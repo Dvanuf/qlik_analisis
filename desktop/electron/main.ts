@@ -4,8 +4,8 @@
  * Здесь живёт ядро анализа (папка ../../src ядра проекта) — renderer получает
  * только данные через IPC и не имеет прямого доступа к файловой системе.
  */
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
@@ -235,6 +235,128 @@ async function openQix(opts: {
   const qix = await session.open();
   return { qix, session, url };
 }
+
+/** Сессионная cookie хаба и ключи хранятся в зашифрованном виде (safeStorage). */
+const CREDS_FILE = 'hub-credentials.bin';
+
+ipcMain.handle('core:save-credentials', (_e, creds: {
+  hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string;
+}) => {
+  const blob = safeStorage.encryptString(JSON.stringify(creds));
+  writeFileSync(resolve(app.getPath('userData'), CREDS_FILE), blob);
+  return true;
+});
+
+ipcMain.handle('core:load-credentials', () => {
+  const file = resolve(app.getPath('userData'), CREDS_FILE);
+  if (!existsSync(file)) return null;
+  try {
+    return JSON.parse(safeStorage.decryptString(readFileSync(file)));
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('core:clear-credentials', () => {
+  const file = resolve(app.getPath('userData'), CREDS_FILE);
+  if (existsSync(file)) rmSync(file);
+  return true;
+});
+
+/** Хосты, для которых разрешен самоподписанный сертификат (только по явному флагу). */
+const allowedInsecureHosts = new Set<string>();
+
+app.on('certificate-error', (event, _webContents, url, _error, _certificate, callback) => {
+  try {
+    const host = new URL(url).hostname;
+    if (allowedInsecureHosts.has(host)) {
+      event.preventDefault();
+      callback(true);
+      return;
+    }
+  } catch { /* некорректный URL — обрабатываем как обычно */ }
+  callback(false);
+});
+
+/**
+ * Вход в хаб: открываем окно браузера, пользователь вводит доменный пароль,
+ * приложение само перехватывает cookie сессии и ключи рукопожатия.
+ */
+ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: string; insecure?: boolean }) => {
+  const partition = 'persist:qlik-hub';
+  const captured: { csrfToken?: string; xrfKey?: string; wsUrl?: string } = {};
+  let host = '';
+  try {
+    host = new URL(opts.hubUrl).hostname;
+  } catch { /* оставим пустым */ }
+  if (opts.insecure && host) allowedInsecureHosts.add(host);
+
+  const win = new BrowserWindow({
+    width: 1180,
+    height: 860,
+    title: 'Вход в Qlik — авторизуйтесь в браузере',
+    webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
+  });
+
+  // Отладчик подключаем с повторами: до первой загрузки цели «target closed».
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
+      await win.webContents.debugger.sendCommand('Network.enable');
+      win.webContents.debugger.on('message', (_evt, method, params: Record<string, unknown>) => {
+        if (method === 'Network.webSocketCreated') {
+          const url = String((params as { url?: string })?.url ?? '');
+          captured.wsUrl = url;
+          try {
+            captured.csrfToken = new URL(url).searchParams.get('qlik-csrf-token') ?? captured.csrfToken;
+          } catch { /* некорректный URL — пропускаем */ }
+        }
+        if (method === 'Network.webSocketWillSendHandshakeRequest') {
+          const headers = (params as { request?: { headers?: Record<string, string> } })?.request?.headers ?? {};
+          for (const [k, v] of Object.entries(headers)) {
+            if (k.toLowerCase() === 'x-qlik-xrfkey' && v) captured.xrfKey = v;
+          }
+        }
+      });
+      break;
+    } catch {
+      try { win.webContents.debugger.detach(); } catch { /* уже отключён */ }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  const target = opts.appId
+    ? `${opts.hubUrl}/sense/app/${opts.appId}/overview`
+    : `${opts.hubUrl}/sense/`;
+  await win.loadURL(target);
+
+  // Ждём cookie сессии (появляется после успешного входа) и CSRF-токен
+  // (берётся из рукопожатия движка, которое страница приложения открывает сама).
+  const result = await new Promise<{ cookie: string; xrfKey?: string; csrfToken?: string; wsUrl?: string } | null>((resolvePromise) => {
+    const started = Date.now();
+    const timer = setInterval(async () => {
+      const cookies = await win.webContents.session.cookies.get({ url: opts.hubUrl });
+      const session = cookies.find((c) => c.name === 'X-Qlik-Session');
+      const hasToken = Boolean(captured.csrfToken);
+      if (session && (hasToken || Date.now() - started > 25000)) {
+        clearInterval(timer);
+        resolvePromise({
+          cookie: `${session.name}=${session.value}`,
+          xrfKey: captured.xrfKey,
+          csrfToken: captured.csrfToken,
+          wsUrl: captured.wsUrl,
+        });
+        return;
+      }
+      if (Date.now() - started > 300000) { clearInterval(timer); resolvePromise(null); }
+    }, 2000);
+    win.on('closed', () => { clearInterval(timer); resolvePromise(null); });
+  });
+
+  try { win.webContents.debugger.detach(); } catch { /* уже отключён */ }
+  if (!win.isDestroyed()) win.close();
+  return result;
+});
 
 /** Список приложений, доступных на сервере. */
 ipcMain.handle('core:list-apps', async (_e, opts: {

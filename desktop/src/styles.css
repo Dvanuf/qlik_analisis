@@ -100,3 +100,7 @@ table.findings th { text-align: left; color: #fff; background: var(--navy); padd
 table.findings td { padding: 7px 9px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
 h3 { margin: 22px 0 6px; font-size: 14px; color: var(--navy); }
 a { color: #1d4ed8; }
+
+button.primary { background:#0f766e; }
+button.primary:hover { background:#115e59; }
+p.ok { color:#2c7a4b; font-size:13px; }

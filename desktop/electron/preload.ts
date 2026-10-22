@@ -22,6 +22,13 @@ const api = {
     url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
     user?: string; password?: string; insecure?: boolean; platform?: string;
   }) => ipcRenderer.invoke('core:analyze-app', opts),
+  /** Открывает окно входа в хаб и возвращает cookie + ключи рукопожатия. */
+  openHub: (opts: { hubUrl: string; appId?: string; insecure?: boolean }) => ipcRenderer.invoke('core:open-hub', opts),
+  saveCredentials: (creds: {
+    hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string;
+  }) => ipcRenderer.invoke('core:save-credentials', creds),
+  loadCredentials: () => ipcRenderer.invoke('core:load-credentials'),
+  clearCredentials: () => ipcRenderer.invoke('core:clear-credentials'),
   /** Пошаговый вывод диагностики: подписка возвращает функцию отписки. */
   onDoctorStep: (cb: (step: { name: string; status: string; detail: string; hint?: string }) => void) => {
     const listener = (_e: unknown, step: { name: string; status: string; detail: string; hint?: string }) => cb(step);

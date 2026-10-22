@@ -65,6 +65,14 @@ declare global {
         url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean; platform?: string;
       }): Promise<AnalysisResult>;
+      openHub(opts: { hubUrl: string; appId?: string; insecure?: boolean }): Promise<{
+        cookie?: string; xrfKey?: string; csrfToken?: string; wsUrl?: string;
+      } | null>;
+      saveCredentials(creds: {
+        hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string;
+      }): Promise<boolean>;
+      loadCredentials(): Promise<{ hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string } | null>;
+      clearCredentials(): Promise<boolean>;
       onDoctorStep(cb: (step: DoctorStep) => void): () => void;
     };
   }
@@ -106,10 +114,59 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [ruleSearch, setRuleSearch] = useState('');
   const [ruleCat, setRuleCat] = useState('all');
+  const [hubStatus, setHubStatus] = useState('');
+
+  /** Базовый URL хаба из URL движка: wss://host/app/... -> https://host */
+  const hubUrl = useMemo(() => {
+    try {
+      const u = new URL(url);
+      return `https://${u.host}`;
+    } catch {
+      return '';
+    }
+  }, [url]);
+
+  /** Вход в хаб: открывается окно, пользователь вводит доменный пароль. */
+  async function signIn() {
+    if (!hubUrl) { setHubStatus('Сначала укажите корректный URL движка'); return; }
+    setBusy('Открываем хаб — авторизуйтесь в окне браузера…');
+    setHubStatus('Ожидаем авторизацию в окне хаба…');
+    try {
+      const res = await window.qa.openHub({ hubUrl, appId: appId || undefined, insecure });
+      if (res?.cookie) {
+        setCookie(res.cookie);
+        setXrfKey(res.xrfKey ?? '');
+        setCsrfToken(res.csrfToken ?? '');
+        await window.qa.saveCredentials({
+          hubUrl,
+          cookie: res.cookie,
+          xrfKey: res.xrfKey,
+          csrfToken: res.csrfToken,
+        });
+        setHubStatus(
+          `Вход выполнен: cookie ${res.cookie ? '✓' : '✗'}, `
+          + `CSRF-токен ${res.csrfToken ? '✓' : '✗'}, XSRF-ключ ${res.xrfKey ? '✓' : '✗'}`,
+        );
+      } else {
+        setHubStatus('Авторизация не завершена: окно закрыто или cookie не получена');
+      }
+    } catch (err) {
+      setHubStatus(`Ошибка входа: ${String(err)}`);
+    }
+    setBusy('');
+  }
 
   useEffect(() => {
     void window.qa.appInfo().then(setInfo);
     void window.qa.rules().then(setRuleInfo);
+    // Восстанавливаем сохранённую сессию хаба (зашифрована safeStorage).
+    void window.qa.loadCredentials().then((creds) => {
+      if (!creds?.cookie) return;
+      setCookie(creds.cookie);
+      setXrfKey(creds.xrfKey ?? '');
+      setCsrfToken(creds.csrfToken ?? '');
+      setHubStatus('Сессия хаба восстановлена из защищённого хранилища');
+    });
     return window.qa.onDoctorStep((step) => {
       setDoctorSteps((prev) => [...prev, step]);
     });
@@ -305,10 +362,21 @@ export default function App() {
             </label>
           </div>
           <div className="actions">
+            <button className="primary" onClick={() => void signIn()}>
+              Войти в хаб (откроется окно авторизации)
+            </button>
             <button onClick={() => void runDoctor()}>Проверить подключение</button>
             <button onClick={() => void loadApps()}>Загрузить список приложений</button>
             <button onClick={() => void analyzeFile()}>Анализ файла…</button>
           </div>
+          {hubStatus && (
+            <p className={hubStatus.startsWith('Вход выполнен') ? 'ok' : 'muted'}>
+              {hubStatus}
+              {hubStatus.startsWith('Вход выполнен') && (
+                <> — <span className="muted">данные сохранены в зашифрованном виде; ручное копирование из DevTools больше не нужно</span></>
+              )}
+            </p>
+          )}
 
           {apps.length > 0 && (
             <div className="appList">
