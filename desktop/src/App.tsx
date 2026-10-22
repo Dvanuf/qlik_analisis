@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-type Tab = 'connect' | 'analysis' | 'rules';
+type Tab = 'connect' | 'analysis' | 'summary' | 'rules';
 type Platform = 'qlik-sense' | 'qlikview';
 type Severity = 'error' | 'warning' | 'info';
 
@@ -149,6 +149,8 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [ruleSearch, setRuleSearch] = useState('');
   const [ruleCat, setRuleCat] = useState('all');
+  const [batchCat, setBatchCat] = useState('all');
+  const [batchSearch, setBatchSearch] = useState('');
   const [hubStatus, setHubStatus] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [batch, setBatch] = useState<{ results: BatchItem[]; totals: BatchTotals } | null>(null);
@@ -283,7 +285,7 @@ export default function App() {
     try {
       const res = await window.qa.analyzeAll({ ...conn, platform, pauseMs: 1000 });
       setBatch(res);
-      setTab('analysis');
+      setTab('summary');
     } catch (err) {
       setDoctorSteps([{ name: 'Пакетный анализ', status: 'FAIL', detail: String(err) }]);
     } finally {
@@ -381,6 +383,36 @@ export default function App() {
     return map;
   }, [analysis]);
 
+  /** Категории, реально встречающиеся в сводном отчёте (для фильтра). */
+  const batchCatOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of batch?.results ?? []) {
+      for (const [cat, n] of Object.entries(r.summary?.findings.byCategory ?? {})) {
+        if (n > 0) set.add(cat);
+      }
+    }
+    return [...set].sort();
+  }, [batch]);
+
+  /** Отфильтрованные строки сводного отчёта. */
+  const filteredBatch = useMemo(() => {
+    const all = batch?.results ?? [];
+    const q = batchSearch.trim().toLowerCase();
+    return all
+      .filter((r) => {
+        if (batchCat !== 'all') {
+          const n = r.summary?.findings.byCategory[batchCat] ?? 0;
+          if (n === 0) return false;
+        }
+        if (q) {
+          const hay = `${r.title} ${r.appId}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (b.summary?.findings.total ?? -1) - (a.summary?.findings.total ?? -1));
+  }, [batch, batchCat, batchSearch]);
+
   const toggle = <T,>(set: Set<T>, value: T) => {
     const next = new Set(set);
     if (next.has(value)) next.delete(value); else next.add(value);
@@ -411,10 +443,11 @@ export default function App() {
           </div>
         </div>
         <nav className="tabs">
-          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['rules', 'Правила']] as [Tab, string][]).map(([id, label]) => (
+          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['summary', 'Сводный отчёт'], ['rules', 'Правила']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
               {label}
               {id === 'analysis' && analysis ? ` (${analysis.summary.findings.total})` : ''}
+              {id === 'summary' && batch ? ` (${batch.totals.apps})` : ''}
               {id === 'rules' && ruleInfo ? ` (${ruleInfo.total})` : ''}
             </button>
           ))}
@@ -442,11 +475,12 @@ export default function App() {
                 <b>«Загрузить список приложений»</b> → выберите приложение → <b>«Анализировать»</b>.
               </li>
               <li>
-                Результаты — на вкладке <b>«Анализ»</b>: сводка, находки с фильтрами, готовые правки скрипта.
-                Кнопка <b>«Экспорт отчёта»</b> сохраняет HTML+JSON в «Документы/QlikAnalyzer».
+                Результаты одного приложения — на вкладке <b>«Анализ»</b>: сводка, находки с фильтрами,
+                готовые правки скрипта. Кнопка <b>«Экспорт отчёта»</b> сохраняет HTML+JSON в «Документы/QlikAnalyzer».
               </li>
               <li>
-                <b>«Анализировать все»</b> — прогон по всем приложениям сервера с прогрессом и сводным отчётом.
+                <b>«Анализировать все»</b> — прогон по всем приложениям сервера; результат открывается
+                на вкладке <b>«Сводный отчёт»</b> (таблица приложений, фильтр по категории, поиск).
               </li>
             </ol>
             <p className="muted small">
@@ -591,65 +625,10 @@ export default function App() {
       {tab === 'analysis' && (
         <section className="card wide">
           <h2>
-            {batch ? 'Сводный анализ по всем приложениям' : 'Результаты анализа'}
+            Результаты анализа
             {analysis?.appName ? ` — ${analysis.appName}` : ''}
             {analysis?.file ? ` — ${analysis.file}` : ''}
           </h2>
-
-          {batch && (
-            <>
-              <div className="cards">
-                <div className="card">
-                  <div className="card-num">{batch.totals.apps}</div>
-                  <div className="card-label">приложений</div>
-                </div>
-                <div className="card">
-                  <div className="card-num">{batch.totals.findings}</div>
-                  <div className="card-label">находок всего</div>
-                </div>
-                {Object.entries(batch.totals.bySeverity).map(([k, v]) => (
-                  <div className="card" key={k}>
-                    <div className="card-num">{v}</div>
-                    <div className="card-label">{k}</div>
-                  </div>
-                ))}
-                <div className="card">
-                  <div className="card-num">{batch.totals.removableRows.toLocaleString('ru-RU')}</div>
-                  <div className="card-label">строк можно убрать</div>
-                </div>
-              </div>
-              <div className="actions">
-                <button className="primary" onClick={() => void exportBatch()}>
-                  Экспорт сводного отчёта
-                </button>
-              </div>
-              <table className="batchTable">
-                <thead>
-                  <tr>
-                    <th>Приложение</th><th>Размер</th><th>Всего</th>
-                    <th>Script</th><th>Resources</th><th>Quality</th><th>Practices</th><th>Статус</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {batch.results
-                    .slice()
-                    .sort((a, b) => (b.summary?.findings.total ?? -1) - (a.summary?.findings.total ?? -1))
-                    .map((r) => (
-                      <tr key={r.appId}>
-                        <td>{r.title}</td>
-                        <td>{r.size ? `${Math.round(r.size / 1048576)} МБ` : '—'}</td>
-                        <td>{r.summary?.findings.total ?? 0}</td>
-                        <td>{r.summary?.findings.byCategory.Script ?? 0}</td>
-                        <td>{r.summary?.findings.byCategory.Resources ?? 0}</td>
-                        <td>{r.summary?.findings.byCategory.Quality ?? 0}</td>
-                        <td>{r.summary?.findings.byCategory.Practices ?? 0}</td>
-                        <td>{r.error ? <span className="err">{r.error}</span> : (r.fromCache ? 'из кэша' : 'ок')}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </>
-          )}
 
           {analysis ? (
             <>
@@ -752,6 +731,89 @@ export default function App() {
             </>
           ) : (
             <p className="muted">Анализ ещё не запускался. Откройте вкладку «Подключение».</p>
+          )}
+        </section>
+      )}
+
+      {tab === 'summary' && (
+        <section className="card wide">
+          <h2>Сводный отчёт по всем приложениям</h2>
+
+          {batch ? (
+            <>
+              <div className="cards">
+                <div className="card">
+                  <div className="card-num">{batch.totals.apps}</div>
+                  <div className="card-label">приложений</div>
+                </div>
+                <div className="card">
+                  <div className="card-num">{batch.totals.findings}</div>
+                  <div className="card-label">находок всего</div>
+                </div>
+                {Object.entries(batch.totals.bySeverity).map(([k, v]) => (
+                  <div className="card" key={k}>
+                    <div className="card-num">{v}</div>
+                    <div className="card-label">{k}</div>
+                  </div>
+                ))}
+                <div className="card">
+                  <div className="card-num">{batch.totals.removableRows.toLocaleString('ru-RU')}</div>
+                  <div className="card-label">строк можно убрать</div>
+                </div>
+              </div>
+
+              <div className="toolbar">
+                <button className={batchCat === 'all' ? 'active' : ''} onClick={() => setBatchCat('all')}>
+                  Все приложения
+                </button>
+                {batchCatOptions.map((c) => (
+                  <button key={c} className={batchCat === c ? 'active' : ''} onClick={() => setBatchCat(c)}>
+                    {c}
+                  </button>
+                ))}
+                <input
+                  className="search"
+                  value={batchSearch}
+                  onChange={(e) => setBatchSearch(e.target.value)}
+                  placeholder="Поиск по названию приложения…"
+                />
+                <span className="muted">показано {filteredBatch.length} из {batch.results.length}</span>
+              </div>
+
+              <div className="actions">
+                <button className="primary" onClick={() => void exportBatch()}>
+                  Экспорт сводного отчёта
+                </button>
+              </div>
+
+              <table className="batchTable">
+                <thead>
+                  <tr>
+                    <th>Приложение</th><th>Размер</th><th>Всего</th>
+                    <th>Script</th><th>Resources</th><th>Quality</th><th>Practices</th><th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBatch.map((r) => (
+                    <tr key={r.appId}>
+                      <td>{r.title}</td>
+                      <td>{r.size ? `${Math.round(r.size / 1048576)} МБ` : '—'}</td>
+                      <td>{r.summary?.findings.total ?? 0}</td>
+                      <td>{r.summary?.findings.byCategory.Script ?? 0}</td>
+                      <td>{r.summary?.findings.byCategory.Resources ?? 0}</td>
+                      <td>{r.summary?.findings.byCategory.Quality ?? 0}</td>
+                      <td>{r.summary?.findings.byCategory.Practices ?? 0}</td>
+                      <td>{r.error ? <span className="err">{r.error}</span> : (r.fromCache ? 'из кэша' : 'ок')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <p className="muted">
+              Сводный анализ ещё не запускался. Откройте вкладку «Подключение» и нажмите
+              «Анализировать все».
+            </p>
           )}
         </section>
       )}

@@ -1,0 +1,41 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "dataDir": "server/data",
+    "concurrency": 1,
+    "pauseMs": 1000,
+    "allowRemoteAnalysis": true,
+    "trustProxy": false,
+    "allowedIps": []
+  },
+  "auth": {
+    "mode": "none",
+    "realm": "Qlik Quality",
+    "userHeader": "X-Forwarded-User",
+    "allowedDomains": [],
+    "analystRole": "analyst",
+    "users": [
+      {
+        "login": "analyst",
+        "passwordEnv": "QLIK_SERVER_PASSWORD",
+        "role": "analyst"
+      },
+      {
+        "login": "viewer",
+        "passwordEnv": "QLIK_SERVER_VIEWER_PASSWORD",
+        "role": "viewer"
+      }
+    ]
+  },
+  "qlik": {
+    "url": "wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000",
+    "cookie": "",
+    "xrfKey": "",
+    "csrfToken": "",
+    "user": "",
+    "passwordEnv": "QLIK_PASSWORD",
+    "insecure": true,
+    "platform": "qlikview"
+  }
+}

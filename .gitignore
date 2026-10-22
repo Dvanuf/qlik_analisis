@@ -12,3 +12,7 @@ desktop/release/*
 # Кэш пакетного анализа
 .cache/
 reports/
+
+# Данные сервера (отчёты, индекс)
+server/data/
+server/data-test/

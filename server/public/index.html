@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qlik Quality — сервер</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="head-row">
+      <div>
+        <h1>Qlik Quality</h1>
+        <span class="sub" id="whoami">загрузка…</span>
+      </div>
+      <div class="head-actions">
+        <button id="btn-reload-apps">Обновить список приложений</button>
+        <button id="btn-analyze-all" class="primary">Анализировать все</button>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="active" data-tab="apps">Приложения</button>
+      <button data-tab="jobs">Задачи</button>
+      <button data-tab="reports">Отчёты</button>
+      <button data-tab="rules">Правила</button>
+    </nav>
+  </header>
+
+  <div id="alert" class="alert" hidden></div>
+
+  <main>
+    <!-- Приложения -->
+    <section class="tab-page active" data-page="apps">
+      <div class="toolbar">
+        <input id="app-search" class="search" placeholder="Поиск по названию приложения…">
+        <span class="muted" id="apps-count"></span>
+      </div>
+      <table id="apps-table">
+        <thead>
+          <tr><th>Приложение</th><th>Размер</th><th>Последняя перезагрузка</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Задачи -->
+    <section class="tab-page" data-page="jobs">
+      <table id="jobs-table">
+        <thead>
+          <tr><th>Задача</th><th>Тип</th><th>Статус</th><th>Прогресс</th><th>Запустил</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Отчёты -->
+    <section class="tab-page" data-page="reports">
+      <table id="reports-table">
+        <thead>
+          <tr><th>Отчёт</th><th>Тип</th><th>Создан</th><th>Запустил</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Правила -->
+    <section class="tab-page" data-page="rules">
+      <div class="toolbar">
+        <input id="rule-search" class="search" placeholder="Поиск по правилу или флагу QSDA…">
+        <span class="muted" id="rules-count"></span>
+      </div>
+      <table id="rules-table">
+        <thead>
+          <tr><th>ID</th><th>Категория</th><th>Уровень</th><th>Правило</th><th>Флаг QSDA</th><th>Платформы</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
