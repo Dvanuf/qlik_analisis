@@ -1,0 +1,35 @@
+appId: com.qlikanalyzer.desktop
+productName: Qlik Analyzer
+copyright: Внутренний инструмент анализа качества Qlik Sense / QlikView
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+
+# Ядро анализа уже собрано в dist/main — дополнительные зависимости не нужны.
+asar: true
+
+mac:
+  target:
+    - target: dir
+    - target: zip
+  category: public.app-category.developer-tools
+  darkModeSupport: true
+
+win:
+  target:
+    - target: dir
+    - target: zip
+    - target: nsis
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Qlik Analyzer

@@ -1,0 +1,221 @@
+# qlik-analyzer
+
+Анализ качества приложений **Qlik Sense** и **QlikView**: экстрактор данных, 38 детерминированных
+правил в четырёх категориях (Quality / Resources / Practices / Script), HTML-отчёт и режим CI.
+
+> Прототип. Живого Qlik-инстанса в среде разработки не было: серверные коннекторы написаны по
+> документации QIX Engine API и типам `@types/qlik-engineapi`, офлайн-режим (скрипты, `.qvs`)
+> проверен на реальных файлах.
+
+## Что умеет
+
+| Блок | Что делает |
+|---|---|
+| **Экстрактор Qlik Sense** | Enigma.js / QIX Engine API: скрипт загрузки, объекты и выражения, модель данных (таблицы, поля, ключи, cardinality, NULL), переменные, закладки; опционально — замер времени расчёта объектов |
+| **Экстрактор офлайн** | Скрипт загрузки (`.qvs`/`.txt` — экспорт из Qlik Sense или QlikView), контейнер приложения Qlik Sense (`.qvs`/zip — ищем скрипт внутри) |
+| **Парсер скрипта** | Свой: операторы `LOAD / RESIDENT / JOIN / CONCATENATE / INTO / LET / SET / DROP / RENAME / STORE`, метки, комментарии, строковые константы, пути вида `[lib://…]` |
+| **Нормализация выражений** | Токенайзер Qlik-выражений, извлечение ссылок, канонизация для поиска дублей |
+| **38 правил** | Quality (7), Resources (9), Practices (10), Script (12) |
+| **Отчёты** | HTML (самодостаточный, с фильтрами) и JSON (CI, Jira, дашборды) |
+| **Конфигурация** | `qlik-analyzer.config.json`: окружения, приложения, пути, правила; секреты — только через переменные окружения |
+| **Диагностика** | Команда `doctor`: TCP → WebSocket → OpenDoc → листинг возможностей, с расшифровкой кодов ошибок |
+| **CI** | Код возврата `--fail-on error|warning`, артефакты, готовый workflow для GitHub Actions |
+
+## Быстрый старт
+
+```bash
+# Node.js 20+ (в этой среде установлен локально в ../.tools/node)
+export PATH="$(cd ../.tools/node/bin && pwd):$PATH"
+npm install
+
+# 1. Оффлайн: скрипт загрузки — сервер не нужен
+node bin/analyze.js analyze --script "C:\scripts\sales.qvs" --out out/report.html
+
+# 2. Qlik Sense Enterprise on Windows
+node bin/analyze.js doctor  --env qs-prod --app sales
+node bin/analyze.js analyze --env qs-prod --app sales --out out/report.html
+
+# 3. Разово, без конфигурации
+node bin/analyze.js analyze \
+  --host qlik-sense.corp.local --port 4747 --app-id 8f1c-… \
+  --user "CORP\qlik_ro" --password-env QLIK_QS_PASSWORD --insecure
+
+# 4. Что настроено в конфигурации
+node bin/analyze.js envs
+```
+
+## Подключение к вашим средам
+
+### Qlik Sense Enterprise on Windows (релиз 2025)
+
+```bash
+# URL движка: ws://<host>:4747/app/<appId>
+node bin/analyze.js doctor --url ws://qlik-sense.corp.local:4747/app/8f1c-… --user "CORP\qlik_ro" --password-env QLIK_QS_PASSWORD --insecure
+```
+
+- авторизация: доменный пользователь (Basic) и/или заголовок `X-Qlik-User` (имперсонация);
+- `--insecure` — для самоподписанных сертификатов (на QSS это обычная ситуация);
+- `doctor` подсказывает причину по кодам: 4202 (URL), 4203 (права), 4204 (нет appId), 4205/4240 (нет движков), 401/403 (авторизация).
+
+### QlikView Server 12
+
+У QlikView Server **нет QIX Engine API** — только классические QlikView API (COM, QMS, JavaScript),
+а `.qvw` — проприетарный бинарный контейнер, который офлайн не разбирается. Поэтому для QlikView
+реализован **скриптовый режим**:
+
+```bash
+# 1) выгрузить скрипт из QlikView Desktop: Edit Script → File → Export → Script → app.qvs
+#    (или автоматизировать: tools/qv-export-script.ps1 — COM, требует проверки на стенде)
+# 2) проанализировать
+node bin/analyze.js analyze --script "C:\apps\Sales.qvs" --out out/qv-report.html
+```
+
+Скриптовые правила (S001–S012) работают одинаково для Qlik Sense и QlikView: синтаксис скрипта
+у них общий.
+
+### Qlik Cloud (если появится)
+
+```bash
+node bin/analyze.js analyze --url wss://<tenant>.<region>.qlikcloud.com/app/<APP_ID> --api-key "$QLIK_API_KEY"
+```
+
+## Конфигурация
+
+`qlik-analyzer.config.json` в корне проекта (путь переопределяется `--config` или
+переменной `QLIK_ANALYZER_CONFIG`). Приоритет: **CLI-флаг > переменная окружения > конфиг > умолчание**.
+
+```json
+{
+  "environments": {
+    "qs-prod": {
+      "type": "qlik-sense",
+      "host": "qlik-sense.corp.local",
+      "port": 4747,
+      "user": "CORP\\qlik_ro",
+      "passwordEnv": "QLIK_QS_PASSWORD",
+      "qlikUser": "CORP\\qlik_ro",
+      "insecure": true
+    },
+    "qv-prod": { "type": "qlikview", "doc": "\\\\qv01\\Apps\\Sales.qvw" }
+  },
+  "apps": { "sales": { "env": "qs-prod", "appId": "8f1c-…" } },
+  "paths": { "out": "reports/{env}/{app}/report.html" },
+  "rules": { "disabled": ["P010"], "maxExpressionLength": 200 }
+}
+```
+
+**Секреты в конфиге не хранятся** — указывается имя переменной (`passwordEnv`), значение берётся
+из окружения или из `.env` (шаблон — `.env.example`, сам `.env` в `.gitignore`).
+
+## Каталог правил
+
+**Quality** — ошибки, которые ломают расчёты
+
+| ID | Правило |
+|---|---|
+| Q001 | Синтаксическая ошибка в выражении (скобки, строки, висящий оператор) |
+| Q002 | Ссылка на несуществующее поле |
+| Q003 | Ссылка на неопределённую переменную |
+| Q004 | Неизвестная функция (опечатка) |
+| Q005 | Пустое выражение |
+| Q006 | Объект без описания |
+| Q007 | Переменная без описания |
+
+**Resources** — «балласт» приложения
+
+| ID | Правило |
+|---|---|
+| R001 | Неиспользуемое поле (→ `DROP FIELD`) |
+| R002 | Поле используется только в скрипте |
+| R003 | Неиспользуемая таблица (→ `DROP TABLE`) |
+| R004 | Неиспользуемая переменная |
+| R005 | Поле полностью заполнено NULL |
+| R006 | Пустая таблица (0 строк) |
+| R007 | Ключ, подходящий под `AutoNumber` |
+| R008 | Лист без объектов |
+| R009 | Поле-константа (одно уникальное значение) |
+
+**Practices** — качество проектирования
+
+| ID | Правило |
+|---|---|
+| P001 | Дублирующееся выражение (регистр/пробелы/скобки) |
+| P002 | Совпадающие меры с разными именами (аналог «Expression Matching Measure» в QSDA Pro) |
+| P003 | Ключевое поле используется в выражении |
+| P004 | Дубликат названия объекта |
+| P005 | Синтетический ключ |
+| P006 | Вычисляемое измерение (агрегация в измерении) |
+| P007 | Выражение по нескольким таблицам |
+| P008 | Data island (`Aggr`) |
+| P009 | Сложное выражение (длина / вложенность) |
+| P010 | Несогласованное именование (префиксы `dim_`/`fact_`/`var_`) |
+
+**Script** — анализ скрипта загрузки (Qlik Sense и QlikView)
+
+| ID | Правило |
+|---|---|
+| S001 | Загрузка без явного списка полей (`LOAD *`) |
+| S002 | Загрузка без фильтра `WHERE` |
+| S003 | Цепочка `RESIDENT` (перезапись данных в памяти) |
+| S004 | `CONCATENATE` без `NoConcatenate` |
+| S005 | Повторная загрузка таблицы |
+| S006 | `JOIN` по неключевому полю |
+| S007 | В скрипте нет `DROP FIELD` |
+| S008 | Неиспользуемая переменная скрипта |
+| S009 | Ссылка на неизвестную таблицу (`RESIDENT`/`JOIN`) |
+| S010 | Структурная ошибка скрипта (незакрытая строка/скобка) |
+| S011 | Скрипт без комментариев |
+| S012 | Загрузка файла без указания формата |
+
+## Архитектура
+
+```
+bin/analyze.js            CLI: analyze | doctor | envs
+src/
+  config.js               конфиг, приоритеты, секреты из окружения
+  cli/doctor.js           диагностика подключения и расшифровка кодов ошибок
+  extract/engine.js       экстрактор Qlik Sense (Enigma.js + ws: Bearer/Basic/X-Qlik-User)
+  connectors/file.js      офлайн: скрипт, .qvs (zip), .qvw
+  script/parse.js         парсер скрипта загрузки
+  normalize.js            токенайзер выражений, ссылки, канонизация
+  graph.js                индекс использования полей и переменных
+  rules/                  quality / resources / practices / script + реестр
+  analyzer.js             прогон, сводка, генератор патча скрипта
+  report/html.js          HTML-отчёт
+tools/qv-export-script.ps1  выгрузка скрипта из .qvw через COM (QlikView)
+test/                     69 тестов (node:test) + фикстуры
+```
+
+Принцип: **детерминированное ядро + ИИ-надстройка**. Ядро даёт воспроизводимые факты
+(что сломано, что не используется, где тормозит) — их и проверяет CI. ИИ подключается
+поверх: объяснение находок, генерация фиксов, семантическое сравнение формул,
+автогенерация тестов на enigma-mock, регрессионное сравнение «было / стало».
+
+## CI
+
+```yaml
+- run: node bin/analyze.js analyze --env qs-prod --app sales --out report.html --fail-on error
+- uses: actions/upload-artifact@v4
+  if: always()
+  with: { name: qlik-quality, path: report.html }
+```
+
+Готовый workflow — `.github/workflows/qlik-quality.yml`.
+
+## Ограничения
+
+- Серверные коннекторы не проверены на живом Qlik (в среде нет инстанса) — при первом запуске
+  на вашем стенде начните с `doctor`.
+- Точный расход памяти (как «383 MB» в QSDA Pro) статически недоступен: его даёт только отчёт
+  о памяти движка. Здесь оценивается объём в строках.
+- QlikView: доступен только скриптовый анализ — объектный анализ требует QlikView Engine,
+  которого в QV Server 12 нет.
+- Модель данных из скрипта (fallback) — эвристика: ключи и cardinality из неё не восстановить.
+- Семантически равные, но структурно разные формулы не ловятся — это задача ИИ-слоя.
+
+## Развитие
+
+- правило = одна функция в `src/rules/*.js` с полями `id/category/severity/title/description/
+  recommendation/run(ctx)`; она автоматически попадёт в реестр, каталог правил и отчёт;
+- функция Qlik — в `src/rules/qfuncs.js`;
+- каталог правил — `src/rules/index.js` (CATEGORIES, ALL_RULES).

@@ -1,0 +1,33 @@
+{
+  "name": "qlik-analyzer",
+  "version": "0.1.0",
+  "description": "Статический анализатор качества приложений Qlik Sense: экстрактор на Enigma.js, детерминированные правила Quality/Resources/Practices, HTML-отчёт",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "qlik-analyzer": "bin/analyze.js"
+  },
+  "scripts": {
+    "analyze": "node bin/analyze.js",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "qlik",
+    "qlik-sense",
+    "static-analysis",
+    "qa",
+    "code-quality"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "enigma.js": "^2.15.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/qlik-engineapi": "^12.67.16"
+  }
+}

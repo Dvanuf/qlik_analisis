@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "source": "fixture",
+    "generatedAt": "2026-10-21T19:00:00.000Z",
+    "capabilities": ["script", "objects", "dataModel", "variables", "bookmarks"],
+    "skipped": [],
+    "scriptFields": ["CustomerID", "Comment", "Region", "RawID", "RawValue", "StagingFlag"]
+  },
+  "appName": "Demo Sales",
+  "appId": "fixture-app-id",
+  "script": "LOAD CustomerID, Sales Amount, Quantity, Unit Cost, Region, Comment FROM 'sales.csv';\nLOAD Month, Year FROM 'calendar.csv';\nLOAD RawID, RawValue, StagingFlag FROM 'staging.csv';\nLET vSales = Sum([Sales Amount]);\nLET vMargin = Sum([Sales Amount]) - Sum([Unit Cost]);\nLET vUnused = 1;",
+  "sheets": [
+    { "id": "sheet-1", "name": "Sales Dashboard", "type": "sheet", "description": "Основной дашборд" },
+    { "id": "sheet-2", "name": "Empty Sheet", "type": "sheet", "description": "" }
+  ],
+  "objects": [
+    {
+      "id": "obj-1",
+      "name": "fact_Sales",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Продажи по месяцам",
+      "expressions": [
+        { "kind": "dimension", "expr": "Month" },
+        { "kind": "measure", "expr": "Sum([Sales Amount])" }
+      ]
+    },
+    {
+      "id": "obj-2",
+      "name": "Margin",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "",
+      "expressions": [
+        { "kind": "measure", "expr": "SUM([Sales Amount])" },
+        { "kind": "dimension", "expr": "Sum([Quantity])" }
+      ]
+    },
+    {
+      "id": "obj-3",
+      "name": "Profit",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Прибыль по клиентам",
+      "expressions": [
+        { "kind": "measure", "expr": "$(vSales)" },
+        { "kind": "measure", "expr": "Sum([OrderID])" }
+      ]
+    },
+    {
+      "id": "obj-4",
+      "name": "Margin",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Дубликат имени",
+      "expressions": [
+        { "kind": "measure", "expr": "Sum([Sales Amount]) * 1.2" }
+      ]
+    },
+    {
+      "id": "obj-5",
+      "name": "Total Amount",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "",
+      "expressions": [
+        { "kind": "measure", "expr": "Sum([Sales Amount" }
+      ]
+    },
+    {
+      "id": "obj-6",
+      "name": "Unknown Field Chart",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Ошибка в имени поля",
+      "expressions": [
+        { "kind": "measure", "expr": "Sum([NoSuchField])" }
+      ]
+    },
+    {
+      "id": "obj-7",
+      "name": "Unknown Variable Chart",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Переменная не объявлена",
+      "expressions": [
+        { "kind": "measure", "expr": "$(vUnknown)" }
+      ]
+    },
+    {
+      "id": "obj-8",
+      "name": "Typo Function",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Опечатка в имени функции",
+      "expressions": [
+        { "kind": "measure", "expr": "Smm([Sales Amount])" }
+      ]
+    },
+    {
+      "id": "obj-9",
+      "name": "Aggr Chart",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Data island и несколько таблиц",
+      "expressions": [
+        { "kind": "measure", "expr": "Aggr(Sum([Sales Amount]), [Month])" }
+      ]
+    },
+    {
+      "id": "obj-10",
+      "name": "Complex Expression",
+      "type": "chart",
+      "sheetId": "sheet-1",
+      "description": "Слишком сложное выражение",
+      "expressions": [
+        { "kind": "measure", "expr": "Sum(If([Region]='EU', [Sales Amount] * 1.2, If([Region]='US', [Sales Amount] * 0.9, If([Region]='APAC', [Sales Amount] * 1.05, [Sales Amount] * 1.0)))) + Sum(If([Region]='EU', [Unit Cost] * 1.1, [Unit Cost])) + Sum(If([Region]='US', [Unit Cost] * 0.95, [Unit Cost]))" }
+      ]
+    }
+  ],
+  "variables": [
+    { "name": "vSales", "value": "Sum([Sales Amount])", "description": "Сумма продаж" },
+    { "name": "vMargin", "value": "Sum([Sales Amount]) - Sum([Unit Cost])", "description": "Валовая прибыль" },
+    { "name": "vUnused", "value": "1", "description": "" }
+  ],
+  "fields": [
+    { "name": "OrderID", "table": "Sales", "tags": ["key"], "key": true, "rows": 10000, "nonNulls": 10000, "distinct": 10000, "hasNull": false },
+    { "name": "Sales Amount", "table": "Sales", "tags": ["measure"], "key": false, "rows": 10000, "nonNulls": 10000, "distinct": 8400, "hasNull": false },
+    { "name": "Quantity", "table": "Sales", "tags": ["dimension"], "key": false, "rows": 10000, "nonNulls": 10000, "distinct": 120, "hasNull": false },
+    { "name": "Unit Cost", "table": "Sales", "tags": ["dimension"], "key": false, "rows": 10000, "nonNulls": 10000, "distinct": 320, "hasNull": false },
+    { "name": "Region", "table": "Sales", "tags": ["dimension"], "key": false, "rows": 10000, "nonNulls": 10000, "distinct": 1, "hasNull": false },
+    { "name": "CustomerID", "table": "Sales", "tags": ["dimension"], "key": false, "rows": 10000, "nonNulls": 9800, "distinct": 2100, "hasNull": true },
+    { "name": "Comment", "table": "Sales", "tags": ["dimension"], "key": false, "rows": 10000, "nonNulls": 0, "distinct": 0, "hasNull": true },
+    { "name": "Month", "table": "Calendar", "tags": ["dimension"], "key": false, "rows": 120, "nonNulls": 120, "distinct": 12, "hasNull": false },
+    { "name": "Year", "table": "Calendar", "tags": ["dimension"], "key": false, "rows": 120, "nonNulls": 120, "distinct": 10, "hasNull": false },
+    { "name": "RawID", "table": "Staging", "tags": ["dimension"], "key": false, "rows": 500, "nonNulls": 500, "distinct": 500, "hasNull": false },
+    { "name": "RawValue", "table": "Staging", "tags": ["dimension"], "key": false, "rows": 500, "nonNulls": 500, "distinct": 420, "hasNull": false },
+    { "name": "EmptyFlag", "table": "EmptyTable", "tags": ["dimension"], "key": false, "rows": 0, "nonNulls": 0, "distinct": 0, "hasNull": false }
+  ],
+  "tables": [
+    { "name": "Sales", "rows": 10000, "fields": ["OrderID", "Sales Amount", "Quantity", "Unit Cost", "Region", "CustomerID", "Comment"], "keyFields": ["OrderID"], "synthetic": false, "directDiscovery": false },
+    { "name": "Calendar", "rows": 120, "fields": ["Month", "Year"], "keyFields": ["Month"], "synthetic": false, "directDiscovery": false },
+    { "name": "Staging", "rows": 500, "fields": ["RawID", "RawValue"], "keyFields": ["RawID", "RawValue"], "synthetic": true, "directDiscovery": false },
+    { "name": "EmptyTable", "rows": 0, "fields": ["EmptyFlag"], "keyFields": [], "synthetic": false, "directDiscovery": false }
+  ],
+  "bookmarks": [
+    { "id": "bm-1", "name": "Default", "objectIds": ["obj-1", "obj-2", "obj-3"] }
+  ],
+  "extensions": []
+}

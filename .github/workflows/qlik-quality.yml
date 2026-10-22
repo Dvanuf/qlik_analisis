@@ -1,0 +1,42 @@
+name: Qlik quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      # Подключение к Qlik Sense (Enterprise on Windows / Qlik Cloud).
+      # URL и токен берутся из секретов репозитория.
+      - name: Analyze application
+        env:
+          QLIK_WS_URL: ${{ secrets.QLIK_WS_URL }}
+          QLIK_API_KEY: ${{ secrets.QLIK_API_KEY }}
+        run: |
+          node bin/analyze.js \
+            --url "$QLIK_WS_URL" \
+            --api-key "$QLIK_API_KEY" \
+            --graph out/app-graph.json \
+            --json out/findings.json \
+            --out out/report.html \
+            --fail-on error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qlik-quality-report
+          path: |
+            out/report.html
+            out/findings.json
+            out/app-graph.json

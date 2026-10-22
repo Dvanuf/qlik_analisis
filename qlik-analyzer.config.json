@@ -1,0 +1,55 @@
+{
+  "environments": {
+    "qs-prod": {
+      "type": "qlik-sense",
+      "host": "qlik-sense.corp.local",
+      "port": 4747,
+      "user": "CORP\\qlik_ro",
+      "passwordEnv": "QLIK_QS_PASSWORD",
+      "qlikUser": "CORP\\qlik_ro",
+      "insecure": true
+    },
+    "qs-prod-tls": {
+      "type": "qlik-sense",
+      "host": "qlik-sense.corp.local",
+      "port": 4746,
+      "user": "CORP\\qlik_ro",
+      "passwordEnv": "QLIK_QS_PASSWORD",
+      "qlikUser": "CORP\\qlik_ro",
+      "insecure": true
+    },
+    "qs-uat": {
+      "type": "qlik-sense",
+      "host": "qlik-sense-uat.corp.local",
+      "port": 4747,
+      "user": "CORP\\qlik_ro",
+      "passwordEnv": "QLIK_QS_PASSWORD",
+      "insecure": true
+    },
+    "qs-desktop": {
+      "type": "qlik-sense",
+      "url": "ws://localhost:9076/app/engineData"
+    },
+    "qv-prod": {
+      "type": "qlikview",
+      "doc": "\\\\qlikview.corp.local\\QlikViewDocuments\\Sales.qvw",
+      "user": "CORP\\qlik_ro",
+      "passwordEnv": "QLIK_QV_PASSWORD"
+    }
+  },
+  "apps": {
+    "sales": { "env": "qs-prod", "appId": "8f1c2d3e-0000-4000-8000-000000000001" },
+    "returns": { "env": "qs-prod", "appId": "8f1c2d3e-0000-4000-8000-000000000002" },
+    "sales-uat": { "env": "qs-uat", "appId": "8f1c2d3e-0000-4000-8000-000000000001" }
+  },
+  "paths": {
+    "out": "reports/{env}/{app}/report.html",
+    "json": "reports/{env}/{app}/findings.json",
+    "graph": "reports/{env}/{app}/app-graph.json"
+  },
+  "rules": {
+    "disabled": ["P010"],
+    "maxExpressionLength": 200,
+    "namePrefixes": ["dim_", "fact_", "var_", "ext_"]
+  }
+}
