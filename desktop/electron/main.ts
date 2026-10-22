@@ -309,7 +309,25 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
   });
 
-  // Отладчик подключаем с повторами: до первой загрузки цели «target closed».
+  // 1) Сначала грузим страницу: до первой навигации у Electron нет цели для
+  //    CDP («target closed while handling command») — окно остаётся белым.
+  const target = opts.appId
+    ? `${opts.hubUrl}/sense/app/${opts.appId}/overview`
+    : `${opts.hubUrl}/sense/app`;
+  hubLog('открываем:', target);
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    hubLog('did-fail-load:', code, desc, url);
+  });
+  win.webContents.on('console-message', (_e, level, message) => {
+    if (level >= 2) hubLog('консоль страницы:', message);
+  });
+  win.webContents.on('did-finish-load', () => {
+    hubLog('страница загружена:', win.webContents.getURL(), '|', win.webContents.getTitle());
+  });
+  await win.loadURL(target);
+
+  // 2) Подключаем отладчик и перезагружаем страницу: рукопожатие движка
+  //    гарантированно попадёт в перехват.
   for (let attempt = 1; attempt <= 10; attempt += 1) {
     try {
       if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
@@ -321,6 +339,7 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
           try {
             captured.csrfToken = new URL(url).searchParams.get('qlik-csrf-token') ?? captured.csrfToken;
           } catch { /* некорректный URL — пропускаем */ }
+          hubLog('WS создан:', url);
         }
         if (method === 'Network.webSocketWillSendHandshakeRequest') {
           const headers = (params as { request?: { headers?: Record<string, string> } })?.request?.headers ?? {};
@@ -329,27 +348,15 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
           }
         }
       });
+      hubLog('отладчик подключён, попытка', attempt, '— перезагружаем страницу');
+      await win.reload();
       break;
-    } catch {
+    } catch (err) {
+      hubLog('отладчик: попытка', attempt, 'не удалась:', (err as Error)?.message ?? err);
       try { win.webContents.debugger.detach(); } catch { /* уже отключён */ }
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
-
-  const target = opts.appId
-    ? `${opts.hubUrl}/sense/app/${opts.appId}/overview`
-    : `${opts.hubUrl}/sense/app`;
-  hubLog('открываем:', target);
-  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
-    hubLog('did-fail-load:', code, desc, url);
-  });
-  win.webContents.on('console-message', (_e, level, message) => {
-    if (level >= 2) console.log('[hub] консоль страницы:', message);
-  });
-  win.webContents.on('did-finish-load', () => {
-    hubLog('страница загружена:', win.webContents.getURL(), '|', win.webContents.getTitle());
-  });
-  await win.loadURL(target);
 
   // Ждём cookie сессии (появляется после успешного входа) и CSRF-токен
   // (берётся из рукопожатия движка, которое страница приложения открывает сама).

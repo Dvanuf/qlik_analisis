@@ -19,6 +19,8 @@ app.on('certificate-error', (event, _wc, url, _err, _cert, callback) => {
 });
 
 app.whenReady().then(async () => {
+  const captured = { csrfToken: null, xrfKey: null, wsUrl: null, cookie: null };
+  const target = `${hubUrl}/sense/app/${appId}/overview`;
   const win = new BrowserWindow({
     width: 1000,
     height: 700,
@@ -50,29 +52,12 @@ app.whenReady().then(async () => {
     if (level >= 2) console.log('>> консоль страницы:', message, `(${source}:${line})`);
   });
 
-  const captured = { csrfToken: null, xrfKey: null, wsUrl: null, cookie: null };
-
-  await win.loadURL(`${hubUrl}/sense/app/${appId}/overview`);
-
-  // Отладчик подключаем после первой загрузки и перезагружаем страницу:
-  // тогда рукопожатие движка гарантированно попадёт в перехват.
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
+  // 1) Подключаем отладчик ДО первой загрузки — ровно как в приложении.
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
     try {
       if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
       await win.webContents.debugger.sendCommand('Network.enable');
       win.webContents.debugger.on('message', (_e, method, params) => {
-        if (method === 'Network.requestWillBeSent') {
-          const u = String(params?.request?.url ?? '');
-          if (u.includes('xrfkey') || u.includes('csrf')) {
-            console.log('>> запрос с ключом:', u.slice(0, 160));
-            const h = params?.request?.headers ?? {};
-            for (const [k, v] of Object.entries(h)) {
-              if (k.toLowerCase().includes('xrf') || k.toLowerCase().includes('csrf')) {
-                console.log('   заголовок', k, '=', v);
-              }
-            }
-          }
-        }
         if (method === 'Network.webSocketCreated') {
           captured.wsUrl = params.url;
           try {
@@ -80,27 +65,29 @@ app.whenReady().then(async () => {
           } catch { /* ignore */ }
           console.log('>> WS создан:', params.url);
         }
-        if (method === 'Network.webSocketWillSendHandshakeRequest') {
-          const h = params.request?.headers ?? {};
-          for (const [k, v] of Object.entries(h)) {
-            if (k.toLowerCase() === 'x-qlik-xrfkey') captured.xrfKey = v;
-          }
-          console.log('>> заголовки рукопожатия:', JSON.stringify(h).slice(0, 300));
-        }
       });
       console.log('>> отладчик подключён с попытки', attempt);
-      await win.reload();
       break;
     } catch (e) {
-      console.log('попытка', attempt, 'не удалась:', e.message);
+      console.log('>> попытка', attempt, 'не удалась:', e.message);
       try { win.webContents.debugger.detach(); } catch { /* ignore */ }
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
 
-  await new Promise((r) => setTimeout(r, 15000));
+  win.webContents.on('did-start-loading', () => console.log('>> did-start-loading'));
+  win.webContents.on('dom-ready', () => console.log('>> dom-ready'));
+  win.webContents.on('did-finish-load', () => console.log('>> did-finish-load'));
+  win.webContents.on('did-fail-load', (_e, code, desc, u) => console.log('>> did-fail-load:', code, desc, u));
+  win.webContents.on('did-stop-loading', () => console.log('>> did-stop-loading'));
+
+  console.log('>> открываем:', target);
+  await win.loadURL(target);
+
+  await new Promise((r) => setTimeout(r, 20000));
   console.log('>> текущий URL окна:', win.webContents.getURL());
   console.log('>> заголовок окна:', win.webContents.getTitle());
+  console.log('>> видимость окна:', win.isVisible());
 
   const cookies = await win.webContents.session.cookies.get({ url: hubUrl });
   const s = cookies.find((c) => c.name === 'X-Qlik-Session');
