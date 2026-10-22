@@ -8,3 +8,7 @@ dist/
 # Артефакты сборок не коммитим (100+ МБ), но реестр версий — коммитим
 desktop/release/*
 !desktop/release/README.md
+
+# Кэш пакетного анализа
+.cache/
+reports/

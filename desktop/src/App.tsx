@@ -132,7 +132,7 @@ export default function App() {
   const [busy, setBusy] = useState('');
   const [doctorSteps, setDoctorSteps] = useState<DoctorStep[]>([]);
 
-  const [url, setUrl] = useState('wss://dc3-qliks-ap-03.onyx.local/app/7cd8b706-5b9e-4c96-b2fb-6b1ed3deeb20');
+  const [url, setUrl] = useState('wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [cookie, setCookie] = useState('');
@@ -463,7 +463,7 @@ export default function App() {
                 <button
                   type="button"
                   className="link"
-                  onClick={() => setUrl('wss://dc3-qliks-ap-03.onyx.local/app/7cd8b706-5b9e-4c96-b2fb-6b1ed3deeb20')}
+                  onClick={() => setUrl('wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000')}
                 >
                   восстановить
                 </button>

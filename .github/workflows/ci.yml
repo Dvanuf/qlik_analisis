@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Тесты ядра
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm test
+
+  desktop:
+    name: Сборка десктоп-приложения
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run typecheck
+        working-directory: desktop
+      - run: npm run build
+        working-directory: desktop
+      - name: Сборка Windows-пакета
+        run: npx electron-builder --win --x64 --config.win.target=nsis
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qlik-analyzer-windows
+          path: desktop/release/*.exe

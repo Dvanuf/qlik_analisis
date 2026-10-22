@@ -8,9 +8,9 @@ import { renderSummaryHtml } from '../src/report/summary.js';
 
 const qix = {
   getDocList: async () => [
-    { qDocId: 'a1', qTitle: 'Бренды (qs-akb-01)(1)', qFileSize: 251658240, qLastReloadTime: '2026-10-20T10:00:00Z' },
-    { qDocId: 'a2', qTitle: 'Операции с баллами', qFileSize: 10485760, qLastReloadTime: '2026-10-21T10:00:00Z' },
-    { qDocId: 'a3', qTitle: 'Сломанное', qFileSize: 100, qLastReloadTime: null },
+    { qDocId: 'a1', qTitle: 'Пример приложения', qFileSize: 251658240, qLastReloadTime: '2026-10-20T10:00:00Z' },
+    { qDocId: 'a2', qTitle: 'Второе приложение', qFileSize: 10485760, qLastReloadTime: '2026-10-21T10:00:00Z' },
+    { qDocId: 'a3', qTitle: 'Недоступное приложение', qFileSize: 100, qLastReloadTime: null },
   ],
   openDoc: async (id) => {
     if (id === 'a3') throw new Error('документ недоступен');
