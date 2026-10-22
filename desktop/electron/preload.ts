@@ -29,6 +29,31 @@ const api = {
   }) => ipcRenderer.invoke('core:save-credentials', creds),
   loadCredentials: () => ipcRenderer.invoke('core:load-credentials'),
   clearCredentials: () => ipcRenderer.invoke('core:clear-credentials'),
+  /** Пакетный анализ всех приложений сервера. */
+  analyzeAll: (opts: {
+    url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
+    user?: string; password?: string; insecure?: boolean; platform?: string;
+    pauseMs?: number; useCache?: boolean;
+  }) => ipcRenderer.invoke('core:analyze-all', opts),
+  cancelBatch: () => ipcRenderer.invoke('core:cancel-batch'),
+  /** Прогресс пакетного анализа: подписка возвращает функцию отписки. */
+  onBatchProgress: (cb: (p: {
+    phase: string; index: number; total: number; appId?: string;
+    title?: string; findings?: number; error?: string; fromCache?: boolean;
+  }) => void) => {
+    const listener = (_e: unknown, p: {
+      phase: string; index: number; total: number; appId?: string;
+      title?: string; findings?: number; error?: string; fromCache?: boolean;
+    }) => cb(p);
+    ipcRenderer.on('batch:progress', listener);
+    return () => ipcRenderer.removeListener('batch:progress', listener);
+  },
+  /** Сохраняет отчёт (HTML + JSON) в «Документы/QlikAnalyzer» и открывает HTML. */
+  exportReport: (payload: {
+    appName: string; summary: unknown; findings: unknown; patch: unknown; ruleStats: unknown;
+  }) => ipcRenderer.invoke('core:export-report', payload),
+  /** Сохраняет сводный отчёт по пакетному прогону. */
+  exportSummary: (payload: { totals: unknown; results: unknown; platform?: string }) => ipcRenderer.invoke('core:export-summary', payload),
   /** Пошаговый вывод диагностики: подписка возвращает функцию отписки. */
   onDoctorStep: (cb: (step: { name: string; status: string; detail: string; hint?: string }) => void) => {
     const listener = (_e: unknown, step: { name: string; status: string; detail: string; hint?: string }) => cb(step);

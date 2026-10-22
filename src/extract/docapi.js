@@ -51,12 +51,18 @@ function readMeta(layout) {
  * @param {string} appId — идентификатор документа
  * @param {(msg: string) => void} [log]
  */
-export async function extractViaDocApi(qix, appId, log = () => {}) {
+/**
+ * Строит граф приложения по уже открытому документу.
+ * Вынесено отдельно, чтобы пакетный режим мог переиспользовать одну сессию
+ * движка для всех приложений (не открывать соединение на каждое).
+ *
+ * @param {object} app — открытый документ (Doc API)
+ * @param {string} appId
+ * @param {(msg: string) => void} [log]
+ */
+export async function buildGraphFromDoc(app, appId, log = () => {}) {
   const capabilities = [];
   const skipped = [];
-
-  const app = await qix.openDoc(appId);
-  capabilities.push('openDoc');
 
   const appLayout = await app.getAppLayout().catch(() => null);
   const appProps = await app.getAppProperties().catch(() => null);
@@ -189,5 +195,18 @@ export async function extractViaDocApi(qix, appId, log = () => {}) {
 
   log(`Doc API: скрипт ${graph.script.length} симв., таблиц ${graph.tables.length}, полей ${graph.fields.length}, объектов ${graph.objects.length}`);
 
+  return graph;
+}
+
+/**
+ * Экстракт одного приложения через Doc API (открывает документ сам).
+ * @param {object} qix — глобальный объект Doc API
+ * @param {string} appId
+ * @param {(msg: string) => void} [log]
+ */
+export async function extractViaDocApi(qix, appId, log = () => {}) {
+  const app = await qix.openDoc(appId);
+  const graph = await buildGraphFromDoc(app, appId, log);
+  graph.meta.capabilities.unshift('openDoc');
   return graph;
 }

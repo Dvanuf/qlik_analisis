@@ -46,6 +46,28 @@ type AnalysisResult = {
 
 type AppItem = { id: string; title: string; size: number | null };
 
+type BatchProgress = {
+  phase: 'start' | 'done' | 'error' | 'stopped';
+  index: number; total: number; appId?: string;
+  title?: string; findings?: number; error?: string; fromCache?: boolean;
+};
+
+type BatchItem = {
+  appId: string; title: string; size?: number | null; error?: string;
+  fromCache?: boolean;
+  summary?: {
+    findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number> };
+    savings?: { removableFields: number; removableRows: number };
+  } | null;
+};
+
+type BatchTotals = {
+  apps: number; errors: number; findings: number;
+  byCategory: Record<string, number>;
+  bySeverity: Record<string, number>;
+  removableRows: number; removableFields: number;
+};
+
 declare global {
   interface Window {
     qa: {
@@ -74,6 +96,19 @@ declare global {
       loadCredentials(): Promise<{ hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string } | null>;
       clearCredentials(): Promise<boolean>;
       onDoctorStep(cb: (step: DoctorStep) => void): () => void;
+      analyzeAll(opts: {
+        url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
+        user?: string; password?: string; insecure?: boolean; platform?: string;
+        pauseMs?: number; useCache?: boolean;
+      }): Promise<{ results: BatchItem[]; totals: BatchTotals }>;
+      cancelBatch(): Promise<boolean>;
+      onBatchProgress(cb: (p: BatchProgress) => void): () => void;
+      exportReport(payload: {
+        appName: string; summary: unknown; findings: unknown; patch: unknown; ruleStats: unknown;
+      }): Promise<{ htmlPath: string; jsonPath: string }>;
+      exportSummary(payload: {
+        totals: unknown; results: unknown; platform?: string;
+      }): Promise<{ htmlPath: string; jsonPath: string }>;
     };
   }
 }
@@ -115,6 +150,11 @@ export default function App() {
   const [ruleSearch, setRuleSearch] = useState('');
   const [ruleCat, setRuleCat] = useState('all');
   const [hubStatus, setHubStatus] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [batch, setBatch] = useState<{ results: BatchItem[]; totals: BatchTotals } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [exportNote, setExportNote] = useState('');
 
   /** Базовый URL хаба из URL движка: wss://host/app/... -> https://host */
   const hubUrl = useMemo(() => {
@@ -179,9 +219,14 @@ export default function App() {
       setCsrfToken(creds.csrfToken ?? '');
       setHubStatus('Сессия хаба восстановлена из защищённого хранилища');
     });
-    return window.qa.onDoctorStep((step) => {
+    const offDoctor = window.qa.onDoctorStep((step) => {
       setDoctorSteps((prev) => [...prev, step]);
     });
+    const offBatch = window.qa.onBatchProgress((p) => setBatchProgress(p));
+    return () => {
+      offDoctor();
+      offBatch();
+    };
   }, []);
 
   const conn = { url, user, password, cookie, xrfKey, csrfToken, insecure };
@@ -228,6 +273,60 @@ export default function App() {
       setTab('connect');
     }
     setBusy('');
+  }
+
+  /** Пакетный анализ всех приложений сервера. */
+  async function analyzeAll() {
+    setBatchRunning(true);
+    setBatchProgress(null);
+    setBusy('Пакетный анализ запущен…');
+    try {
+      const res = await window.qa.analyzeAll({ ...conn, platform, pauseMs: 1000 });
+      setBatch(res);
+      setTab('analysis');
+    } catch (err) {
+      setDoctorSteps([{ name: 'Пакетный анализ', status: 'FAIL', detail: String(err) }]);
+    } finally {
+      setBatchRunning(false);
+      setBusy('');
+    }
+  }
+
+  async function cancelBatch() {
+    await window.qa.cancelBatch();
+    setBusy('Останавливаем пакетный анализ…');
+  }
+
+  /** Экспорт отчёта по текущему анализу (HTML + JSON) в «Документы/QlikAnalyzer». */
+  async function exportCurrent() {
+    if (!analysis) return;
+    try {
+      const res = await window.qa.exportReport({
+        appName: analysis.appName ?? analysis.file ?? 'Приложение',
+        summary: analysis.summary,
+        findings: analysis.findings,
+        patch: analysis.patch,
+        ruleStats: analysis.ruleStats,
+      });
+      setExportNote(`Отчёт сохранён: ${res.htmlPath}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить отчёт: ${String(err)}`);
+    }
+  }
+
+  /** Экспорт сводного отчёта по пакетному прогону. */
+  async function exportBatch() {
+    if (!batch) return;
+    try {
+      const res = await window.qa.exportSummary({
+        totals: batch.totals,
+        results: batch.results,
+        platform,
+      });
+      setExportNote(`Сводный отчёт сохранён: ${res.htmlPath}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить сводный отчёт: ${String(err)}`);
+    }
   }
 
   async function analyzeFile() {
@@ -327,13 +426,40 @@ export default function App() {
       {tab === 'connect' && (
         <section className="card wide">
           <h2>Подключение к Qlik</h2>
+
+          <details className="howto" open>
+            <summary>Как подключиться</summary>
+            <ol>
+              <li>
+                Укажите <b>URL движка</b>: <code>wss://&lt;host&gt;/app/&lt;appId&gt;</code>
+                {' '}(через хаб, порт 443) или <code>ws://&lt;host&gt;:4747/app/&lt;appId&gt;</code>.
+              </li>
+              <li>
+                Нажмите <b>«Войти в хаб»</b> → в открывшемся окне введите доменный логин и пароль.
+                Cookie и CSRF-токен подставятся сами — вручную ничего копировать не нужно.
+              </li>
+              <li>
+                <b>«Загрузить список приложений»</b> → выберите приложение → <b>«Анализировать»</b>.
+              </li>
+              <li>
+                Результаты — на вкладке <b>«Анализ»</b>: сводка, находки с фильтрами, готовые правки скрипта.
+                Кнопка <b>«Экспорт отчёта»</b> сохраняет HTML+JSON в «Документы/QlikAnalyzer».
+              </li>
+              <li>
+                <b>«Анализировать все»</b> — прогон по всем приложениям сервера с прогрессом и сводным отчётом.
+              </li>
+            </ol>
+            <p className="muted small">
+              Проверяем 45 правил в 4 категориях (Quality · Resources · Practices · Script).
+              Отчёты: «Документы/QlikAnalyzer». Лог входа: <code>hub-login.log</code> рядом с данными приложения.
+            </p>
+          </details>
+
           <div className="form">
             <label>
               URL движка
               <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="wss://host/app/&lt;appId&gt;" />
               <span className="muted">
-                Формат: wss://&lt;host&gt;/app/&lt;appId&gt; (через хаб, порт 443) или ws://&lt;host&gt;:4747/app/&lt;appId&gt;
-                {' '}
                 <button
                   type="button"
                   className="link"
@@ -343,46 +469,55 @@ export default function App() {
                 </button>
               </span>
             </label>
-            <label>
-              Пользователь (домен\логин)
-              <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="CORP\user" />
-            </label>
-            <label>
-              Пароль
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </label>
-            <label>
-              Cookie сессии хаба
-              <input
-                type="password"
-                value={cookie}
-                onChange={(e) => setCookie(e.target.value)}
-                placeholder="X-Qlik-Session=…"
-              />
-            </label>
-            <label>
-              XSRF-ключ хаба
-              <input
-                type="password"
-                value={xrfKey}
-                onChange={(e) => setXrfKey(e.target.value)}
-                placeholder="X-Qlik-XrfKey: …"
-              />
-            </label>
-            <label>
-              CSRF-токен
-              <input
-                type="password"
-                value={csrfToken}
-                onChange={(e) => setCsrfToken(e.target.value)}
-                placeholder="qlik-csrf-token=…"
-              />
-            </label>
             <label className="check">
               <input type="checkbox" checked={insecure} onChange={(e) => setInsecure(e.target.checked)} />
               самоподписанный сертификат
             </label>
           </div>
+
+          <details className="advanced" open={showAdvanced}>
+            <summary onClick={() => setShowAdvanced((v) => !v)}>
+              Дополнительно — ручной ввод (для других развёртываний)
+            </summary>
+            <div className="form">
+              <label>
+                Пользователь (домен\логин)
+                <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="CORP\user" />
+              </label>
+              <label>
+                Пароль
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+              <label>
+                Cookie сессии хаба
+                <input
+                  type="password"
+                  value={cookie}
+                  onChange={(e) => setCookie(e.target.value)}
+                  placeholder="X-Qlik-Session=…"
+                />
+              </label>
+              <label>
+                XSRF-ключ хаба
+                <input
+                  type="password"
+                  value={xrfKey}
+                  onChange={(e) => setXrfKey(e.target.value)}
+                  placeholder="X-Qlik-XrfKey: …"
+                />
+              </label>
+              <label>
+                CSRF-токен
+                <input
+                  type="password"
+                  value={csrfToken}
+                  onChange={(e) => setCsrfToken(e.target.value)}
+                  placeholder="qlik-csrf-token=…"
+                />
+              </label>
+            </div>
+          </details>
+
           <div className="actions">
             <button className="primary" onClick={() => void signIn()}>
               Войти в хаб (откроется окно авторизации)
@@ -390,7 +525,29 @@ export default function App() {
             <button onClick={() => void runDoctor()}>Проверить подключение</button>
             <button onClick={() => void loadApps()}>Загрузить список приложений</button>
             <button onClick={() => void analyzeFile()}>Анализ файла…</button>
+            <button onClick={() => void analyzeAll()} disabled={batchRunning}>
+              Анализировать все
+            </button>
+            {batchRunning && (
+              <button onClick={() => void cancelBatch()}>Прервать</button>
+            )}
           </div>
+
+          {batchProgress && (
+            <p className="muted small">
+              {batchProgress.phase === 'start' && (
+                <>Обработано {batchProgress.index} из {batchProgress.total}: {batchProgress.title}…</>
+              )}
+              {batchProgress.phase === 'done' && (
+                <>Готово {batchProgress.index + 1} из {batchProgress.total}: {batchProgress.title} — {batchProgress.findings} находок
+                  {batchProgress.fromCache ? ' (из кэша)' : ''}</>
+              )}
+              {batchProgress.phase === 'error' && (
+                <>Ошибка на {batchProgress.title}: {batchProgress.error}</>
+              )}
+            </p>
+          )}
+
           {hubStatus && (
             <p className={hubStatus.startsWith('Вход выполнен') ? 'ok' : 'muted'}>
               {hubStatus}
@@ -434,10 +591,65 @@ export default function App() {
       {tab === 'analysis' && (
         <section className="card wide">
           <h2>
-            Результаты анализа
+            {batch ? 'Сводный анализ по всем приложениям' : 'Результаты анализа'}
             {analysis?.appName ? ` — ${analysis.appName}` : ''}
             {analysis?.file ? ` — ${analysis.file}` : ''}
           </h2>
+
+          {batch && (
+            <>
+              <div className="cards">
+                <div className="card">
+                  <div className="card-num">{batch.totals.apps}</div>
+                  <div className="card-label">приложений</div>
+                </div>
+                <div className="card">
+                  <div className="card-num">{batch.totals.findings}</div>
+                  <div className="card-label">находок всего</div>
+                </div>
+                {Object.entries(batch.totals.bySeverity).map(([k, v]) => (
+                  <div className="card" key={k}>
+                    <div className="card-num">{v}</div>
+                    <div className="card-label">{k}</div>
+                  </div>
+                ))}
+                <div className="card">
+                  <div className="card-num">{batch.totals.removableRows.toLocaleString('ru-RU')}</div>
+                  <div className="card-label">строк можно убрать</div>
+                </div>
+              </div>
+              <div className="actions">
+                <button className="primary" onClick={() => void exportBatch()}>
+                  Экспорт сводного отчёта
+                </button>
+              </div>
+              <table className="batchTable">
+                <thead>
+                  <tr>
+                    <th>Приложение</th><th>Размер</th><th>Всего</th>
+                    <th>Script</th><th>Resources</th><th>Quality</th><th>Practices</th><th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batch.results
+                    .slice()
+                    .sort((a, b) => (b.summary?.findings.total ?? -1) - (a.summary?.findings.total ?? -1))
+                    .map((r) => (
+                      <tr key={r.appId}>
+                        <td>{r.title}</td>
+                        <td>{r.size ? `${Math.round(r.size / 1048576)} МБ` : '—'}</td>
+                        <td>{r.summary?.findings.total ?? 0}</td>
+                        <td>{r.summary?.findings.byCategory.Script ?? 0}</td>
+                        <td>{r.summary?.findings.byCategory.Resources ?? 0}</td>
+                        <td>{r.summary?.findings.byCategory.Quality ?? 0}</td>
+                        <td>{r.summary?.findings.byCategory.Practices ?? 0}</td>
+                        <td>{r.error ? <span className="err">{r.error}</span> : (r.fromCache ? 'из кэша' : 'ок')}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </>
+          )}
 
           {analysis ? (
             <>
@@ -459,6 +671,13 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              <div className="actions">
+                <button className="primary" onClick={() => void exportCurrent()}>
+                  Экспорт отчёта
+                </button>
+              </div>
+              {exportNote && <p className="muted small">{exportNote}</p>}
 
               {analysis.patch.script && (
                 <>

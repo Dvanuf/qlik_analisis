@@ -13,6 +13,7 @@ import { extractFromEngine, buildEngineUrl, ENIGMA_SCHEMA } from '../../src/extr
 import { analyze } from '../../src/analyzer.js';
 import { ALL_RULES, CATEGORIES } from '../../src/rules/index.js';
 import { extractFromFile } from '../../src/connectors/file.js';
+import { renderHtml } from '../../src/report/html.js';
 import { runDoctor } from '../../src/cli/doctor.js';
 import { parseScript } from '../../src/script/parse.js';
 
@@ -235,6 +236,85 @@ async function openQix(opts: {
   const qix = await session.open();
   return { qix, session, url };
 }
+
+/** Пакетный анализ всех приложений сервера с прогрессом и возможностью отмены. */
+let batchCancelRequested = false;
+
+ipcMain.handle('core:analyze-all', async (_e, opts: {
+  url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
+  user?: string; password?: string; insecure?: boolean; platform?: string;
+  pauseMs?: number; useCache?: boolean;
+}) => {
+  const { analyzeAll } = await import('../../src/batch.js');
+  batchCancelRequested = false;
+  const { results, totals } = await analyzeAll({
+    url: opts.url,
+    cookie: opts.cookie,
+    xrfKey: opts.xrfKey,
+    csrfToken: opts.csrfToken,
+    user: opts.user,
+    password: opts.password,
+    insecure: opts.insecure,
+    platform: opts.platform ?? 'qlikview',
+    rules: { platform: opts.platform ?? 'qlikview' },
+    pauseMs: opts.pauseMs ?? 1000,
+    cacheDir: resolve(app.getPath('userData'), 'cache'),
+    useCache: opts.useCache !== false,
+    shouldStop: () => batchCancelRequested,
+    onProgress: (p) => mainWindow?.webContents.send('batch:progress', p),
+  });
+  return { results, totals };
+});
+
+ipcMain.handle('core:cancel-batch', () => {
+  batchCancelRequested = true;
+  return true;
+});
+
+/** Экспорт отчёта в HTML (и JSON) и открытие его в браузере. */
+ipcMain.handle('core:export-report', async (_e, payload: {
+  appName: string; summary: unknown; findings: unknown; patch: unknown; ruleStats: unknown;
+}) => {
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const safeName = String(payload.appName || 'app').replace(/[^\wа-яА-Я ._-]/g, '_').slice(0, 60);
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const htmlPath = resolve(dir, `${safeName} ${stamp}.html`);
+  const jsonPath = resolve(dir, `${safeName} ${stamp}.json`);
+
+  const result = {
+    summary: payload.summary,
+    findings: payload.findings,
+    patch: payload.patch,
+    ruleStats: payload.ruleStats,
+  };
+  writeFileSync(htmlPath, renderHtml(result), 'utf8');
+  writeFileSync(jsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await shell.openPath(htmlPath);
+  return { htmlPath, jsonPath };
+});
+
+/** Экспорт сводного отчёта по пакетному прогону (HTML + JSON). */
+ipcMain.handle('core:export-summary', async (_e, payload: {
+  totals: unknown; results: unknown; platform?: string;
+}) => {
+  const { renderSummaryHtml } = await import('../../src/report/summary.js');
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const htmlPath = resolve(dir, `Сводный анализ ${stamp}.html`);
+  const jsonPath = resolve(dir, `Сводный анализ ${stamp}.json`);
+
+  const html = renderSummaryHtml({
+    results: payload.results as never,
+    totals: payload.totals as never,
+    platform: payload.platform ?? 'qlikview',
+  });
+  writeFileSync(htmlPath, html, 'utf8');
+  writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await shell.openPath(htmlPath);
+  return { htmlPath, jsonPath };
+});
 
 /** Сессионная cookie хаба и ключи хранятся в зашифрованном виде (safeStorage). */
 const CREDS_FILE = 'hub-credentials.bin';

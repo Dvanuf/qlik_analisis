@@ -106,3 +106,26 @@ button.primary:hover { background:#115e59; }
 p.ok { color:#2c7a4b; font-size:13px; }
 
 button.link { background:none; border:0; color:#1d4ed8; padding:0; font-size:12px; text-decoration:underline; cursor:pointer; }
+
+/* --- Инструкция «Как подключиться» и блок ручного ввода --- */
+details.howto,
+details.advanced {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+details.howto summary,
+details.advanced summary { cursor: pointer; font-weight: 600; color: var(--navy); }
+details.howto ol { margin: 10px 0 6px; padding-left: 22px; }
+details.howto li { margin-bottom: 6px; }
+details.howto code { background: #eef2f7; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+details.advanced .form { margin-top: 12px; }
+
+/* --- Таблица сводного анализа --- */
+table.batchTable { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+table.batchTable th, table.batchTable td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+table.batchTable th { background: var(--navy); color: #fff; font-size: 11px; text-transform: uppercase; }
+table.batchTable tr:hover td { background: #f8fafc; }
+p.small, .small { font-size: 12px; }

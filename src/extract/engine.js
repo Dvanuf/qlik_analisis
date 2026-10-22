@@ -112,7 +112,8 @@ export function buildEngineUrl(url, { csrfToken, appId } = {}) {
     }
     if (!u.searchParams.get('reloadUri')) {
       const id = appId ?? appIdFromUrl(url);
-      if (id) u.searchParams.set('reloadUri', `${u.protocol}//${u.host}/sense/app/${id}`);
+      // reloadUri — это адрес страницы приложения в хабе, то есть https, а не wss.
+      if (id) u.searchParams.set('reloadUri', `https://${u.host}/sense/app/${id}`);
     }
     return u.toString();
   } catch {

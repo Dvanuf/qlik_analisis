@@ -30,6 +30,8 @@ const FLAGS = {
   '--host': 'host', '--port': 'port', '--app-id': 'appId', '--user': 'user',
   '--qlik-user': 'qlikUser', '--password': 'password', '--password-env': 'passwordEnv',
   '--api-key': 'apiKey', '--cookie': 'cookie', '--xrf-key': 'xrfKey', '--csrf-token': 'csrfToken', '--insecure': 'insecure', '--schema': 'schema',
+  '--out-dir': 'outDir', '--summary': 'summary', '--cache-dir': 'cacheDir', '--pause': 'pause',
+  '--limit': 'limit', '--app-ids': 'appIds', '--no-cache': 'noCache',
   '--script': 'script', '--qvs': 'qvs', '--qvw': 'qvw', '--fixture': 'fixture', '--out': 'out',
   '--json': 'json', '--graph': 'graph', '--fail-on': 'failOn',
   '--enable': 'enable', '--platform': 'platform', '--disable': 'disable',
@@ -149,6 +151,56 @@ async function main() {
     const { steps, failed } = await runDoctor(target);
     printDoctor(steps);
     process.exit(failed ? 1 : 0);
+  }
+
+  if (command === 'analyze-all') {
+    const { analyzeAll } = await import('../src/batch.js');
+    const { renderSummaryHtml } = await import('../src/report/summary.js');
+    const outDir = resolve(args.outDir ?? 'reports/batch');
+    const cacheDir = resolve(args.cacheDir ?? '.cache/analysis');
+    mkdirSync(outDir, { recursive: true });
+
+    console.log(`Пакетный анализ: ${target.url}`);
+    const { results, totals } = await analyzeAll({
+      url: target.url,
+      cookie: target.cookie,
+      xrfKey: target.xrfKey,
+      csrfToken: target.csrfToken,
+      user: target.user,
+      password: target.password,
+      insecure: target.insecure,
+      platform: rules.platform,
+      rules,
+      appIds: args.appIds ? String(args.appIds).split(',').map((s) => s.trim()) : null,
+      limit: args.limit ?? null,
+      pauseMs: args.pause ?? 1000,
+      cacheDir,
+      useCache: !args.noCache,
+      onProgress: (p) => {
+        if (p.phase === 'start') {
+          process.stdout.write(`  [${p.index + 1}/${p.total}] ${p.title}… `);
+        } else if (p.phase === 'done') {
+          console.log(`готово (${p.findings} находок${p.fromCache ? ', из кэша' : ''})`);
+        } else if (p.phase === 'error') {
+          console.log(`ОШИБКА: ${p.error}`);
+        }
+      },
+    });
+
+    for (const r of results) {
+      const name = String(r.title || r.appId).replace(/[^\wа-яА-Я ._-]/g, '_').slice(0, 60);
+      writeOut(resolve(outDir, `${name}.json`), `${JSON.stringify(r, null, 2)}\n`);
+    }
+    const summaryPath = resolve(args.summary ?? resolve(outDir, 'summary.json'));
+    writeOut(summaryPath, `${JSON.stringify({ totals, results }, null, 2)}\n`);
+    const summaryHtml = writeOut(resolve(outDir, 'summary.html'),
+      renderSummaryHtml({ results, totals, platform: rules.platform }));
+    console.log(`\nПриложений: ${totals.apps}, находок: ${totals.findings} `
+      + `(ошибок ${totals.bySeverity.error ?? 0}, предупреждений ${totals.bySeverity.warning ?? 0})`);
+    console.log(`Сводный отчёт: ${summaryHtml}`);
+    console.log(`JSON: ${summaryPath}`);
+    if (totals.bySeverity.error > 0) process.exit(1);
+    return;
   }
 
   if (command !== 'analyze') {
