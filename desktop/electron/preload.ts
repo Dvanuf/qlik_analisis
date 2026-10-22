@@ -14,6 +14,14 @@ const api = {
   openDialog: () => ipcRenderer.invoke('core:open-dialog'),
   previewScript: (text: string) => ipcRenderer.invoke('core:preview-script', text),
   readFile: (filePath: string) => ipcRenderer.invoke('core:read-file', filePath),
+  listApps: (opts: {
+    url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
+    user?: string; password?: string; insecure?: boolean;
+  }) => ipcRenderer.invoke('core:list-apps', opts),
+  analyzeApp: (opts: {
+    url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
+    user?: string; password?: string; insecure?: boolean; platform?: string;
+  }) => ipcRenderer.invoke('core:analyze-app', opts),
   /** Пошаговый вывод диагностики: подписка возвращает функцию отписки. */
   onDoctorStep: (cb: (step: { name: string; status: string; detail: string; hint?: string }) => void) => {
     const listener = (_e: unknown, step: { name: string; status: string; detail: string; hint?: string }) => cb(step);

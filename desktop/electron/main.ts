@@ -7,11 +7,11 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-
-// Ядро анализа (ESM-JS исходники собираются esbuild'ом в этот же бандл).
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-import { ALL_RULES, CATEGORIES } from '../../src/rules/index.js';
+import enigma from 'enigma.js';
+import NodeWebSocket from 'ws';
+import { extractFromEngine, buildEngineUrl, ENIGMA_SCHEMA } from '../../src/extract/engine.js';
 import { analyze } from '../../src/analyzer.js';
+import { ALL_RULES, CATEGORIES } from '../../src/rules/index.js';
 import { extractFromFile } from '../../src/connectors/file.js';
 import { runDoctor } from '../../src/cli/doctor.js';
 import { parseScript } from '../../src/script/parse.js';
@@ -137,6 +137,10 @@ ipcMain.handle('core:rules', () => ({
     severity: r.severity,
     title: r.title,
     description: r.description,
+    recommendation: r.recommendation,
+    qsdaName: r.qsdaName,
+    qsdaUrl: r.qsdaUrl,
+    platforms: r.platforms,
   })),
 }));
 
@@ -195,7 +199,7 @@ ipcMain.handle('core:open-dialog', async () => {
 });
 
 ipcMain.handle('core:preview-script', (_e, text: string) => {
-  const model = parseScript(text);
+  const model = parseScript(text) as { loads: { table: string }[]; variables: { name: string }[]; comments: unknown[] };
   return {
     loads: model.loads.map((l) => l.table),
     variables: model.variables.map((v) => v.name),
@@ -204,6 +208,85 @@ ipcMain.handle('core:preview-script', (_e, text: string) => {
 });
 
 ipcMain.handle('core:read-file', (_e, filePath: string) => readFileSync(resolve(filePath), 'utf8'));
+
+/**
+ * Открывает сессию к движку Qlik и отдаёт глобальный объект.
+ * Один и тот же путь используется для списка приложений и анализа.
+ */
+async function openQix(opts: {
+  url: string; cookie?: string; xrfKey?: string; csrfToken?: string; user?: string;
+  password?: string; insecure?: boolean; appId?: string;
+}) {
+  const headers: Record<string, string> = {};
+  if (opts.cookie) headers.Cookie = opts.cookie;
+  if (opts.xrfKey) headers['X-Qlik-XrfKey'] = opts.xrfKey;
+  if (opts.user && opts.password) {
+    headers.Authorization = `Basic ${Buffer.from(`${opts.user}:${opts.password}`).toString('base64')}`;
+  }
+  const url = buildEngineUrl(opts.url, { csrfToken: opts.csrfToken, appId: opts.appId });
+  const session = enigma.create({
+    schema: ENIGMA_SCHEMA,
+    url,
+    createSocket: (u: string) => new NodeWebSocket(u, {
+      headers,
+      ...(opts.insecure ? { rejectUnauthorized: false } : {}),
+    }) as unknown as WebSocket,
+  });
+  const qix = await session.open();
+  return { qix, session, url };
+}
+
+/** Список приложений, доступных на сервере. */
+ipcMain.handle('core:list-apps', async (_e, opts: {
+  url: string; cookie?: string; xrfKey?: string; csrfToken?: string; user?: string;
+  password?: string; insecure?: boolean;
+}) => {
+  let session: { close: () => Promise<void> } | null = null;
+  try {
+    const conn = await openQix(opts);
+    session = conn.session;
+    const list = await (conn.qix as unknown as { getDocList?: () => Promise<unknown> }).getDocList?.();
+    const items = (Array.isArray(list)
+      ? list
+      : ((list as { qItems?: unknown[] })?.qItems ?? [])) as {
+      qDocId?: string; qTitle?: string; qDocName?: string; qFileSize?: number;
+    }[];
+    return items.map((d) => ({
+      id: d.qDocId ?? '',
+      title: d.qTitle ?? d.qDocName ?? '',
+      size: d.qFileSize ?? null,
+    }));
+  } catch (err) {
+    return { error: String((err as Error)?.message ?? err) };
+  } finally {
+    try { await session?.close(); } catch { /* закрываем мягко */ }
+  }
+});
+
+/** Полный анализ приложения на сервере. */
+ipcMain.handle('core:analyze-app', async (_e, opts: {
+  url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
+  user?: string; password?: string; insecure?: boolean; platform?: string;
+}) => {
+  const graph = await extractFromEngine({
+    url: opts.url,
+    appId: opts.appId,
+    cookie: opts.cookie,
+    xrfKey: opts.xrfKey,
+    csrfToken: opts.csrfToken,
+    user: opts.user,
+    password: opts.password,
+    insecure: opts.insecure,
+  });
+  const result = analyze(graph as never, { platform: opts.platform ?? 'qlikview' });
+  return {
+    appName: result.summary.appName,
+    summary: result.summary,
+    findings: result.findings,
+    patch: result.patch,
+    ruleStats: result.ruleStats,
+  };
+});
 
 function looksLikeText(filePath: string): boolean {
   try {

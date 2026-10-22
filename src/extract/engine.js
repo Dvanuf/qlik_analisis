@@ -16,6 +16,9 @@ import { extractViaDocApi } from './docapi.js';
 // и require.resolve('enigma.js/schemas/…') не сработает.
 import embeddedSchema from 'enigma.js/schemas/12.34.11.json' with { type: 'json' };
 
+/** Схема QIX Engine API, встроенная в бандл (в т.ч. в упакованное приложение). */
+export const ENIGMA_SCHEMA = embeddedSchema;
+
 // createRequire вызывается лениво: в CommonJS-бандле Electron import.meta.url
 // недоступен на верхнем уровне модуля, а нужен он только в запасном пути поиска схемы.
 let nodeRequire = null;
@@ -118,7 +121,12 @@ export function buildEngineUrl(url, { csrfToken, appId } = {}) {
 }
 
 /**
- * @param {{url: string, schemaPath?: string, apiKey?: string, measurePerf?: boolean}} config
+ * @param {{
+ *   url: string, schemaPath?: string, apiKey?: string, measurePerf?: boolean,
+ *   user?: string, password?: string, qlikUser?: string, insecure?: boolean,
+ *   cookie?: string, xrfKey?: string, csrfToken?: string, appId?: string,
+ *   openTimeoutMs?: number,
+ * }} config
  * @returns {Promise<object>} граф приложения
  */
 export async function extractFromEngine(config) {
@@ -195,7 +203,13 @@ export async function extractFromEngine(config) {
 
   const app = qix.get('App');
   const graph = {
-    meta: { source: 'engine', url, generatedAt: new Date().toISOString() },
+    meta: {
+      source: 'engine',
+      url,
+      generatedAt: new Date().toISOString(),
+      thumbnail: null,
+      associations: [],
+    },
     appName: '', appId: '', script: '',
     sheets: [], objects: [], variables: [], fields: [], tables: [], bookmarks: [], extensions: [],
   };
@@ -244,6 +258,7 @@ export async function extractFromEngine(config) {
           distinct: f.qnTotalDistinctValues ?? null,
           hasNull: f.qHasNull ?? null,
           informationDensity: f.qInformationDensity ?? null,
+          subsetRatio: f.qSubsetRatio ?? null,
         }));
         graph.tables.push({
           name: t.qName,
@@ -314,6 +329,10 @@ export async function extractFromEngine(config) {
       }
       graph.variables.push({ name, value, description: '' });
     }
+
+    // --- Связи между таблицами (правило про внешний join) ---
+    const assoc = await attempt('associations', async () => app.getAssociationScores([], [], 0), []);
+    if (Array.isArray(assoc)) graph.meta.associations = assoc;
 
     // --- Закладки ---
     const bm = await attempt('bookmarks', async () => {

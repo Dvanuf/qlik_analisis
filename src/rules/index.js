@@ -5,10 +5,12 @@ import { qualityRules } from './quality.js';
 import { resourceRules } from './resources.js';
 import { practiceRules } from './practices.js';
 import { scriptRules } from './script.js';
+import { qsdaRules } from './qsda.js';
+import { enrichRule } from './qsda-map.js';
 
 export const ALL_RULES = [
-  ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules,
-];
+  ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...qsdaRules,
+].map(enrichRule);
 
 export const RULES_BY_ID = new Map(ALL_RULES.map((r) => [r.id, r]));
 
@@ -36,14 +38,26 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
     title: rule.title,
     description: rule.description,
     recommendation: rule.recommendation,
+    qsdaName: rule.qsdaName,
+    qsdaUrl: rule.qsdaUrl,
+    platforms: rule.platforms,
     count: 0,
     skipped: false,
+    note: null,
   }));
   const statById = new Map(ruleStats.map((s) => [s.id, s]));
 
   for (const rule of ALL_RULES) {
     if (enabled && !enabled.has(rule.id)) { statById.get(rule.id).skipped = true; continue; }
     if (disabled && disabled.has(rule.id)) { statById.get(rule.id).skipped = true; continue; }
+    // Правило может быть неприменимо к выбранной платформе.
+    const platform = config.platform ?? 'qlikview';
+    if (Array.isArray(rule.platforms) && rule.platforms.length && !rule.platforms.includes(platform)) {
+      const stat = statById.get(rule.id);
+      stat.skipped = true;
+      stat.note = `Не применимо для платформы ${platform === 'qlik-sense' ? 'Qlik Sense' : 'QlikView'}.`;
+      continue;
+    }
     // Скриптовые правила требуют текста скрипта — без него они не применимы.
     if (rule.category === 'Script' && !String(graph.script ?? '').trim()) {
       statById.get(rule.id).skipped = true;

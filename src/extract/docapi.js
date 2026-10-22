@@ -74,6 +74,8 @@ export async function extractViaDocApi(qix, appId, log = () => {}) {
       skipped,
       productVersion: appProps?.qSavedInProductVersion ?? '',
       lastReload: appLayout?.qLastReloadTime ?? appProps?.qLastReloadTime ?? '',
+      thumbnail: appProps?.qThumbnail ?? null,
+      associations: [],
     },
     appName: appLayout?.qTitle ?? appProps?.qTitle ?? appId,
     appId: appLayout?.qFileName ?? appId,
@@ -116,6 +118,7 @@ export async function extractViaDocApi(qix, appId, log = () => {}) {
         distinct: f.qnTotalDistinctValues ?? null,
         hasNull: f.qHasNull ?? null,
         informationDensity: f.qInformationDensity ?? null,
+        subsetRatio: f.qSubsetRatio ?? null,
       }));
       graph.tables.push({
         name: t.qName,
@@ -159,6 +162,18 @@ export async function extractViaDocApi(qix, appId, log = () => {}) {
     graph.objects.push({
       id, name: meta.name || id, type,
       description: meta.description, expressions: unique, layoutMs: null,
+    });
+  }
+
+  // --- Связи между таблицами (для правила про внешний join) ---
+  const assoc = await app.getAssociationScores?.([], [], 0).catch(() => null);
+  if (Array.isArray(assoc)) {
+    graph.meta.associations = assoc;
+    capabilities.push('associations');
+  } else {
+    skipped.push({
+      capability: 'associations',
+      reason: 'Связи между таблицами недоступны в этой версии API — правило R011 не применимо.',
     });
   }
 

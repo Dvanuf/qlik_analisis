@@ -28,6 +28,7 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@types/qlik-engineapi": "^12.67.16"
+    "@types/qlik-engineapi": "^12.67.16",
+    "@types/ws": "^8.18.2"
   }
 }

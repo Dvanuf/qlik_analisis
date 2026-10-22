@@ -74,3 +74,29 @@ button:hover { background: #27496f; }
 .byRule summary b { margin-left: auto; color: var(--navy); }
 .byRule ul { margin: 8px 0 2px; padding-left: 18px; }
 .byRule li { margin-bottom: 3px; font-size: 12.5px; }
+
+/* --- Вкладки, платформа, фильтры --- */
+.head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.platform { display: flex; gap: 8px; }
+.platform button { background: #e8eef6; color: var(--navy); border: 1px solid #cbd5e1; }
+.platform button.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.tabs { display: flex; gap: 4px; margin-top: 12px; }
+.tabs button { background: transparent; color: #5b6b7c; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; }
+.tabs button.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 600; }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; }
+.appList { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 12px 0 4px; }
+.appList select { min-width: 380px; max-width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 12px; }
+.toolbar button { background: #e8eef6; color: #33465c; border: 1px solid #cbd5e1; padding: 5px 12px; font-size: 12.5px; }
+.toolbar button.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.toolbar .sep { width: 1px; height: 20px; background: var(--line); }
+.toolbar .search { flex: 1 1 240px; min-width: 200px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 999px; font-size: 13px; }
+
+table.findings { font-size: 12.5px; }
+table.findings th { text-align: left; color: #fff; background: var(--navy); padding: 7px 9px; font-size: 11px; text-transform: uppercase; }
+table.findings td { padding: 7px 9px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+h3 { margin: 22px 0 6px; font-size: 14px; color: var(--navy); }
+a { color: #1d4ed8; }

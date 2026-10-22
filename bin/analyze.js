@@ -32,7 +32,7 @@ const FLAGS = {
   '--api-key': 'apiKey', '--cookie': 'cookie', '--xrf-key': 'xrfKey', '--csrf-token': 'csrfToken', '--insecure': 'insecure', '--schema': 'schema',
   '--script': 'script', '--qvs': 'qvs', '--qvw': 'qvw', '--fixture': 'fixture', '--out': 'out',
   '--json': 'json', '--graph': 'graph', '--fail-on': 'failOn',
-  '--enable': 'enable', '--disable': 'disable',
+  '--enable': 'enable', '--platform': 'platform', '--disable': 'disable',
   '--max-expression-length': 'maxExpressionLength', '--name-prefixes': 'namePrefixes',
   '--perf': 'perf', '--quiet': 'quiet',
 };
