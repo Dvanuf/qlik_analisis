@@ -89,12 +89,9 @@ export function renderHtml(result) {
           <div class="muted small">${escapeHtml(r.description ?? '')}</div>
           ${r.note ? `<div class="muted small">${escapeHtml(r.note)}</div>` : ''}
         </td>
-        <td>${r.qsdaUrl
-    ? `<a href="${escapeHtml(r.qsdaUrl)}" target="_blank" rel="noreferrer">${escapeHtml(r.qsdaName ?? '')}</a>`
-    : '<span class="muted">—</span>'}</td>
+        <td class="muted small">${escapeHtml(r.recommendation ?? '')}</td>
         <td>${r.skipped ? '<span class="muted">выключено</span>' : `<b>${r.count}</b>`}</td>
       </tr>`).join('');
-
   const skipped = (meta.skipped ?? []).length
     ? `<div class="skipped"><b>Пропущенные проверки (${meta.skipped.length}):</b> ${meta.skipped
       .map((s) => `${escapeHtml(s.capability)} — ${escapeHtml(s.reason)}`).join('; ')}</div>`
@@ -156,7 +153,7 @@ export function renderHtml(result) {
 
   <h2>Каталог правил</h2>
   <table>
-    <thead><tr><th>ID</th><th>Категория</th><th>Уровень</th><th>Правило</th><th>Флаг QSDA</th><th>Срабатываний</th></tr></thead>
+    <thead><tr><th>ID</th><th>Категория</th><th>Уровень</th><th>Правило</th><th>Рекомендация</th><th>Срабатываний</th></tr></thead>
     <tbody>${ruleRows}</tbody>
   </table>
 

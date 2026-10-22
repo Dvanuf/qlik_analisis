@@ -14,8 +14,7 @@ type RuleInfo = {
   categories: { name: string; count: number }[];
   rules: {
     id: string; category: string; severity: string; title: string; description: string;
-    recommendation: string; qsdaName: string | null; qsdaUrl: string | null;
-    platforms: string[];
+    recommendation: string; platforms: string[];
   }[];
 };
 
@@ -40,7 +39,7 @@ type AnalysisResult = {
   skipped?: { capability: string; reason: string }[];
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
-    count: number; skipped: boolean; note: string | null; qsdaName: string | null;
+    count: number; skipped: boolean; note: string | null;
   }[];
 };
 
@@ -370,7 +369,7 @@ export default function App() {
       if (ruleCat !== 'all' && r.category !== ruleCat) return false;
       if (ruleSearch.trim()) {
         const q = ruleSearch.trim().toLowerCase();
-        const hay = `${r.id} ${r.title} ${r.qsdaName ?? ''} ${r.description}`.toLowerCase();
+        const hay = `${r.id} ${r.title} ${r.description} ${r.recommendation}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -834,7 +833,7 @@ export default function App() {
               className="search"
               value={ruleSearch}
               onChange={(e) => setRuleSearch(e.target.value)}
-              placeholder="Поиск по правилу или флагу QSDA…"
+              placeholder="Поиск по правилу или описанию…"
             />
             <span className="muted">показано {filteredRules.length}</span>
           </div>
@@ -842,7 +841,7 @@ export default function App() {
             <thead>
               <tr>
                 <th>ID</th><th>Категория</th><th>Уровень</th><th>Правило</th>
-                <th>Флаг QSDA</th><th>Платформы</th><th>Срабатываний</th>
+                <th>Рекомендация</th><th>Платформы</th><th>Срабатываний</th>
               </tr>
             </thead>
             <tbody>
@@ -855,11 +854,7 @@ export default function App() {
                     <b>{r.title}</b>
                     <div className="muted small">{r.description}</div>
                   </td>
-                  <td>
-                    {r.qsdaUrl ? (
-                      <a href={r.qsdaUrl} target="_blank" rel="noreferrer">{r.qsdaName}</a>
-                    ) : <span className="muted">—</span>}
-                  </td>
+                  <td className="muted small">{r.recommendation}</td>
                   <td className="muted small">
                     {(r.platforms ?? []).map((p) => (p === 'qlik-sense' ? 'Qlik Sense' : 'QlikView')).join(', ')}
                   </td>

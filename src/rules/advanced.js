@@ -1,6 +1,7 @@
 /**
- * Правила, добавленные по сверке со справочником флагов QSDA Pro V3.7.
- * Каждое правило помечено соответствием флагу QSDA (см. qsda-map.js).
+ * Дополнительные правила: полнота ключей, кардинальность связей,
+ * хранение числовых данных, превью приложения, устаревшие типы
+ * визуализаций, синтетические ключи и условная агрегация.
  */
 import { extractReferences } from '../normalize.js';
 import { allExpressions } from '../graph.js';
@@ -11,12 +12,12 @@ const AGG_FUNCTIONS = new Set([
   'firstsortedvalue', 'lastsortedvalue', 'minsortedvalue',
 ]);
 
-export const qsdaRules = [
+export const advancedRules = [
   {
     id: 'R010',
     category: 'Resources',
     severity: 'warning',
-    title: 'Missing Key value',
+    title: 'Неполный ключ',
     description: 'Ключевое поле имеет subset ratio меньше 100% — часть значений ключа отсутствует, это признак потери данных при связи таблиц.',
     recommendation: 'Проверить источник данных и полноту ключа; при необходимости пересобрать ключ.',
     run(ctx) {
@@ -29,7 +30,7 @@ export const qsdaRules = [
           ruleId: 'R010',
           category: 'Resources',
           severity: 'warning',
-          title: 'Missing Key value',
+          title: 'Неполный ключ',
           target: { kind: 'field', name: f.name, id: f.name },
           message: `Ключевое поле «${f.name}» (${f.table}) заполнено на ${Math.round(ratio * 100)}%`,
           detail: 'Часть значений ключа отсутствует — вероятна потеря данных при связи таблиц.',
@@ -45,7 +46,7 @@ export const qsdaRules = [
     id: 'R011',
     category: 'Practices',
     severity: 'info',
-    title: 'Tables can be Outer Joined',
+    title: 'Таблицы можно объединить',
     description: 'Между таблицами связь «один к одному» — их можно объединить внешним join, сократив число связей.',
     recommendation: 'Объединить таблицы внешним join, если это допустимо по бизнес-логике.',
     run(ctx) {
@@ -58,7 +59,7 @@ export const qsdaRules = [
           ruleId: 'R011',
           category: 'Practices',
           severity: 'info',
-          title: 'Tables can be Outer Joined',
+          title: 'Таблицы можно объединить',
           target: { kind: 'table', name: a.qTable ?? a.table ?? '?', id: a.qTable ?? '' },
           message: `Связь «${a.qField ?? a.field ?? '?'}» имеет кардинальность 1:1 — таблицы можно объединить внешним join`,
           detail: 'Устраняет лишнюю связь в модели данных.',
@@ -73,7 +74,7 @@ export const qsdaRules = [
     id: 'R012',
     category: 'Resources',
     severity: 'info',
-    title: 'Suboptimal numeric storage',
+    title: 'Неоптимальное хранение чисел',
     description: 'Числовое поле хранится неоптимально: высокое количество уникальных значений при большом объёме данных.',
     recommendation: 'Рассмотреть хранение как float или уменьшить разрядность; точную оценку памяти даёт отчёт движка.',
     run(ctx) {
@@ -87,7 +88,7 @@ export const qsdaRules = [
           ruleId: 'R012',
           category: 'Resources',
           severity: 'info',
-          title: 'Suboptimal numeric storage',
+          title: 'Неоптимальное хранение чисел',
           target: { kind: 'field', name: f.name, id: f.name },
           message: `Числовое поле «${f.name}» (${f.table}): ${f.distinct} уникальных значений на ${f.rows} строк`,
           detail: 'Плотность значений указывает на неоптимальное хранение (dual вместо float).',
@@ -103,7 +104,7 @@ export const qsdaRules = [
     id: 'R013',
     category: 'Resources',
     severity: 'info',
-    title: 'No Application Thumbnail',
+    title: 'Нет превью приложения',
     description: 'У приложения нет изображения-превью — в списке приложений оно выглядит безликим.',
     recommendation: 'Задать превью приложения в свойствах приложения.',
     run(ctx) {
@@ -115,7 +116,7 @@ export const qsdaRules = [
         ruleId: 'R013',
         category: 'Resources',
         severity: 'info',
-        title: 'No Application Thumbnail',
+        title: 'Нет превью приложения',
         target: { kind: 'app', name: ctx.graph.appName ?? 'приложение', id: ctx.graph.appId ?? '' },
         message: 'У приложения не задано изображение-превью',
         detail: 'В списке приложений хаба такое приложение сложнее опознать.',
@@ -128,7 +129,7 @@ export const qsdaRules = [
     id: 'R014',
     category: 'Practices',
     severity: 'info',
-    title: 'DeprecatedVisualization',
+    title: 'Устаревший тип визуализации',
     description: 'Используется устаревший тип визуализации.',
     recommendation: 'Заменить на поддерживаемый объект.',
     run(ctx) {
@@ -142,7 +143,7 @@ export const qsdaRules = [
           ruleId: 'R014',
           category: 'Practices',
           severity: 'info',
-          title: 'DeprecatedVisualization',
+          title: 'Устаревший тип визуализации',
           target: { kind: 'object', name: obj.name, id: obj.id },
           message: `Объект «${obj.name}» имеет устаревший тип «${obj.type}»`,
           detail: 'Тип помечен как deprecated/obsolete в документации Qlik.',
@@ -157,7 +158,7 @@ export const qsdaRules = [
     id: 'P012',
     category: 'Practices',
     severity: 'warning',
-    title: 'Synthetic Key field',
+    title: 'Поле синтетического ключа',
     description: 'Поле входит в синтетический ключ — такие ключи ухудшают связность и нагрузку на joins.',
     recommendation: 'Оставить один ключевой атрибут, остальные сделать обычными полями.',
     run(ctx) {
@@ -169,7 +170,7 @@ export const qsdaRules = [
             ruleId: 'P012',
             category: 'Practices',
             severity: 'warning',
-            title: 'Synthetic Key field',
+            title: 'Поле синтетического ключа',
             target: { kind: 'field', name: keyField, id: keyField },
             message: `Поле «${keyField}» входит в синтетический ключ таблицы «${t.name}»`,
             detail: `Ключевые поля таблицы: ${(t.keyFields ?? []).join(', ')}`,
@@ -185,7 +186,7 @@ export const qsdaRules = [
     id: 'P011',
     category: 'Practices',
     severity: 'warning',
-    title: 'Conditional Aggregation',
+    title: 'Условная агрегация',
     description: 'В выражении условная агрегация: считаются несколько агрегатов сразу, что замедляет расчёт.',
     recommendation: 'Вынести условие в вычисляемое поле или в set analysis.',
     run(ctx) {
@@ -200,7 +201,7 @@ export const qsdaRules = [
           ruleId: 'P011',
           category: 'Practices',
           severity: 'warning',
-          title: 'Conditional Aggregation',
+          title: 'Условная агрегация',
           target: { kind: 'object', name: item.owner.name, id: item.owner.id },
           message: `«${item.owner.name}»: условная агрегация (${[...new Set(aggs)].join(', ')}) внутри IF`,
           detail: `Выражение: ${expr.slice(0, 160)}`,

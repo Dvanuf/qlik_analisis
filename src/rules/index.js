@@ -5,11 +5,11 @@ import { qualityRules } from './quality.js';
 import { resourceRules } from './resources.js';
 import { practiceRules } from './practices.js';
 import { scriptRules } from './script.js';
-import { qsdaRules } from './qsda.js';
-import { enrichRule } from './qsda-map.js';
+import { advancedRules } from './advanced.js';
+import { enrichRule } from './platforms.js';
 
 export const ALL_RULES = [
-  ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...qsdaRules,
+  ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...advancedRules,
 ].map(enrichRule);
 
 export const RULES_BY_ID = new Map(ALL_RULES.map((r) => [r.id, r]));
@@ -38,8 +38,6 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
     title: rule.title,
     description: rule.description,
     recommendation: rule.recommendation,
-    qsdaName: rule.qsdaName,
-    qsdaUrl: rule.qsdaUrl,
     platforms: rule.platforms,
     count: 0,
     skipped: false,

@@ -147,7 +147,7 @@ async function loadRules() {
 function renderRules() {
   const q = state.ruleSearch.trim().toLowerCase();
   const list = state.rules.filter((r) => !q
-    || `${r.id} ${r.title} ${r.qsdaName ?? ''} ${r.description}`.toLowerCase().includes(q));
+    || `${r.id} ${r.title} ${r.description} ${r.recommendation ?? ''}`.toLowerCase().includes(q));
   $('#rules-count').textContent = `показано ${list.length} из ${state.rules.length}`;
   $('#rules-table tbody').innerHTML = list.map((r) => `
     <tr>
@@ -155,9 +155,7 @@ function renderRules() {
       <td>${esc(r.category)}</td>
       <td><span class="pill ${esc(r.severity)}">${esc(r.severity)}</span></td>
       <td><b>${esc(r.title)}</b><div class="muted small">${esc(r.description)}</div></td>
-      <td>${r.qsdaUrl
-        ? `<a href="${esc(r.qsdaUrl)}" target="_blank">${esc(r.qsdaName)}</a>`
-        : '<span class="muted">—</span>'}</td>
+      <td class="muted small">${esc(r.recommendation ?? '')}</td>
       <td class="muted small">${(r.platforms ?? []).map((p) => (p === 'qlik-sense' ? 'Qlik Sense' : 'QlikView')).join(', ')}</td>
     </tr>`).join('');
 }

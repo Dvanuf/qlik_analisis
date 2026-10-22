@@ -35,12 +35,16 @@ npm run smoke       # автопроверка: приложение запус�
 ## Как добавить правило
 
 1. Создайте функцию в нужном файле `src/rules/` (`quality.js`, `resources.js`,
-   `practices.js`, `script.js`) или в новом модуле и подключите его в `src/rules/index.js`.
+   `practices.js`, `script.js`, `advanced.js`) или в новом модуле и подключите его
+   в `src/rules/index.js`.
 2. Укажите `category` из `CATEGORIES` и `severity` из `SEVERITIES`
    (`error` / `warning` / `info`).
-3. Если у правила есть аналог в QSDA Pro — добавьте соответствие в `src/rules/qsda-map.js`.
+3. Заполните `title`, `description` (что проверяется) и `recommendation`
+   (что с этим делать) — обе формулировки видны пользователю в каталоге правил
+   и в отчёте.
 4. Добавьте тест в `test/rules.test.js`.
-5. Обновите `docs/rules-vs-qsda.md` (генерируется `scripts/gen-rules-vs-qsda.mjs`).
+5. Если правило применимо не ко всем платформам — укажите это
+   в `src/rules/platforms.js`.
 
 ## Как выпустить версию
 

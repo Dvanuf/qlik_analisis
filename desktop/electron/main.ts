@@ -69,6 +69,31 @@ async function runSmokeCheck(): Promise<void> {
     void (async () => {
       try {
         await new Promise((r) => setTimeout(r, 1500));
+
+        // Открываем вкладку «Правила» — там каталог с описаниями и рекомендациями.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+              .filter(function (b) { return b.textContent.indexOf('Правила') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 900));
+
+        const catalog = await win.webContents.executeJavaScript(`
+          (function () {
+            var table = document.querySelector('table.rules');
+            if (!table) return JSON.stringify({ rows: 0, heads: [], externalLinks: 0 });
+            return JSON.stringify({
+              rows: table.querySelectorAll('tbody tr').length,
+              heads: Array.prototype.slice.call(table.querySelectorAll('thead th'))
+                .map(function (t) { return t.textContent.trim(); }),
+              externalLinks: table.querySelectorAll('a[href^="http"]').length
+            });
+          })()
+        `);
+
         const image = await win.webContents.capturePage();
         // В упакованном приложении app.asar доступен только для чтения —
         // скриншот пишем в каталог пользователя.
@@ -96,6 +121,7 @@ async function runSmokeCheck(): Promise<void> {
           rules: ALL_RULES.length,
           categories: CATEGORIES,
           findingsOnFixture,
+          catalog: JSON.parse(String(catalog)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {
@@ -139,8 +165,6 @@ ipcMain.handle('core:rules', () => ({
     title: r.title,
     description: r.description,
     recommendation: r.recommendation,
-    qsdaName: r.qsdaName,
-    qsdaUrl: r.qsdaUrl,
     platforms: r.platforms,
   })),
 }));

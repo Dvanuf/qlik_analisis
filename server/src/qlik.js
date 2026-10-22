@@ -197,8 +197,6 @@ export function rulesCatalog() {
       title: r.title,
       description: r.description,
       recommendation: r.recommendation,
-      qsdaName: r.qsdaName,
-      qsdaUrl: r.qsdaUrl,
       platforms: r.platforms,
     })),
   };

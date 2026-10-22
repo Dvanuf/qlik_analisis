@@ -152,3 +152,39 @@ test('все правила отрабатывают без исключений
   assert.deepEqual(result.errors, []);
   for (const rule of ALL_RULES) assert.ok(RULES_BY_ID.has(rule.id));
 });
+
+test('каждое правило содержит описание, рекомендацию и платформы', () => {
+  for (const rule of ALL_RULES) {
+    assert.ok(rule.description?.trim().length > 20,
+      `у правила ${rule.id} слишком короткое описание: ${rule.description}`);
+    assert.ok(rule.recommendation?.trim().length > 10,
+      `у правила ${rule.id} слишком короткая рекомендация: ${rule.recommendation}`);
+    assert.ok(Array.isArray(rule.platforms) && rule.platforms.length,
+      `у правила ${rule.id} не указаны платформы`);
+  }
+});
+
+test('у правил нет внешних ссылок на сторонние справочники', () => {
+  for (const rule of ALL_RULES) {
+    const blob = JSON.stringify(rule);
+    assert.ok(!/https?:\/\//i.test(blob), `в правиле ${rule.id} есть внешняя ссылка`);
+  }
+});
+
+test('названия правил на русском языке', () => {
+  for (const rule of ALL_RULES) {
+    // Заголовок должен содержать кириллицу: английские названия из сторонних
+    // справочников в отчётах смотрелись бы чужеродно.
+    assert.ok(/[а-яА-ЯёЁ]/.test(rule.title),
+      `заголовок правила ${rule.id} без кириллицы: ${rule.title}`);
+  }
+});
+
+test('в HTML-отчёте каталог правил не содержит внешних ссылок', () => {
+  const html = renderHtml(result);
+  const catalog = html.slice(html.indexOf('Каталог правил'));
+  assert.ok(catalog.includes('Рекомендация'), 'в каталоге правил нет колонки «Рекомендация»');
+  // В каталоге не должно быть ссылок на внешние ресурсы.
+  const links = catalog.match(/<a\s[^>]*href="http[^"]*"/gi) ?? [];
+  assert.deepEqual(links, [], `в каталоге правил есть внешние ссылки: ${links.join(', ')}`);
+});

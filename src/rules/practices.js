@@ -62,7 +62,7 @@ export const practiceRules = [
     severity: 'warning',
     title: 'Совпадающие меры с разными именами',
     description: 'Две меры имеют одинаковую эффективную формулу (различия только в именах переменных, регистре и пробелах).',
-    recommendation: 'Оставить одну меру и использовать её повторно — аналог проверки «Expression Matching Measure» в QSDA Pro.',
+    recommendation: 'Оставить одну меру и использовать её повторно — так избегают дублирования расчёта.',
     run(ctx) {
       const findings = [];
       const vmap = variableMap(ctx.graph);
