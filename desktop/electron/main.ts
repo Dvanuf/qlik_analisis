@@ -5,7 +5,7 @@
  * только данные через IPC и не имеет прямого доступа к файловой системе.
  */
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
@@ -278,6 +278,17 @@ app.on('certificate-error', (event, _webContents, url, _error, _certificate, cal
   callback(false);
 });
 
+/** Лог входа в хаб — пишем и в консоль, и в файл, чтобы разобраться без переустановки. */
+function hubLog(...args: unknown[]): void {
+  const line = `[${new Date().toISOString()}] ${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`;
+  console.log(line);
+  try {
+    const file = resolve(app.getPath('userData'), 'hub-login.log');
+    if (!existsSync(file)) writeFileSync(file, '', 'utf8');
+    appendFileSync(file, `${line}\n`, 'utf8');
+  } catch { /* лог не критичен */ }
+}
+
 /**
  * Вход в хаб: открываем окно браузера, пользователь вводит доменный пароль,
  * приложение само перехватывает cookie сессии и ключи рукопожатия.
@@ -327,7 +338,17 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
 
   const target = opts.appId
     ? `${opts.hubUrl}/sense/app/${opts.appId}/overview`
-    : `${opts.hubUrl}/sense/`;
+    : `${opts.hubUrl}/sense/app`;
+  hubLog('открываем:', target);
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    hubLog('did-fail-load:', code, desc, url);
+  });
+  win.webContents.on('console-message', (_e, level, message) => {
+    if (level >= 2) console.log('[hub] консоль страницы:', message);
+  });
+  win.webContents.on('did-finish-load', () => {
+    hubLog('страница загружена:', win.webContents.getURL(), '|', win.webContents.getTitle());
+  });
   await win.loadURL(target);
 
   // Ждём cookie сессии (появляется после успешного входа) и CSRF-токен

@@ -126,13 +126,24 @@ export default function App() {
     }
   }, [url]);
 
+  /** appId из URL движка: wss://host/app/<id> -> <id> */
+  const appIdFromUrl = useMemo(() => {
+    const m = String(url).match(/\/app\/([^/?#]+)/);
+    return m ? m[1] : '';
+  }, [url]);
+
   /** Вход в хаб: открывается окно, пользователь вводит доменный пароль. */
   async function signIn() {
     if (!hubUrl) { setHubStatus('Сначала укажите корректный URL движка'); return; }
     setBusy('Открываем хаб — авторизуйтесь в окне браузера…');
-    setHubStatus('Ожидаем авторизацию в окне хаба…');
+    setHubStatus('Ожидаем авторизацию в окне хаба… (в окне должна открыться страница приложения)');
     try {
-      const res = await window.qa.openHub({ hubUrl, appId: appId || undefined, insecure });
+      const targetApp = appId || appIdFromUrl;
+      const res = await window.qa.openHub({
+        hubUrl,
+        appId: targetApp || undefined,
+        insecure,
+      });
       if (res?.cookie) {
         setCookie(res.cookie);
         setXrfKey(res.xrfKey ?? '');
@@ -148,7 +159,8 @@ export default function App() {
           + `CSRF-токен ${res.csrfToken ? '✓' : '✗'}, XSRF-ключ ${res.xrfKey ? '✓' : '✗'}`,
         );
       } else {
-        setHubStatus('Авторизация не завершена: окно закрыто или cookie не получена');
+        setHubStatus('Авторизация не завершена: окно закрыто или cookie не получена. '
+          + 'Подробности — в файле hub-login.log рядом с данными приложения.');
       }
     } catch (err) {
       setHubStatus(`Ошибка входа: ${String(err)}`);
@@ -319,7 +331,17 @@ export default function App() {
             <label>
               URL движка
               <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="wss://host/app/&lt;appId&gt;" />
-              <span className="muted">Движок часто доступен только через хаб: wss://&lt;host&gt;/app/&lt;appId&gt; (443)</span>
+              <span className="muted">
+                Формат: wss://&lt;host&gt;/app/&lt;appId&gt; (через хаб, порт 443) или ws://&lt;host&gt;:4747/app/&lt;appId&gt;
+                {' '}
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => setUrl('wss://dc3-qliks-ap-03.onyx.local/app/7cd8b706-5b9e-4c96-b2fb-6b1ed3deeb20')}
+                >
+                  восстановить
+                </button>
+              </span>
             </label>
             <label>
               Пользователь (домен\логин)

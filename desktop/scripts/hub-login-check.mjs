@@ -27,14 +27,27 @@ app.whenReady().then(async () => {
   });
 
   // Ставим сессионную cookie так же, как это делает браузер после входа.
+  // Если передан "-", проверяем поведение БЕЗ сессии (что видит новый пользователь).
   const url = new URL(hubUrl);
-  await win.webContents.session.cookies.set({
-    url: hubUrl,
-    name: 'X-Qlik-Session',
-    value: cookieValue,
-    domain: url.hostname,
-    path: '/',
-    secure: true,
+  if (cookieValue && cookieValue !== '-') {
+    await win.webContents.session.cookies.set({
+      url: hubUrl,
+      name: 'X-Qlik-Session',
+      value: cookieValue,
+      domain: url.hostname,
+      path: '/',
+      secure: true,
+    });
+    console.log('>> cookie подставлена');
+  } else {
+    console.log('>> проверка БЕЗ сессии (как у нового пользователя)');
+  }
+
+  win.webContents.on('did-fail-load', (_e, code, desc, u) => {
+    console.log('>> did-fail-load:', code, desc, u);
+  });
+  win.webContents.on('console-message', (_e, level, message, line, source) => {
+    if (level >= 2) console.log('>> консоль страницы:', message, `(${source}:${line})`);
   });
 
   const captured = { csrfToken: null, xrfKey: null, wsUrl: null, cookie: null };
