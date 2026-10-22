@@ -1,7 +1,10 @@
 node_modules/
 out/
-release/
 dist/
 *.log
 .DS_Store
 .env
+
+# Артефакты сборок не коммитим (100+ МБ), но реестр версий — коммитим
+desktop/release/*
+!desktop/release/README.md
