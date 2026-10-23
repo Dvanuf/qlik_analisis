@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { normalizeEngineUrl, cleanEngineUrl } from '../../src/extract/url.js';
 
 type Tab = 'connect' | 'analysis' | 'summary' | 'rules';
 type Platform = 'qlik-sense' | 'qlikview';
@@ -125,19 +126,24 @@ const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('connect');
-  const [platform, setPlatform] = useState<Platform>('qlikview');
+  const [platform, setPlatform] = useState<Platform>(
+    () => (localStorage.getItem('qa.platform') as Platform) ?? 'qlikview',
+  );
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [ruleInfo, setRuleInfo] = useState<RuleInfo | null>(null);
   const [busy, setBusy] = useState('');
   const [doctorSteps, setDoctorSteps] = useState<DoctorStep[]>([]);
 
-  const [url, setUrl] = useState('wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000');
-  const [user, setUser] = useState('');
+  const [url, setUrl] = useState(
+    () => localStorage.getItem('qa.url')
+      ?? 'wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000',
+  );
+  const [user, setUser] = useState(() => localStorage.getItem('qa.user') ?? '');
   const [password, setPassword] = useState('');
   const [cookie, setCookie] = useState('');
   const [xrfKey, setXrfKey] = useState('');
   const [csrfToken, setCsrfToken] = useState('');
-  const [insecure, setInsecure] = useState(true);
+  const [insecure, setInsecure] = useState(() => localStorage.getItem('qa.insecure') !== '0');
 
   const [apps, setApps] = useState<AppItem[]>([]);
   const [appId, setAppId] = useState('');
@@ -156,6 +162,13 @@ export default function App() {
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [exportNote, setExportNote] = useState('');
+
+  // Настройки подключения живут между запусками: без этого после перезапуска
+  // поле URL возвращается к заглушке и список приложений не грузится.
+  useEffect(() => { localStorage.setItem('qa.url', url); }, [url]);
+  useEffect(() => { localStorage.setItem('qa.user', user); }, [user]);
+  useEffect(() => { localStorage.setItem('qa.insecure', insecure ? '1' : '0'); }, [insecure]);
+  useEffect(() => { localStorage.setItem('qa.platform', platform); }, [platform]);
 
   /** Базовый URL хаба из URL движка: wss://host/app/... -> https://host */
   const hubUrl = useMemo(() => {
@@ -189,6 +202,9 @@ export default function App() {
         setCookie(res.cookie);
         setXrfKey(res.xrfKey ?? '');
         setCsrfToken(res.csrfToken ?? '');
+        // Адрес движка из рукопожатия подставляем в поле URL: без него
+        // приложение остаётся с заглушкой и список приложений не грузится.
+        if (res.wsUrl) setUrl(cleanEngineUrl(res.wsUrl));
         await window.qa.saveCredentials({
           hubUrl,
           cookie: res.cookie,
@@ -432,7 +448,9 @@ export default function App() {
           <div>
             <h1>Qlik Analyzer</h1>
             <span className="sub">
-              {info ? `Electron ${info.electron} · Node ${info.node} · ${info.platform}/${info.arch}` : 'загрузка…'}
+              {info
+                ? `версия ${info.appVersion} · Electron ${info.electron} · Node ${info.node} · ${info.platform}/${info.arch}`
+                : 'загрузка…'}
             </span>
           </div>
           <div className="platform">
@@ -500,6 +518,14 @@ export default function App() {
               URL движка
               <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="wss://host/app/&lt;appId&gt;" />
               <span className="muted">
+                <button
+                  type="button"
+                  className="link"
+                  title="Привести адрес к виду wss://<host>/app/<appId>"
+                  onClick={() => setUrl(normalizeEngineUrl(url, { appId: appId || undefined }))}
+                >
+                  привести в формат
+                </button>
                 <button
                   type="button"
                   className="link"
