@@ -150,7 +150,42 @@ cd .. && git add -A && git commit -m "release: v0.1.13" && git tag v0.1.13
 
 ---
 
-## 10. Язык общения
+## 10. Особенности окружения сборки (проверено 23.10.2026)
+
+**Node.js в системе НЕ установлен.** `node`/`npm`/`npx` недоступны, PATH их не содержит.
+Рабочий Node берётся из самого приложения:
+
+```bash
+PROJ=/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer
+ELECTRON="$PROJ/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+
+# Тесты ядра
+cd "$PROJ" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" --test "test/*.test.js"
+
+# Типы десктопа
+cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" ./node_modules/typescript/bin/tsc --noEmit
+
+# Сборка renderer
+cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vite/bin/vite.js build
+```
+
+**Ловушки:**
+
+- В терминале VSCode выставлено `ELECTRON_RUN_AS_NODE=1`. Для запуска самого
+  приложения (не как Node) нужно `env -u ELECTRON_RUN_AS_NODE`.
+- `electron-builder` не запускается через CLI: yargs получает путь к скрипту как
+  аргумент. Работает **программный API** (`build({ targets, config })`).
+- Под Electron-as-node нужно `process.noAsar = true`, иначе сборщик падает на
+  `default_app.asar` («Invalid package»).
+- `electronDownload.arch` надо задавать строкой (`'arm64'`/`'x64'`), иначе в
+  `@electron/get` уходит число (`Arch.arm64 === 3`), кэш Electron не находится
+  и начинается скачивание.
+- Макрос `${arch}` в `artifactName` раскрывается числом — имена артефактов
+  задаются явно: `${productName}-${version}-arm64.${ext}` и т. п.
+- `npm list` для сбора зависимостей: production-зависимостей нет, достаточно
+  заглушки, отдающей `{"name":…,"version":…,"dependencies":{}}`.
+
+## 11. Язык общения
 
 С пользователем — **русский**. Комментарии в коде, README, CHANGELOG — **русский**.
 Идентификаторы, имена файлов, сообщения коммитов — **английский**.
