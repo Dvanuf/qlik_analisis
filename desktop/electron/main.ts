@@ -11,6 +11,7 @@ import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { extractFromEngine, buildEngineUrl, ENIGMA_SCHEMA } from '../../src/extract/engine.js';
 import { listApps } from '../../src/extract/session.js';
+import { appUrl } from '../../src/extract/url.js';
 import { analyze } from '../../src/analyzer.js';
 import { ALL_RULES, CATEGORIES } from '../../src/rules/index.js';
 import { extractFromFile } from '../../src/connectors/file.js';
@@ -572,7 +573,9 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   user?: string; password?: string; insecure?: boolean; platform?: string;
 }) => {
   const graph = await extractFromEngine({
-    url: opts.url,
+    // Адрес строго под выбранное приложение: в URL из поля может стоять
+    // идентификатор другого приложения — открылось бы не то.
+    url: appUrl(opts.url, opts.appId),
     appId: opts.appId,
     cookie: opts.cookie,
     xrfKey: opts.xrfKey,

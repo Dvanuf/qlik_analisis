@@ -80,6 +80,26 @@ export function normalizeEngineUrl(raw, { appId } = {}) {
 }
 
 /**
+ * Адрес движка для конкретного приложения: `/app/<appId>`.
+ * Идентификатор в пути заменяется — иначе открылось бы не то приложение.
+ *
+ * @param {string} url
+ * @param {string} appId
+ * @returns {string}
+ */
+export function appUrl(url, appId) {
+  try {
+    const u = new URL(url);
+    u.pathname = appId ? `/app/${appId}` : '/app';
+    u.search = '';
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return String(url ?? '');
+  }
+}
+
+/**
  * URL хаба без привязки к приложению.
  *
  * Сессия, открытая на конкретном приложении (`/app/<id>`), не даёт серверных

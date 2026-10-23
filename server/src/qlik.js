@@ -6,6 +6,7 @@ import { analyze } from '../../src/analyzer.js';
 import { extractFromEngine } from '../../src/extract/engine.js';
 import { buildGraphFromDoc } from '../../src/extract/docapi.js';
 import { openEngineSession, listApps } from '../../src/extract/session.js';
+import { appUrl } from '../../src/extract/url.js';
 import { renderHtml } from '../../src/report/html.js';
 import { renderSummaryHtml } from '../../src/report/summary.js';
 import { ALL_RULES, CATEGORIES, SEVERITIES } from '../../src/rules/index.js';
@@ -40,7 +41,8 @@ export async function analyzeApp(qlikCfg, appId, options = {}) {
   const platform = options.platform ?? qlikCfg.platform ?? null;
 
   const { qix, session } = await openEngineSession({
-    url: qlikCfg.url,
+    // Адрес строго под анализируемое приложение.
+    url: appUrl(qlikCfg.url, appId),
     cookie: qlikCfg.cookie,
     xrfKey: qlikCfg.xrfKey,
     csrfToken: qlikCfg.csrfToken,
@@ -58,7 +60,7 @@ export async function analyzeApp(qlikCfg, appId, options = {}) {
       graph = await buildGraphFromDoc(doc, appId, () => {});
     } else {
       graph = await extractFromEngine({
-        url: qlikCfg.url,
+        url: appUrl(qlikCfg.url, appId),
         appId,
         cookie: qlikCfg.cookie,
         xrfKey: qlikCfg.xrfKey,
@@ -97,15 +99,6 @@ export async function analyzeApp(qlikCfg, appId, options = {}) {
  */
 export async function analyzeAllApps(qlikCfg, options = {}) {
   const platform = qlikCfg.platform ?? null;
-  const { qix, session } = await openEngineSession({
-    url: qlikCfg.url,
-    cookie: qlikCfg.cookie,
-    xrfKey: qlikCfg.xrfKey,
-    csrfToken: qlikCfg.csrfToken,
-    user: qlikCfg.user,
-    password: qlikCfg.password,
-    insecure: qlikCfg.insecure,
-  });
 
   const results = [];
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -124,8 +117,19 @@ export async function analyzeAllApps(qlikCfg, options = {}) {
         phase: 'start', index: i, total, appId: app.id, title: app.title,
       });
       try {
-        const doc = await qix.openDoc(app.id);
-        const graph = await buildGraphFromDoc(doc, app.id, () => {});
+        // Сессия на каждое приложение: документ нельзя закрыть в рамках
+        // сессии (в схеме QIX нет метода CloseDoc), поэтому при обходе подряд
+        // сервер отвечает «App already open».
+        const graph = await extractFromEngine({
+          url: appUrl(qlikCfg.url, app.id),
+          appId: app.id,
+          cookie: qlikCfg.cookie,
+          xrfKey: qlikCfg.xrfKey,
+          csrfToken: qlikCfg.csrfToken,
+          user: qlikCfg.user,
+          password: qlikCfg.password,
+          insecure: qlikCfg.insecure,
+        });
         const result = analyze(graph, { platform });
         results.push({
           appId: app.id,
@@ -165,7 +169,7 @@ export async function analyzeAllApps(qlikCfg, options = {}) {
       await sleep(pauseMs);
     }
   } finally {
-    try { await session.close(); } catch { /* закрываем мягко */ }
+    // Сессии открываются и закрываются внутри цикла — по одной на приложение.
   }
 
   const totals = totalsOf(results);

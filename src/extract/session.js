@@ -199,9 +199,11 @@ export async function listApps(options = {}) {
   //    переадресуются (301), а csrf-токен в URL обязателен (иначе 403).
   //    Запасной адрес — служебный /app/engineData, через него хаб тоже
   //    отдаёт список приложений.
-  const candidates = [];
+  //    Служебный адрес /app/engineData идёт первым: он не открывает документ,
+  //    поэтому приложение остаётся свободным для последующего анализа
+  //    (иначе сервер отвечает «App already open»).
+  const candidates = [engineDataUrl(url)];
   if (appIdFromUrl(url)) candidates.push(url);
-  candidates.push(engineDataUrl(url));
   let lastError = null;
   for (const candidate of candidates) {
     let conn = null;

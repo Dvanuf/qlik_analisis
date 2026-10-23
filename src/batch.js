@@ -7,8 +7,10 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { openEngineSession, listApps } from './extract/session.js';
+import { listApps } from './extract/session.js';
+import { appUrl } from './extract/url.js';
 import { buildGraphFromDoc } from './extract/docapi.js';
+import { extractFromEngine } from './extract/engine.js';
 import { analyze } from './analyzer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -52,23 +54,15 @@ export async function analyzeAll(options) {
   } = options;
 
   // Можно передать готовую сессию (тесты) — тогда соединение не открывается.
-  let qix = options.qix ?? null;
-  let session = options.session ?? null;
-  if (!qix) {
-    const conn = await openEngineSession({
-      url, cookie, xrfKey, csrfToken, user, password, insecure,
-    });
-    qix = conn.qix;
-    session = conn.session;
-  }
+  const sharedQix = options.qix ?? null;
+  const sharedSession = options.session ?? null;
 
-  // Движок отвечает на конкретный документ: в URL должен быть appId.
-  // Это «входная точка», после неё мы обходим все приложения сервера.
-  if (!options.qix && !/\/app\/[^/?#]+/.test(url)) {
-    try { await session.close(); } catch { /* закрываем мягко */ }
+  // Движок отвечает по пути /app — это «входная точка», после неё мы обходим
+  // все приложения сервера.
+  if (!sharedQix && !/\/app(\/|$)/.test(url)) {
     throw new Error(
-      'В URL нужен appId — например wss://<host>/app/<appId>. '
-      + 'Это приложение станет точкой входа, а анализ пройдёт по всем приложениям сервера.',
+      'В URL нужен путь /app — например wss://<host>/app/<appId>. '
+      + 'Это адрес хаба, а анализ пройдёт по всем приложениям сервера.',
     );
   }
 
@@ -105,8 +99,21 @@ export async function analyzeAll(options) {
           continue;
         }
 
-        const doc = await qix.openDoc(app.id);
-        const graph = await buildGraphFromDoc(doc, app.id);
+        let graph;
+        if (sharedQix) {
+          const doc = await sharedQix.openDoc(app.id);
+          graph = await buildGraphFromDoc(doc, app.id);
+        } else {
+          // Сессия на каждое приложение: документ нельзя закрыть в рамках
+          // сессии (в схеме QIX нет метода CloseDoc), поэтому при обходе подряд
+          // сервер отвечает «App already open». Своя сессия на приложение
+          // освобождает документ при закрытии соединения.
+          graph = await extractFromEngine({
+            url: appUrl(url, app.id),
+            appId: app.id,
+            cookie, xrfKey, csrfToken, user, password, insecure,
+          });
+        }
         const result = analyze(graph, { ...rules, platform });
         const entry = {
           appId: app.id,
@@ -148,7 +155,7 @@ export async function analyzeAll(options) {
       await sleep(pauseMs);
     }
   } finally {
-    try { await session.close(); } catch { /* закрываем мягко */ }
+    try { await sharedSession?.close(); } catch { /* закрываем мягко */ }
   }
 
   return { results, totals: totalsOf(results) };
