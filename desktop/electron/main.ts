@@ -558,7 +558,7 @@ ipcMain.handle('core:list-apps', async (_e, opts: {
     session = conn.session;
     // Общий код ядра: сам выбирает метод — GetAppList для Qlik Sense,
     // GetDocList для QlikView (на «чужой» метод сервер отвечает «Method not found»).
-    return await listApps(conn.qix);
+    return await listApps(opts);
   } catch (err) {
     return { error: String((err as Error)?.message ?? err) };
   } finally {

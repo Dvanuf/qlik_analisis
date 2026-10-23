@@ -74,7 +74,9 @@ export async function analyzeAll(options) {
 
   const results = [];
   try {
-    const all = await listApps(qix);
+    const all = await listApps(
+      options.qix ?? { url, cookie, xrfKey, csrfToken, user, password, insecure },
+    );
     const selected = appIds?.length
       ? all.filter((a) => appIds.includes(a.id))
       : all;

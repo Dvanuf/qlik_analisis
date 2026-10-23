@@ -16,17 +16,8 @@ import { totalsOf } from '../../src/batch.js';
  * @param {object} qlikCfg — раздел qlik из resolveServerConfig
  */
 export async function fetchApps(qlikCfg) {
-  const { qix, session } = await openEngineSession({
-    url: qlikCfg.url,
-    cookie: qlikCfg.cookie,
-    xrfKey: qlikCfg.xrfKey,
-    csrfToken: qlikCfg.csrfToken,
-    user: qlikCfg.user,
-    password: qlikCfg.password,
-    insecure: qlikCfg.insecure,
-  });
   try {
-    const apps = await listApps(qix);
+    const apps = await listApps(qlikCfg);
     return apps.map((a) => ({
       id: a.id,
       title: a.title,
@@ -121,7 +112,7 @@ export async function analyzeAllApps(qlikCfg, options = {}) {
   const pauseMs = options.pauseMs ?? 1000;
 
   try {
-    const apps = await listApps(qix);
+    const apps = await listApps(qlikCfg);
     const total = apps.length;
     for (let i = 0; i < apps.length; i += 1) {
       if (options.shouldStop?.()) {
