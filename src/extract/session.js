@@ -81,8 +81,12 @@ export function hubRootUrl(url) {
   }
 }
 
-/** HTTP-запрос без внешних зависимостей (с учётом самоподписанного сертификата). */
-function httpGetJson(url, { headers = {}, insecure = false } = {}) {
+/**
+ * HTTP-запрос без внешних зависимостей (с учётом самоподписанного сертификата).
+ * Редиректы (301/302/303/307/308) следуются автоматически — хаб часто
+ * отвечает перенаправлением, а заголовки авторизации при этом сохраняются.
+ */
+function httpGetJson(url, { headers = {}, insecure = false, redirects = 5 } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const req = (u.protocol === 'http:' ? httpRequest : httpsRequest)(u, {
@@ -90,12 +94,20 @@ function httpGetJson(url, { headers = {}, insecure = false } = {}) {
       headers: { Accept: 'application/json', ...headers },
       ...(insecure ? { rejectUnauthorized: false } : {}),
     }, (res) => {
+      const status = res.statusCode ?? 0;
+      const location = res.headers.location;
+      if ([301, 302, 303, 307, 308].includes(status) && location && redirects > 0) {
+        res.resume();
+        const next = new URL(location, u).toString();
+        httpGetJson(next, { headers, insecure, redirects: redirects - 1 }).then(resolve, reject);
+        return;
+      }
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        if ((res.statusCode ?? 0) >= 400) {
-          reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+        if (status >= 400) {
+          reject(new Error(`HTTP ${status}: ${body.slice(0, 200)}`));
           return;
         }
         try {
@@ -121,31 +133,34 @@ function httpGetJson(url, { headers = {}, insecure = false } = {}) {
  */
 export async function listAppsViaHub({ url, cookie, xrfKey, insecure }) {
   if (!cookie) return null;
-  let hub;
+  let u;
   try {
-    const u = new URL(hubRootUrl(url));
+    u = new URL(hubRootUrl(url));
     u.protocol = u.protocol === 'wss:' ? 'https:' : (u.protocol === 'ws:' ? 'http:' : u.protocol);
-    u.pathname = '/api/v1/apps';
     u.search = '';
-    hub = u.toString();
   } catch {
     return null;
   }
   const headers = { Cookie: cookie };
   if (xrfKey) headers['X-Qlik-XrfKey'] = xrfKey;
-  try {
-    const data = await httpGetJson(hub, { headers, insecure });
-    const items = Array.isArray(data) ? data : (data?.items ?? []);
-    if (!Array.isArray(items)) return null;
-    return items.map((a) => ({
-      id: a.id ?? a.qAppId ?? a.qDocId ?? '',
-      title: a.title ?? a.qTitle ?? a.name ?? '',
-      size: a.fileSize ?? a.qFileSize ?? null,
-      lastReload: a.modifiedDate ?? a.qLastReloadTime ?? null,
-    }));
-  } catch {
-    return null;
+  // Пути REST API хаба: основной и запасной (развёртывания отличаются).
+  for (const path of ['/api/v1/apps', '/hub/api/v1/apps']) {
+    try {
+      u.pathname = path;
+      const data = await httpGetJson(u.toString(), { headers, insecure });
+      const items = Array.isArray(data) ? data : (data?.items ?? []);
+      if (!Array.isArray(items)) continue;
+      return items.map((a) => ({
+        id: a.id ?? a.qAppId ?? a.qDocId ?? '',
+        title: a.title ?? a.qTitle ?? a.name ?? '',
+        size: a.fileSize ?? a.qFileSize ?? null,
+        lastReload: a.modifiedDate ?? a.qLastReloadTime ?? null,
+      }));
+    } catch {
+      // Пробуем следующий путь.
+    }
   }
+  return null;
 }
 
 /**

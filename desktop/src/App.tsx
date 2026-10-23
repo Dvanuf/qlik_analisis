@@ -135,8 +135,7 @@ export default function App() {
   const [doctorSteps, setDoctorSteps] = useState<DoctorStep[]>([]);
 
   const [url, setUrl] = useState(
-    () => localStorage.getItem('qa.url')
-      ?? 'wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000',
+    () => localStorage.getItem('qa.url') ?? 'wss://dc3-qliks-ap-03.onyx.local/app',
   );
   const [user, setUser] = useState(() => localStorage.getItem('qa.user') ?? '');
   const [password, setPassword] = useState('');
@@ -525,13 +524,6 @@ export default function App() {
                   onClick={() => setUrl(normalizeEngineUrl(url, { appId: appId || undefined }))}
                 >
                   привести в формат
-                </button>
-                <button
-                  type="button"
-                  className="link"
-                  onClick={() => setUrl('wss://qlik-host.example.com/app/00000000-0000-4000-8000-000000000000')}
-                >
-                  восстановить
                 </button>
               </span>
             </label>

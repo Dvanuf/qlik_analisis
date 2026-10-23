@@ -6,6 +6,29 @@
  */
 
 /**
+ * Служебный адрес движка Qlik Sense (`/app/engineData`) — это не приложение,
+ * по нему нельзя открыть документ.
+ */
+const ENGINE_DATA = 'engineData';
+
+/**
+ * Идентификатор приложения из адреса движка.
+ * @param {string} raw
+ * @returns {string|null} null — если приложения в адресе нет
+ */
+export function appIdFromUrl(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+  try {
+    const id = new URL(text).pathname.match(/\/app\/([^/?#]+)/)?.[1] ?? '';
+    if (!id || id === ENGINE_DATA) return null;
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Приводит любой вариант адреса к формату `wss://<host>/app/<appId>`.
  *
  * Принимает: `host`, `host:4747`, `http://host`, `https://host`,
@@ -36,7 +59,8 @@ export function normalizeEngineUrl(raw, { appId } = {}) {
 
   // appId из пути: /app/<id> или /sense/app/<id>.
   // Адрес, который ввёл пользователь, важнее подставленного из UI.
-  const fromPath = u.pathname.match(/\/app\/([^/?#]+)/)?.[1] ?? '';
+  const rawId = u.pathname.match(/\/app\/([^/?#]+)/)?.[1] ?? '';
+  const fromPath = rawId && rawId !== ENGINE_DATA ? rawId : '';
   const id = fromPath || appId || '';
 
   const port = u.port;
@@ -72,6 +96,8 @@ export function cleanEngineUrl(raw) {
     const u = new URL(text);
     u.search = '';
     u.hash = '';
+    // /app/engineData — служебный адрес, а не приложение.
+    if (u.pathname.endsWith(`/app/${ENGINE_DATA}`)) u.pathname = '/app';
     return u.toString();
   } catch {
     return text.split('?')[0].split('#')[0];

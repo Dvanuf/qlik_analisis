@@ -54,6 +54,36 @@ test('listApps: список приложений через REST API хаба',
   }
 });
 
+test('listApps: следует за редиректом хаба', async () => {
+  const server = createServer((req, res) => {
+    if (req.url === '/api/v1/apps') {
+      res.writeHead(301, { Location: '/api/v1/apps/' });
+      res.end();
+      return;
+    }
+    if (req.url === '/api/v1/apps/') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ items: [{ id: 'app-9', title: 'После редиректа' }] }));
+      return;
+    }
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end('{}');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const apps = await listApps({
+      url: `http://127.0.0.1:${port}/app/engineData`,
+      cookie: 'X-Qlik-Session=abc',
+    });
+    assert.equal(apps.length, 1);
+    assert.equal(apps[0].id, 'app-9');
+    assert.equal(apps[0].title, 'После редиректа');
+  } finally {
+    server.close();
+  }
+});
+
 test('listApps: REST API хаба недоступен — падает не «Method not found» молча', async () => {
   const server = createServer((req, res) => {
     res.writeHead(403, { 'Content-Type': 'application/json' });

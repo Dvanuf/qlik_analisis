@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeEngineUrl, cleanEngineUrl } from '../src/extract/url.js';
+import { normalizeEngineUrl, cleanEngineUrl, appIdFromUrl } from '../src/extract/url.js';
 
 test('normalizeEngineUrl: приводит адрес к формату движка', () => {
   assert.equal(
@@ -43,6 +43,17 @@ test('normalizeEngineUrl: подставляет appId, если он извес
 test('normalizeEngineUrl: без appId оставляет адрес корня', () => {
   assert.equal(normalizeEngineUrl('qlik.corp.local'), 'wss://qlik.corp.local/app');
   assert.equal(normalizeEngineUrl(''), '');
+});
+
+test('служебный адрес engineData не считается приложением', () => {
+  assert.equal(appIdFromUrl('wss://host/app/engineData'), null);
+  assert.equal(appIdFromUrl('wss://host/app/abc-123'), 'abc-123');
+  assert.equal(appIdFromUrl('wss://host/app'), null);
+  assert.equal(cleanEngineUrl('wss://host/app/engineData?reloadUri=x'), 'wss://host/app');
+  assert.equal(
+    normalizeEngineUrl('wss://host/app/engineData'),
+    'wss://host/app',
+  );
 });
 
 test('cleanEngineUrl: убирает query-параметры рукопожатия', () => {
