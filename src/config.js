@@ -166,7 +166,8 @@ export function resolveRules(cli = {}, config = {}) {
     maxExpressionLength: cli.maxExpressionLength ?? cfg.maxExpressionLength ?? 200,
     namePrefixes: cli.namePrefixes ?? cfg.namePrefixes ?? ['dim_', 'fact_', 'var_', 'ext_'],
     // Платформа определяет применимость правил (master items, закладки — только Qlik Sense).
-    platform: cli.platform ?? cfg.platform ?? 'qlikview',
+    // null = определяется автоматически по типу API экстрактора (QIX Engine API / Doc API).
+    platform: cli.platform ?? cfg.platform ?? null,
     deprecatedVisualizationTypes: cfg.deprecatedVisualizationTypes ?? [],
   };
 }

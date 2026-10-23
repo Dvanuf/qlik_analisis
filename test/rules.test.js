@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { analyze } from '../src/analyzer.js';
 import { ALL_RULES, RULES_BY_ID } from '../src/rules/index.js';
+import {
+  RULE_PLATFORMS, isRuleApplicable, PLATFORM_SENSE, PLATFORM_VIEW, PLATFORM_ANY,
+} from '../src/rules/platforms.js';
 import { renderHtml } from '../src/report/html.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -187,4 +190,86 @@ test('в HTML-отчёте каталог правил не содержит в�
   // В каталоге не должно быть ссылок на внешние ресурсы.
   const links = catalog.match(/<a\s[^>]*href="http[^"]*"/gi) ?? [];
   assert.deepEqual(links, [], `в каталоге правил есть внешние ссылки: ${links.join(', ')}`);
+});
+
+// --- применимость правил по платформам ---
+
+test('применимость размечена для всех правил и только известными платформами', () => {
+  for (const rule of ALL_RULES) {
+    assert.ok(Array.isArray(rule.platforms) && rule.platforms.length,
+      `у правила ${rule.id} не указаны платформы`);
+    for (const p of rule.platforms) {
+      assert.ok([PLATFORM_SENSE, PLATFORM_VIEW].includes(p),
+        `у правила ${rule.id} неизвестная платформа «${p}»`);
+    }
+  }
+  // Каждое правило из реестра должно быть описано в карте применимости.
+  for (const rule of ALL_RULES) {
+    assert.ok(Object.hasOwn(RULE_PLATFORMS, rule.id),
+      `правило ${rule.id} отсутствует в RULE_PLATFORMS`);
+  }
+});
+
+test('правила, требующие фронт-енда, помечены как qlik-sense', () => {
+  // QlikView Doc API не отдаёт объекты (getObjects пуст) — проверять нечего.
+  const frontEndRules = [
+    'Q001', 'Q002', 'Q003', 'Q004', 'Q005', 'Q006',
+    'R001', 'R002', 'R003', 'R004', 'R008',
+    'P001', 'P002', 'P003', 'P004', 'P006', 'P007', 'P008', 'P009', 'P010', 'P011',
+    'R014', 'S008',
+  ];
+  for (const id of frontEndRules) {
+    assert.deepEqual(RULES_BY_ID.get(id).platforms, [PLATFORM_SENSE],
+      `правило ${id} должно быть только для Qlik Sense`);
+  }
+});
+
+test('скриптовые и модельные правила применимы на обеих платформах', () => {
+  const bothRules = [
+    'Q007',
+    'R005', 'R006', 'R007', 'R009', 'R010', 'R012', 'R013',
+    'P005', 'P012', 'R011',
+    'S001', 'S002', 'S003', 'S004', 'S005', 'S006', 'S007', 'S009', 'S010', 'S011', 'S012',
+  ];
+  for (const id of bothRules) {
+    assert.deepEqual(RULES_BY_ID.get(id).platforms, [PLATFORM_SENSE, PLATFORM_VIEW],
+      `правило ${id} должно работать на обеих платформах`);
+  }
+});
+
+test('isRuleApplicable: для неопределённой платформы правило применимо', () => {
+  const rule = RULES_BY_ID.get('Q001');
+  assert.equal(isRuleApplicable(rule, PLATFORM_ANY), true);
+  assert.equal(isRuleApplicable(rule, undefined), true);
+  assert.equal(isRuleApplicable(rule, PLATFORM_SENSE), true);
+  assert.equal(isRuleApplicable(rule, PLATFORM_VIEW), false);
+});
+
+test('под QlikView правила фронт-енда пропускаются с пометкой', () => {
+  const qv = analyze(fixture, { platform: PLATFORM_VIEW });
+  const stat = qv.ruleStats.find((s) => s.id === 'Q001');
+  assert.equal(stat.skipped, true);
+  assert.match(stat.note, /Не применимо для платформы QlikView/);
+  assert.equal(qv.findings.some((f) => f.ruleId === 'Q001'), false);
+  // Скриптовые правила при этом работают.
+  assert.equal(qv.ruleStats.find((s) => s.id === 'S010').skipped, false);
+});
+
+test('под Qlik Sense правила фронт-енда выполняются', () => {
+  const qs = analyze(fixture, { platform: PLATFORM_SENSE });
+  const stat = qs.ruleStats.find((s) => s.id === 'Q001');
+  assert.equal(stat.skipped, false);
+  assert.ok(qs.findings.some((f) => f.ruleId === 'Q001'));
+});
+
+test('платформа по умолчанию берётся из графа, а без неё фильтр не применяется', () => {
+  // Офлайн-граф без meta.platform — платформа не определена, правила не отфильтровываются.
+  const offline = analyze(fixture, {});
+  assert.equal(offline.summary.platform, PLATFORM_ANY);
+  assert.ok(offline.findings.some((f) => f.ruleId === 'Q001'));
+
+  // Граф с платформой в meta — она используется.
+  const withPlatform = analyze({ ...fixture, meta: { ...fixture.meta, platform: PLATFORM_VIEW } }, {});
+  assert.equal(withPlatform.summary.platform, PLATFORM_VIEW);
+  assert.equal(withPlatform.findings.some((f) => f.ruleId === 'Q001'), false);
 });

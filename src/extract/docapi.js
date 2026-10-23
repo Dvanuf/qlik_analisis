@@ -6,6 +6,7 @@
  * предоставляет методы getScript / getAppLayout / getTablesAndKeys / getObject.
  */
 import { parseLoadScript } from './loadscript.js';
+import { PLATFORM_VIEW } from '../rules/platforms.js';
 
 const OBJECT_TYPES = [
   'sheet', 'story', 'chart', 'dimension', 'measure', 'textbox', 'button',
@@ -76,6 +77,8 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
       source: 'doc-api',
       api: 'QlikView Doc API',
       generatedAt: new Date().toISOString(),
+      // Doc API 12 — только QlikView.
+      platform: PLATFORM_VIEW,
       capabilities,
       skipped,
       productVersion: appProps?.qSavedInProductVersion ?? '',

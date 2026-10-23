@@ -279,8 +279,9 @@ ipcMain.handle('core:analyze-all', async (_e, opts: {
     user: opts.user,
     password: opts.password,
     insecure: opts.insecure,
-    platform: opts.platform ?? 'qlikview',
-    rules: { platform: opts.platform ?? 'qlikview' },
+    // undefined = платформа определяется автоматически по типу API экстрактора.
+    platform: opts.platform,
+    rules: { platform: opts.platform },
     pauseMs: opts.pauseMs ?? 1000,
     cacheDir: resolve(app.getPath('userData'), 'cache'),
     useCache: opts.useCache !== false,
@@ -332,7 +333,7 @@ ipcMain.handle('core:export-summary', async (_e, payload: {
   const html = renderSummaryHtml({
     results: payload.results as never,
     totals: payload.totals as never,
-    platform: payload.platform ?? 'qlikview',
+    platform: payload.platform,
   });
   writeFileSync(htmlPath, html, 'utf8');
   writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
@@ -413,6 +414,42 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
   });
 
+  // --- Перехват рукопожатия движка ---
+  // CSRF-токен и XSRF-ключ ходят и в WS-рукопожатии, и в HTTP-запросах к движку.
+  // Ловим оба источника: если соединение с движком переиспользуется и нового
+  // WS не создаётся, токен всё равно виден в query-параметрах запросов.
+  const grabTokenFromUrl = (raw: string): void => {
+    try {
+      const token = new URL(raw).searchParams.get('qlik-csrf-token');
+      if (token) captured.csrfToken = token;
+    } catch { /* некорректный URL — пропускаем */ }
+  };
+  const grabXrfFromHeaders = (headers: Record<string, string> | undefined): void => {
+    for (const [k, v] of Object.entries(headers ?? {})) {
+      if (k.toLowerCase() === 'x-qlik-xrfkey' && v) captured.xrfKey = v;
+    }
+  };
+  const onDebuggerMessage = (
+    _evt: unknown,
+    method: string,
+    params: Record<string, unknown>,
+  ): void => {
+    if (method === 'Network.webSocketCreated') {
+      const url = String((params as { url?: string })?.url ?? '');
+      captured.wsUrl = url;
+      grabTokenFromUrl(url);
+      hubLog('WS создан:', url);
+    }
+    if (method === 'Network.webSocketWillSendHandshakeRequest') {
+      grabXrfFromHeaders((params as { request?: { headers?: Record<string, string> } })?.request?.headers);
+    }
+    if (method === 'Network.requestWillBeSent') {
+      const req = (params as { request?: { url?: string; headers?: Record<string, string> } })?.request;
+      grabTokenFromUrl(String(req?.url ?? ''));
+      grabXrfFromHeaders(req?.headers);
+    }
+  };
+
   // 1) Сначала грузим страницу: до первой навигации у Electron нет цели для
   //    CDP («target closed while handling command») — окно остаётся белым.
   const target = opts.appId
@@ -432,26 +469,15 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
 
   // 2) Подключаем отладчик и перезагружаем страницу: рукопожатие движка
   //    гарантированно попадёт в перехват.
+  let hooked = false;
   for (let attempt = 1; attempt <= 10; attempt += 1) {
     try {
       if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
       await win.webContents.debugger.sendCommand('Network.enable');
-      win.webContents.debugger.on('message', (_evt, method, params: Record<string, unknown>) => {
-        if (method === 'Network.webSocketCreated') {
-          const url = String((params as { url?: string })?.url ?? '');
-          captured.wsUrl = url;
-          try {
-            captured.csrfToken = new URL(url).searchParams.get('qlik-csrf-token') ?? captured.csrfToken;
-          } catch { /* некорректный URL — пропускаем */ }
-          hubLog('WS создан:', url);
-        }
-        if (method === 'Network.webSocketWillSendHandshakeRequest') {
-          const headers = (params as { request?: { headers?: Record<string, string> } })?.request?.headers ?? {};
-          for (const [k, v] of Object.entries(headers)) {
-            if (k.toLowerCase() === 'x-qlik-xrfkey' && v) captured.xrfKey = v;
-          }
-        }
-      });
+      if (!hooked) {
+        win.webContents.debugger.on('message', onDebuggerMessage);
+        hooked = true;
+      }
       hubLog('отладчик подключён, попытка', attempt, '— перезагружаем страницу');
       await win.reload();
       break;
@@ -462,28 +488,58 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     }
   }
 
-  // Ждём cookie сессии (появляется после успешного входа) и CSRF-токен
-  // (берётся из рукопожатия движка, которое страница приложения открывает сама).
-  const result = await new Promise<{ cookie: string; xrfKey?: string; csrfToken?: string; wsUrl?: string } | null>((resolvePromise) => {
+  // 3) Ждём cookie сессии: она появляется после успешного входа в хаб.
+  const sessionCookie = await new Promise<{ name: string; value: string } | null>((resolvePromise) => {
     const started = Date.now();
+    let settled = false;
+    const finish = (value: { name: string; value: string } | null): void => {
+      if (settled) return;
+      settled = true;
+      clearInterval(timer);
+      resolvePromise(value);
+    };
     const timer = setInterval(async () => {
-      const cookies = await win.webContents.session.cookies.get({ url: opts.hubUrl });
-      const session = cookies.find((c) => c.name === 'X-Qlik-Session');
-      const hasToken = Boolean(captured.csrfToken);
-      if (session && (hasToken || Date.now() - started > 25000)) {
-        clearInterval(timer);
-        resolvePromise({
-          cookie: `${session.name}=${session.value}`,
-          xrfKey: captured.xrfKey,
-          csrfToken: captured.csrfToken,
-          wsUrl: captured.wsUrl,
-        });
-        return;
+      try {
+        const cookies = await win.webContents.session.cookies.get({ url: opts.hubUrl });
+        const session = cookies.find((c) => c.name.toLowerCase() === 'x-qlik-session');
+        hubLog('ожидание cookie: найдено [', cookies.map((c) => c.name).join(', ') || '—',
+          '] | CSRF-токен:', captured.csrfToken ? '✓' : '✗');
+        if (session) { finish(session); return; }
+      } catch (err) {
+        hubLog('не удалось прочитать cookie:', (err as Error)?.message ?? err);
       }
-      if (Date.now() - started > 300000) { clearInterval(timer); resolvePromise(null); }
+      if (Date.now() - started > 300000) finish(null);
     }, 2000);
-    win.on('closed', () => { clearInterval(timer); resolvePromise(null); });
+    win.on('closed', () => finish(null));
   });
+
+  // 4) Cookie есть, а CSRF-токена нет: движок не открыл новое WS (соединение
+  //    переиспользовано). Перезагружаем страницу — рукопожатие повторится.
+  if (sessionCookie && !captured.csrfToken) {
+    hubLog('cookie получена, но CSRF-токен не перехвачен — перезагружаем страницу');
+    try {
+      await win.reload();
+    } catch (err) {
+      hubLog('перезагрузка не удалась:', (err as Error)?.message ?? err);
+    }
+    const until = Date.now() + 20000;
+    while (!captured.csrfToken && Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+
+  const result = sessionCookie
+    ? {
+      cookie: `${sessionCookie.name}=${sessionCookie.value}`,
+      xrfKey: captured.xrfKey,
+      csrfToken: captured.csrfToken,
+      wsUrl: captured.wsUrl,
+    }
+    : null;
+
+  hubLog('итог входа: cookie =', result?.cookie ? '✓' : '✗',
+    '| CSRF =', result?.csrfToken ? '✓' : '✗',
+    '| XSRF =', result?.xrfKey ? '✓' : '✗');
 
   try { win.webContents.debugger.detach(); } catch { /* уже отключён */ }
   if (!win.isDestroyed()) win.close();
@@ -532,7 +588,7 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     password: opts.password,
     insecure: opts.insecure,
   });
-  const result = analyze(graph as never, { platform: opts.platform ?? 'qlikview' });
+  const result = analyze(graph as never, { platform: opts.platform });
   return {
     appName: result.summary.appName,
     summary: result.summary,

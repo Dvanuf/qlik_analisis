@@ -74,7 +74,8 @@ export function resolveServerConfig(raw = {}) {
       user: qlik.user ?? '',
       passwordEnv: qlik.passwordEnv ?? '',
       insecure: qlik.insecure ?? true,
-      platform: qlik.platform ?? 'qlikview',
+      // null = определяется автоматически по типу API (QIX Engine API / QlikView Doc API).
+      platform: qlik.platform ?? null,
     },
   };
 }

@@ -45,7 +45,8 @@ export async function fetchApps(qlikCfg) {
  * @param {object} [options] — { platform, rules }
  */
 export async function analyzeApp(qlikCfg, appId, options = {}) {
-  const platform = options.platform ?? qlikCfg.platform ?? 'qlikview';
+  // null = определяется автоматически по типу API экстрактора.
+  const platform = options.platform ?? qlikCfg.platform ?? null;
 
   const { qix, session } = await openEngineSession({
     url: qlikCfg.url,
@@ -104,7 +105,7 @@ export async function analyzeApp(qlikCfg, appId, options = {}) {
  * @param {{pauseMs?: number, shouldStop?: () => boolean, onProgress?: (p: object) => void}} options
  */
 export async function analyzeAllApps(qlikCfg, options = {}) {
-  const platform = qlikCfg.platform ?? 'qlikview';
+  const platform = qlikCfg.platform ?? null;
   const { qix, session } = await openEngineSession({
     url: qlikCfg.url,
     cookie: qlikCfg.cookie,

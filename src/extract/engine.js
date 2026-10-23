@@ -12,6 +12,7 @@ import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { parseLoadScript } from './loadscript.js';
 import { extractViaDocApi } from './docapi.js';
+import { PLATFORM_SENSE } from '../rules/platforms.js';
 // Схема встраивается в бандл: в собранном приложении node_modules нет,
 // и require.resolve('enigma.js/schemas/…') не сработает.
 import embeddedSchema from 'enigma.js/schemas/12.34.11.json' with { type: 'json' };
@@ -208,6 +209,8 @@ export async function extractFromEngine(config) {
       source: 'engine',
       url,
       generatedAt: new Date().toISOString(),
+      // QIX Engine API есть только у Qlik Sense / Qlik Cloud.
+      platform: PLATFORM_SENSE,
       thumbnail: null,
       associations: [],
     },

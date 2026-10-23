@@ -3,6 +3,7 @@
  */
 import { buildIndex } from './graph.js';
 import { runRules, CATEGORIES, SEVERITIES } from './rules/index.js';
+import { PLATFORM_ANY } from './rules/platforms.js';
 import { parseScript } from './script/parse.js';
 
 /**
@@ -12,7 +13,10 @@ import { parseScript } from './script/parse.js';
 export function analyze(graph, config = {}) {
   const scriptModel = parseScript(graph.script ?? '');
   const index = buildIndex(graph, scriptModel);
-  const { findings, ruleStats, errors } = runRules(graph, index, config, scriptModel);
+  // Платформа: явный флаг/конфиг важнее, иначе берётся из графа —
+  // экстрактор проставляет её по типу API (QIX Engine API или QlikView Doc API).
+  const platform = config.platform ?? graph.meta?.platform ?? PLATFORM_ANY;
+  const { findings, ruleStats, errors } = runRules(graph, index, { ...config, platform }, scriptModel);
 
   const byCategory = Object.fromEntries(CATEGORIES.map((c) => [c, 0]));
   const bySeverity = Object.fromEntries(SEVERITIES.map((s) => [s, 0]));
@@ -29,6 +33,7 @@ export function analyze(graph, config = {}) {
     appName: graph.appName || '(без названия)',
     appId: graph.appId || '',
     source: graph.meta?.source ?? 'unknown',
+    platform,
     generatedAt: graph.meta?.generatedAt ?? new Date().toISOString(),
     counts: {
       sheets: (graph.sheets ?? []).length,

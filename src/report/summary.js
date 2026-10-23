@@ -2,12 +2,14 @@
  * Сводный отчёт по пакетному анализу: таблица приложений, топ проблемных,
  * суммарные цифры. Один самодостаточный HTML-файл.
  */
+import { platformLabel, PLATFORM_ANY } from '../rules/platforms.js';
+
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const mb = (bytes) => (bytes == null ? '—' : `${Math.round(bytes / 1048576).toLocaleString('ru-RU')} МБ`);
 
-export function renderSummaryHtml({ results, totals, platform = 'qlikview', generatedAt = new Date().toISOString() }) {
+export function renderSummaryHtml({ results, totals, platform = PLATFORM_ANY, generatedAt = new Date().toISOString() }) {
   const rows = results
     .slice()
     .sort((a, b) => (b.summary?.findings?.total ?? -1) - (a.summary?.findings?.total ?? -1));
@@ -56,7 +58,7 @@ export function renderSummaryHtml({ results, totals, platform = 'qlikview', gene
   ol{padding-left:20px}li{margin-bottom:4px}
 </style></head><body>
 <h1>Сводный анализ приложений Qlik</h1>
-<div class="sub">Платформа: ${esc(platform === 'qlik-sense' ? 'Qlik Sense' : 'QlikView 12')} · сформирован: ${esc(generatedAt)}</div>
+<div class="sub">Платформа: ${esc(platformLabel(platform))} · сформирован: ${esc(generatedAt)}</div>
 
 <div class="cards">
   <div class="card"><div class="n">${totals.apps}</div><div class="l">приложений</div></div>

@@ -9,6 +9,7 @@
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import AdmZip from 'adm-zip';
+import { PLATFORM_ANY } from '../rules/platforms.js';
 
 const ZIP_MAGIC = [0x50, 0x4b]; // 'PK'
 
@@ -81,6 +82,8 @@ export async function extractFromFile(target) {
       file,
       fileSize: stat.size,
       generatedAt: new Date().toISOString(),
+      // Офлайн-режим: платформа неизвестна — фильтр по платформе не применяется.
+      platform: PLATFORM_ANY,
       capabilities: [],
       skipped: [],
     },

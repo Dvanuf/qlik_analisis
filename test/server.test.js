@@ -204,7 +204,8 @@ test('конфигурация сервера: значения по умолч�
   assert.equal(cfg.server.port, 8080);
   assert.equal(cfg.server.concurrency, 1);
   assert.equal(cfg.auth.mode, 'none');
-  assert.equal(cfg.qlik.platform, 'qlikview');
+  // null = платформа определяется автоматически по типу API экстрактора.
+  assert.equal(cfg.qlik.platform, null);
 
   const custom = resolveServerConfig({
     server: { port: 9000, concurrency: 2 },

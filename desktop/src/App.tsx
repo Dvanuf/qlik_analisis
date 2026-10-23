@@ -195,9 +195,16 @@ export default function App() {
           xrfKey: res.xrfKey,
           csrfToken: res.csrfToken,
         });
+        const missing = [
+          res.csrfToken ? null : 'CSRF-токен',
+          res.xrfKey ? null : 'XSRF-ключ',
+        ].filter(Boolean);
         setHubStatus(
           `Вход выполнен: cookie ${res.cookie ? '✓' : '✗'}, `
-          + `CSRF-токен ${res.csrfToken ? '✓' : '✗'}, XSRF-ключ ${res.xrfKey ? '✓' : '✗'}`,
+          + `CSRF-токен ${res.csrfToken ? '✓' : '✗'}, XSRF-ключ ${res.xrfKey ? '✓' : '✗'}`
+          + (missing.length
+            ? ` — не получен: ${missing.join(', ')}. Подробности в файле hub-login.log.`
+            : ''),
         );
       } else {
         setHubStatus('Авторизация не завершена: окно закрыто или cookie не получена. '

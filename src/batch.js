@@ -46,7 +46,7 @@ function writeCache(dir, appId, data) {
  */
 export async function analyzeAll(options) {
   const {
-    url, cookie, xrfKey, csrfToken, user, password, insecure, platform = 'qlikview',
+    url, cookie, xrfKey, csrfToken, user, password, insecure, platform = null,
     rules = {}, appIds, limit, pauseMs = 1000, cacheDir, useCache = true,
     onProgress = () => {}, shouldStop = () => false,
   } = options;

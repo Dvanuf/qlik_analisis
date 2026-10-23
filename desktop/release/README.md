@@ -6,6 +6,9 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.1.13-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 107 МБ | 0.1.13 |
+| `Qlik Analyzer-0.1.13-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.1.13 |
+| `Qlik Analyzer-0.1.13-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.1.13 |
 | `Qlik Analyzer-0.1.12-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 107 МБ | 0.1.12 |
 | `Qlik Analyzer-0.1.12-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.1.12 |
 | `Qlik Analyzer-0.1.12-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.1.12 |

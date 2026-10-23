@@ -6,7 +6,7 @@ import { resourceRules } from './resources.js';
 import { practiceRules } from './practices.js';
 import { scriptRules } from './script.js';
 import { advancedRules } from './advanced.js';
-import { enrichRule } from './platforms.js';
+import { enrichRule, isRuleApplicable, platformLabel, PLATFORM_ANY } from './platforms.js';
 
 export const ALL_RULES = [
   ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...advancedRules,
@@ -45,15 +45,19 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
   }));
   const statById = new Map(ruleStats.map((s) => [s.id, s]));
 
+  // Платформа анализа: qlik-sense | qlikview | any (не определена).
+  // Для 'any' фильтр по платформе не применяется — решение о пропуске принимает
+  // само правило, если данных не хватает.
+  const platform = config.platform ?? PLATFORM_ANY;
+
   for (const rule of ALL_RULES) {
     if (enabled && !enabled.has(rule.id)) { statById.get(rule.id).skipped = true; continue; }
     if (disabled && disabled.has(rule.id)) { statById.get(rule.id).skipped = true; continue; }
     // Правило может быть неприменимо к выбранной платформе.
-    const platform = config.platform ?? 'qlikview';
-    if (Array.isArray(rule.platforms) && rule.platforms.length && !rule.platforms.includes(platform)) {
+    if (!isRuleApplicable(rule, platform)) {
       const stat = statById.get(rule.id);
       stat.skipped = true;
-      stat.note = `Не применимо для платформы ${platform === 'qlik-sense' ? 'Qlik Sense' : 'QlikView'}.`;
+      stat.note = `Не применимо для платформы ${platformLabel(platform)}.`;
       continue;
     }
     // Скриптовые правила требуют текста скрипта — без него они не применимы.
