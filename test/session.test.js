@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { listApps, listAppsViaHub, hubRootUrl } from '../src/extract/session.js';
+import { listApps, listAppsViaHub } from '../src/extract/session.js';
+import { hubRootUrl } from '../src/extract/url.js';
 
 /**
  * Список приложений.

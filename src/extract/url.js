@@ -80,6 +80,66 @@ export function normalizeEngineUrl(raw, { appId } = {}) {
 }
 
 /**
+ * URL хаба без привязки к приложению.
+ *
+ * Сессия, открытая на конкретном приложении (`/app/<id>`), не даёт серверных
+ * методов — вызов GetDocList на ней заканчивается ошибкой «Method not found».
+ * Для списка приложений нужен корень хаба.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+export function hubRootUrl(url) {
+  try {
+    const u = new URL(url);
+    u.pathname = u.pathname.replace(/\/app\/[^/?#]*/, '');
+    u.search = '';
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return String(url ?? '');
+  }
+}
+
+/**
+ * Служебный адрес движка Qlik Sense (`/app/engineData`).
+ * Через него хаб отдаёт список приложений методом GetDocList.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+export function engineDataUrl(url) {
+  try {
+    const u = new URL(url);
+    u.pathname = '/app/engineData';
+    u.search = '';
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return String(url ?? '');
+  }
+}
+
+/**
+ * URL хаба с путём `/app` — эндпоинт приложений хаба без идентификатора.
+ * В отличие от корня хаба (`wss://host/`) он не переадресуется.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+export function hubAppUrl(url) {
+  try {
+    const u = new URL(url);
+    u.pathname = '/app';
+    u.search = '';
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return String(url ?? '');
+  }
+}
+
+/**
  * Убирает query-параметры из адреса движка.
  *
  * Адрес, перехваченный из рукопожатия, выглядит так:

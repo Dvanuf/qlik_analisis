@@ -7,6 +7,18 @@ import { request as httpsRequest } from 'node:https';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { buildEngineUrl, ENIGMA_SCHEMA } from './engine.js';
+import { hubRootUrl, hubAppUrl, engineDataUrl, appIdFromUrl } from './url.js';
+
+/**
+ * Пути REST API хаба, где может лежать список приложений.
+ * У развёртываний база бывает и в корне, и под /hub/.
+ */
+const HUB_APP_PATHS = [
+  '/api/v1/apps',
+  '/hub/api/v1/apps',
+  '/api/v1/documents',
+  '/hub/api/v1/documents',
+];
 
 /**
  * @param {{
@@ -60,28 +72,6 @@ export async function openEngineSession(options) {
 }
 
 /**
- * URL хаба без привязки к приложению.
- *
- * Сессия, открытая на конкретном приложении (`/app/<id>`), не даёт серверных
- * методов — вызов GetDocList на ней заканчивается ошибкой «Method not found».
- * Для списка приложений нужен корень хаба.
- *
- * @param {string} url
- * @returns {string}
- */
-export function hubRootUrl(url) {
-  try {
-    const u = new URL(url);
-    u.pathname = u.pathname.replace(/\/app\/[^/?#]*/, '');
-    u.search = '';
-    u.hash = '';
-    return u.toString();
-  } catch {
-    return String(url ?? '');
-  }
-}
-
-/**
  * HTTP-запрос без внешних зависимостей (с учётом самоподписанного сертификата).
  * Редиректы (301/302/303/307/308) следуются автоматически — хаб часто
  * отвечает перенаправлением, а заголовки авторизации при этом сохраняются.
@@ -131,7 +121,7 @@ function httpGetJson(url, { headers = {}, insecure = false, redirects = 5 } = {}
  * @param {{url: string, cookie?: string, xrfKey?: string, insecure?: boolean}} options
  * @returns {Promise<object[]|null>} null — если хаб не отдал список
  */
-export async function listAppsViaHub({ url, cookie, xrfKey, insecure }) {
+export async function listAppsViaHub({ url, cookie, xrfKey, insecure, log = null }) {
   if (!cookie) return null;
   let u;
   try {
@@ -143,21 +133,25 @@ export async function listAppsViaHub({ url, cookie, xrfKey, insecure }) {
   }
   const headers = { Cookie: cookie };
   if (xrfKey) headers['X-Qlik-XrfKey'] = xrfKey;
-  // Пути REST API хаба: основной и запасной (развёртывания отличаются).
-  for (const path of ['/api/v1/apps', '/hub/api/v1/apps']) {
+  // Пути REST API хаба: у развёртываний база бывает и /, и /hub/.
+  for (const path of HUB_APP_PATHS) {
     try {
       u.pathname = path;
       const data = await httpGetJson(u.toString(), { headers, insecure });
       const items = Array.isArray(data) ? data : (data?.items ?? []);
-      if (!Array.isArray(items)) continue;
+      if (!Array.isArray(items)) {
+        log?.(`хаб ${path}: ответ без поля items`);
+        continue;
+      }
+      log?.(`хаб ${path}: приложений ${items.length}`);
       return items.map((a) => ({
         id: a.id ?? a.qAppId ?? a.qDocId ?? '',
         title: a.title ?? a.qTitle ?? a.name ?? '',
         size: a.fileSize ?? a.qFileSize ?? null,
         lastReload: a.modifiedDate ?? a.qLastReloadTime ?? null,
       }));
-    } catch {
-      // Пробуем следующий путь.
+    } catch (err) {
+      log?.(`хаб ${path}: ${err?.message ?? err}`);
     }
   }
   return null;
@@ -193,35 +187,54 @@ export async function listApps(options = {}) {
     }));
   }
 
-  const { url, cookie, xrfKey, csrfToken, user, password, insecure } = options;
+  const {
+    url, cookie, xrfKey, csrfToken, user, password, insecure, log = null,
+  } = options;
+  // Что именно пробовали — попадёт в текст ошибки, чтобы не гадать.
+  const notes = [];
+  const note = (m) => { notes.push(m); log?.(m); };
 
-  // 1. REST API хаба — основной путь для Qlik Sense.
-  const viaHub = await listAppsViaHub({ url, cookie, xrfKey, insecure });
+  // 1. Движок, метод GetDocList — работает и на Qlik Sense, и на QlikView.
+  //    Сессия открывается по адресу приложения: корневые адреса хаба
+  //    переадресуются (301), а csrf-токен в URL обязателен (иначе 403).
+  //    Запасной адрес — служебный /app/engineData, через него хаб тоже
+  //    отдаёт список приложений.
+  const candidates = [];
+  if (appIdFromUrl(url)) candidates.push(url);
+  candidates.push(engineDataUrl(url));
+  let lastError = null;
+  for (const candidate of candidates) {
+    let conn = null;
+    try {
+      conn = await openEngineSession({
+        url: candidate, cookie, xrfKey, csrfToken, user, password, insecure,
+      });
+      const list = await conn.qix.getDocList?.();
+      const items = (Array.isArray(list) ? list : ((list?.qItems ?? [])));
+      note(`движок ${candidate}: приложений ${items.length}`);
+      return items.map((d) => ({
+        id: d.qDocId ?? d.qAppId ?? '',
+        title: d.qTitle ?? d.qDocName ?? '',
+        size: d.qFileSize ?? null,
+        lastReload: d.qLastReloadTime ?? null,
+      }));
+    } catch (err) {
+      lastError = err;
+      note(`движок ${candidate}: ${err?.message ?? err}`);
+    } finally {
+      try { await conn?.session?.close(); } catch { /* закрываем мягко */ }
+    }
+  }
+
+  // 2. REST API хаба — запасной путь (на части развёртываний REST отдаёт 501).
+  const viaHub = await listAppsViaHub({ url, cookie, xrfKey, insecure, log: note });
   if (viaHub) return viaHub;
 
-  // 2. Движок на корне хаба — QlikView 12 (Doc API).
-  let session = null;
-  try {
-    const conn = await openEngineSession({
-      url: hubRootUrl(url), cookie, xrfKey, csrfToken, user, password, insecure,
-    });
-    session = conn.session;
-    const list = await conn.qix.getDocList?.();
-    const items = (Array.isArray(list) ? list : ((list?.qItems ?? [])));
-    return items.map((d) => ({
-      id: d.qDocId ?? d.qAppId ?? '',
-      title: d.qTitle ?? d.qDocName ?? '',
-      size: d.qFileSize ?? null,
-      lastReload: d.qLastReloadTime ?? null,
-    }));
-  } catch (err) {
-    throw new Error(
-      `Не удалось получить список приложений: ${err?.message ?? err}. `
-      + 'Проверьте, что в поле URL указан адрес хаба (wss://<host>/app/<appId>) '
-      + 'и что выполнен вход в хаб (кнопка «Войти в хаб»).',
-      { cause: err },
-    );
-  } finally {
-    try { await session?.close(); } catch { /* закрываем мягко */ }
-  }
+  throw new Error(
+    `Не удалось получить список приложений: ${lastError?.message ?? 'неизвестная ошибка'}. `
+    + (notes.length ? `Пробовали: ${notes.join('; ')}. ` : '')
+    + 'Проверьте, что в поле URL указан адрес хаба (wss://<host>/app/<appId>) '
+    + 'и что выполнен вход в хаб (кнопка «Войти в хаб»).',
+    { cause: lastError },
+  );
 }
