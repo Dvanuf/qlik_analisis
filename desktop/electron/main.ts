@@ -10,6 +10,7 @@ import { resolve } from 'node:path';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { extractFromEngine, buildEngineUrl, ENIGMA_SCHEMA } from '../../src/extract/engine.js';
+import { listApps } from '../../src/extract/session.js';
 import { analyze } from '../../src/analyzer.js';
 import { ALL_RULES, CATEGORIES } from '../../src/rules/index.js';
 import { extractFromFile } from '../../src/connectors/file.js';
@@ -555,17 +556,9 @@ ipcMain.handle('core:list-apps', async (_e, opts: {
   try {
     const conn = await openQix(opts);
     session = conn.session;
-    const list = await (conn.qix as unknown as { getDocList?: () => Promise<unknown> }).getDocList?.();
-    const items = (Array.isArray(list)
-      ? list
-      : ((list as { qItems?: unknown[] })?.qItems ?? [])) as {
-      qDocId?: string; qTitle?: string; qDocName?: string; qFileSize?: number;
-    }[];
-    return items.map((d) => ({
-      id: d.qDocId ?? '',
-      title: d.qTitle ?? d.qDocName ?? '',
-      size: d.qFileSize ?? null,
-    }));
+    // Общий код ядра: сам выбирает метод — GetAppList для Qlik Sense,
+    // GetDocList для QlikView (на «чужой» метод сервер отвечает «Method not found»).
+    return await listApps(conn.qix);
   } catch (err) {
     return { error: String((err as Error)?.message ?? err) };
   } finally {

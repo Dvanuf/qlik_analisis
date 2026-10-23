@@ -57,12 +57,35 @@ export async function openEngineSession(options) {
   return { qix, session, url: engineUrl };
 }
 
-/** Список приложений, доступных пользователю на сервере. */
+/**
+ * Список приложений, доступных пользователю на сервере.
+ *
+ * Метод зависит от платформы, и «лишний» метод не просто отсутствует —
+ * сервер отвечает на него ошибкой «Method not found»:
+ *  - Qlik Sense (QIX Engine API) — GetAppList;
+ *  - QlikView 12 (Doc API)       — GetDocList.
+ * Поэтому пробуем оба и берём тот, который ответил.
+ */
 export async function listApps(qix) {
-  const list = await qix.getDocList?.();
+  let list = null;
+  let lastError = null;
+  for (const method of ['getAppList', 'getDocList']) {
+    const fn = qix?.[method];
+    if (typeof fn !== 'function') continue;
+    try {
+      list = await fn.call(qix);
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (!list) {
+    throw lastError ?? new Error('Сервер не поддерживает получение списка приложений');
+  }
   const items = (Array.isArray(list) ? list : ((list?.qItems ?? [])));
   return items.map((d) => ({
-    id: d.qDocId ?? '',
+    // У Qlik Sense — qAppId, у QlikView — qDocId.
+    id: d.qAppId ?? d.qDocId ?? '',
     title: d.qTitle ?? d.qDocName ?? '',
     size: d.qFileSize ?? null,
     lastReload: d.qLastReloadTime ?? null,
