@@ -46,6 +46,11 @@ const base = {
   asar: true,
   npmRebuild: false,
   buildDependenciesFromSource: false,
+  // Публикации нет: сборка только для внутреннего использования.
+  // Без этого electron-builder пытается сгенерировать update-инфо
+  // (latest-mac.yml / latest.yml) и падает на определении репозитория —
+  // в проекте нет ни токена, ни поля repository в package.json.
+  publish: null,
   // Кэш Electron уже содержит нужные сборки — скачивание не требуется.
   electronDownload: { arch: 'arm64' },
 };
