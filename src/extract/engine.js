@@ -13,6 +13,8 @@ import NodeWebSocket from 'ws';
 import { parseLoadScript } from './loadscript.js';
 import { extractViaDocApi } from './docapi.js';
 import { PLATFORM_SENSE } from '../rules/platforms.js';
+import { analyzeScriptIntegrity } from '../script/integrity.js';
+import { maskUrl } from '../logging/mask.js';
 // Схема встраивается в бандл: в собранном приложении node_modules нет,
 // и require.resolve('enigma.js/schemas/…') не сработает.
 import embeddedSchema from 'enigma.js/schemas/12.34.11.json' with { type: 'json' };
@@ -196,7 +198,8 @@ export async function extractFromEngine(config) {
         throw new Error('Не удалось определить appId: укажите --app-id или используйте URL вида wss://host/app/<appId>');
       }
       const docGraph = await extractViaDocApi(qix, targetAppId, (m) => console.error(m));
-      docGraph.meta.url = engineUrl;
+      // В отчёте и логах адрес должен быть без CSRF-токена.
+      docGraph.meta.url = maskUrl(engineUrl);
       return docGraph;
     } finally {
       try { await session.close(); } catch { /* закрываем сессию мягко */ }
@@ -207,7 +210,7 @@ export async function extractFromEngine(config) {
   const graph = {
     meta: {
       source: 'engine',
-      url,
+      url: maskUrl(url),
       generatedAt: new Date().toISOString(),
       // QIX Engine API есть только у Qlik Sense / Qlik Cloud.
       platform: PLATFORM_SENSE,
@@ -236,6 +239,8 @@ export async function extractFromEngine(config) {
 
     const script = await attempt('script', () => app.getScript(), '');
     graph.script = typeof script === 'string' ? script : '';
+    // Признаки обрезанного скрипта: правило S010 понижает важность, если текст пришёл не полностью.
+    graph.meta.scriptInfo = analyzeScriptIntegrity(graph.script);
     const parsedScript = parseLoadScript(graph.script);
 
     // --- Модель данных (таблицы, поля, ключи) ---

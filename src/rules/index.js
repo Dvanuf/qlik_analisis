@@ -7,6 +7,7 @@ import { practiceRules } from './practices.js';
 import { scriptRules } from './script.js';
 import { advancedRules } from './advanced.js';
 import { enrichRule, isRuleApplicable, platformLabel, PLATFORM_ANY } from './platforms.js';
+import { normalizeRuleSettings, severityFor } from './settings.js';
 
 export const ALL_RULES = [
   ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...advancedRules,
@@ -28,13 +29,21 @@ export const SEVERITIES = ['error', 'warning', 'info'];
 export function runRules(graph, index, config = {}, ctxScript = null) {
   const findings = [];
   const errors = [];
-  const enabled = config.enabledRules ? new Set(config.enabledRules) : null;
-  const disabled = config.disabledRules ? new Set(config.disabledRules) : null;
+  // Настройки правил: включение/выключение, важность, пороги, исключения.
+  const settings = normalizeRuleSettings(config);
+  const enabled = settings.enabled;
+  const disabled = settings.disabled;
+  // Правила получают пороги и списки исключений через ctx.config.
+  const ruleConfig = {
+    ...config,
+    thresholds: settings.thresholds,
+    exclusions: settings.exclusions,
+  };
 
   const ruleStats = ALL_RULES.map((rule) => ({
     id: rule.id,
     category: rule.category,
-    severity: rule.severity,
+    severity: severityFor(rule.id, rule.severity, settings),
     title: rule.title,
     description: rule.description,
     recommendation: rule.recommendation,
@@ -66,7 +75,7 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
       continue;
     }
     try {
-      const res = rule.run({ graph, index, config, script: ctxScript }) ?? [];
+      const res = rule.run({ graph, index, config: ruleConfig, script: ctxScript }) ?? [];
       // Правило может вернуть { findings, note } — note объясняет, почему проверка не выполнялась.
       const list = Array.isArray(res) ? res : (res.findings ?? []);
       const note = Array.isArray(res) ? null : (res.note ?? null);
@@ -75,7 +84,9 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
         if (stat) stat.note = note;
       }
       for (const f of list) {
-        findings.push({ ...f, ruleId: f.ruleId ?? rule.id });
+        const ruleId = f.ruleId ?? rule.id;
+        // Важность можно переопределить в настройках правил.
+        findings.push({ ...f, ruleId, severity: severityFor(ruleId, f.severity, settings) });
         const stat = statById.get(rule.id);
         if (stat) stat.count += 1;
       }

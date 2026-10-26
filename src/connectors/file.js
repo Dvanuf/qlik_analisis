@@ -10,6 +10,7 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import AdmZip from 'adm-zip';
 import { PLATFORM_ANY } from '../rules/platforms.js';
+import { analyzeScriptIntegrity } from '../script/integrity.js';
 
 const ZIP_MAGIC = [0x50, 0x4b]; // 'PK'
 
@@ -130,6 +131,7 @@ export async function extractFromFile(target) {
     graph.script = found.script;
     graph.meta.scriptEntry = found.name;
     graph.meta.capabilities.push('script');
+    graph.meta.scriptInfo = analyzeScriptIntegrity(graph.script);
     return graph;
   }
 
@@ -144,5 +146,6 @@ export async function extractFromFile(target) {
   }
   graph.script = text;
   graph.meta.capabilities.push('script');
+  graph.meta.scriptInfo = analyzeScriptIntegrity(graph.script);
   return graph;
 }

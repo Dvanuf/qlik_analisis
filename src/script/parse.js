@@ -29,7 +29,11 @@ function splitTopLevel(text, sep = ',') {
   return out.map((s) => s.trim()).filter((s) => s.length);
 }
 
-/** Разбивает скрипт на операторы, сохраняя комментарии отдельно. */
+/**
+ * Разбивает скрипт на операторы, сохраняя комментарии отдельно.
+ * Для каждого оператора и комментария запоминается номер строки — он нужен
+ * для привязки находок к месту в скрипте и для директив `// qa-ignore`.
+ */
 export function splitStatements(script) {
   const src = String(script ?? '');
   const statements = [];
@@ -38,21 +42,27 @@ export function splitStatements(script) {
   let quote = null;
   let brackets = 0;
   let i = 0;
+  let line = 1;
+  let stmtLine = 1;
+  let bufStarted = false;
 
   const push = () => {
     const text = buf.trim();
     buf = '';
-    if (text) statements.push({ kind: 'statement', text });
+    bufStarted = false;
+    if (text) statements.push({ kind: 'statement', text, line: stmtLine });
   };
 
   while (i < src.length) {
     const c = src[i];
     const rest = src.slice(i, i + 2);
+    if (!bufStarted && c !== ' ' && c !== '\t' && c !== '\r') { stmtLine = line; bufStarted = true; }
 
     if (quote) {
       buf += c;
       if (c === '\\') { buf += src[i + 1] ?? ''; i += 2; continue; }
       if (c === quote) quote = null;
+      if (c === '\n') line += 1;
       i += 1;
       continue;
     }
@@ -63,15 +73,17 @@ export function splitStatements(script) {
     if (brackets > 0) { buf += c; i += 1; continue; }
     if (rest === '//') {
       const end = src.indexOf('\n', i);
-      const line = src.slice(i, end === -1 ? src.length : end);
-      comments.push({ text: line.replace(/^\/\/\s?/, ''), offset: i });
+      const text = src.slice(i, end === -1 ? src.length : end);
+      comments.push({ text: text.replace(/^\/\/\s?/, ''), offset: i, line });
       i = end === -1 ? src.length : end;
       continue;
     }
     if (rest === '/*') {
       const end = src.indexOf('*/', i + 2);
       const body = src.slice(i, end === -1 ? src.length : end);
-      comments.push({ text: body.replace(/^\/\*|\*\/$/g, '').trim(), offset: i });
+      comments.push({ text: body.replace(/^\/\*|\*\/$/g, '').trim(), offset: i, line });
+      const consumed = src.slice(i, end === -1 ? src.length : end + 2);
+      for (const ch of consumed) if (ch === '\n') line += 1;
       i = end === -1 ? src.length : end + 2;
       continue;
     }
@@ -86,10 +98,11 @@ export function splitStatements(script) {
       continue;
     }
     if (c === ';') { push(); i += 1; continue; }
+    if (c === '\n') line += 1;
     buf += c;
     i += 1;
   }
-  if (buf.trim()) statements.push({ kind: 'statement', text: buf.trim() });
+  if (buf.trim()) statements.push({ kind: 'statement', text: buf.trim(), line: stmtLine });
 
   return { statements, comments };
 }
@@ -186,6 +199,8 @@ export function parseScript(script) {
   while (queue.length) {
     const st = queue.shift();
     let text = st.text;
+    // Номер строки оператора — к нему привязываются находки и директивы qa-ignore.
+    const line = st.line ?? 0;
 
     // Метка может стоять в начале оператора: "Customers:\nLOAD ...".
     const labelMatch = text.match(/^([A-Za-z_][A-Za-z0-9_ ]*):\s*([\s\S]+)$/);
@@ -206,10 +221,11 @@ export function parseScript(script) {
       model.concatenates.push({
         target: pendingConcatenate,
         hasNoConcatenate: /NOCONCATENATE/i.test(text),
+        line,
       });
       // Хвост оператора (обычно LOAD) обрабатываем отдельно.
       const rest = (m?.[2] ?? '').trim();
-      if (rest) queue.unshift({ text: rest });
+      if (rest) queue.unshift({ text: rest, line });
       continue;
     }
 
@@ -220,19 +236,20 @@ export function parseScript(script) {
         kind: /^TABLE/i.test(m?.[1] ?? '') ? 'table' : 'field',
         targets: splitTopLevel((m?.[2] ?? '').replace(/\([^)]*\)/g, '')),
         raw: text,
+        line,
       });
       continue;
     }
 
     if (/^RENAME\b/i.test(text)) {
       const m = text.match(/^RENAME\s+(\S+)\s+TO\s+(\S+)/i);
-      model.renames.push({ from: m?.[1], to: m?.[2], raw: text });
+      model.renames.push({ from: m?.[1], to: m?.[2], raw: text, line });
       continue;
     }
 
     if (/^STORE\b/i.test(text)) {
       const m = text.match(/^STORE\s+(\S+)/i);
-      model.stores.push({ table: m?.[1], raw: text });
+      model.stores.push({ table: m?.[1], raw: text, line });
       continue;
     }
 
@@ -243,6 +260,7 @@ export function parseScript(script) {
         name: m?.[2] ?? '',
         value: (m?.[3] ?? '').trim(),
         raw: text,
+        line,
       });
       continue;
     }
@@ -269,13 +287,14 @@ export function parseScript(script) {
         table,
         source: source.trim(),
         raw: text,
+        line,
       });
       continue;
     }
 
     if (/^INTO\b/i.test(text)) {
       const m = text.match(/^INTO\s+(?:TABLE\s+)?([^\s]+)/i);
-      model.into.push({ table: m?.[1]?.replace(/["'`]/g, '') ?? '', raw: text });
+      model.into.push({ table: m?.[1]?.replace(/["'`]/g, '') ?? '', raw: text, line });
       continue;
     }
 
@@ -287,10 +306,11 @@ export function parseScript(script) {
           target: pendingLabel || '',
           fields: splitTopLevel(residentMatch[1] || '').map(stripFieldSyntax),
           raw: text,
+          line,
         });
         // После RESIDENT может идти JOIN с вложенной загрузкой — разбираем отдельно.
         const rest = (residentMatch[3] ?? '').trim();
-        if (rest) queue.unshift({ text: rest });
+        if (rest) queue.unshift({ text: rest, line });
         pendingLabel = '';
         continue;
       }
@@ -317,6 +337,7 @@ export function parseScript(script) {
         concatenated: Boolean(pendingConcatenate),
         concatenatedInto: pendingConcatenate || null,
         raw: text,
+        line,
       });
       model.tables.push({ name: table, kind: allFields ? 'load-all' : 'load', fields: allFields ? [] : fields.map(stripFieldSyntax) });
       if (hasWhere) model.hasWhereFilter = true;
@@ -325,7 +346,7 @@ export function parseScript(script) {
       continue;
     }
 
-    model.others.push({ raw: text });
+    model.others.push({ raw: text, line });
   }
 
   return model;

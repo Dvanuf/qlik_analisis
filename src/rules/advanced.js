@@ -79,11 +79,16 @@ export const advancedRules = [
     recommendation: 'Рассмотреть хранение как float или уменьшить разрядность; точную оценку памяти даёт отчёт движка.',
     run(ctx) {
       const out = [];
+      // Пороги настраиваются в редакторе правил: сколько строк и какая доля
+      // уникальных значений считаются «плотным» полем.
+      const limits = ctx.config?.thresholds?.R012 ?? {};
+      const minRows = limits.minRows ?? 1000;
+      const minDistinctRatio = limits.minDistinctRatio ?? 0.5;
       for (const f of ctx.graph.fields ?? []) {
         if (f.key) continue;
         if (!Array.isArray(f.tags) || !f.tags.includes('$numeric')) continue;
-        if (!f.rows || f.rows < 1000 || !f.distinct) continue;
-        if (f.distinct / f.rows < 0.5) continue;
+        if (!f.rows || f.rows < minRows || !f.distinct) continue;
+        if (f.distinct / f.rows < minDistinctRatio) continue;
         out.push({
           ruleId: 'R012',
           category: 'Resources',

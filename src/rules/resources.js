@@ -213,6 +213,8 @@ export const resourceRules = [
         if (!f.key || f.rows == null || f.distinct == null) continue;
         if (f.nonNulls != null && f.nonNulls !== f.rows) continue;
         if (f.distinct !== f.rows) continue;
+        // Имя нового ключевого поля: Key_<таблица> — так его узнать в модели данных.
+        const keyName = `Key_${f.table ?? f.name}`;
         findings.push({
           ruleId: 'R007',
           category: CATEGORY,
@@ -220,9 +222,11 @@ export const resourceRules = [
           title: 'Ключ можно заменить на AutoNumber',
           target: { kind: 'field', name: f.name, id: f.name },
           message: `Ключевое поле «${f.name}» уникально (${f.rows} строк) — подходит для AutoNumber`,
+          detail: `Новое ключевое поле: «${keyName}»`,
           impact: { rows: f.rows, distinct: f.distinct },
           recommendation: 'Заменить ключ на AutoNumber в скрипте загрузки.',
-          fix: { kind: 'autoNumber', payload: f.name },
+          // Второй аргумент AutoNumber — имя нового поля, обязательно строковый литерал.
+          fix: { kind: 'autoNumber', payload: { field: f.name, key: keyName, table: f.table ?? null } },
         });
       }
       return findings;
@@ -264,8 +268,11 @@ export const resourceRules = [
     recommendation: 'Проверить, нужен ли атрибут в модели данных.',
     run(ctx) {
       const findings = [];
+      // Порог «поле-константа» настраивается в редакторе правил:
+      // по умолчанию — одно уникальное значение.
+      const maxDistinct = ctx.config?.thresholds?.R009?.maxDistinct ?? 1;
       for (const f of ctx.graph.fields ?? []) {
-        if (f.distinct !== 1 || f.key) continue;
+        if (f.distinct == null || f.distinct > maxDistinct || f.key) continue;
         findings.push({
           ruleId: 'R009',
           category: CATEGORY,

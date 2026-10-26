@@ -18,6 +18,7 @@ import { extractFromFile } from '../../src/connectors/file.js';
 import { renderHtml } from '../../src/report/html.js';
 import { runDoctor } from '../../src/cli/doctor.js';
 import { parseScript } from '../../src/script/parse.js';
+import { maskSecrets, maskUrl } from '../../src/logging/mask.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -184,7 +185,9 @@ ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
     file: full,
     summary: result.summary,
     findings: result.findings,
+    suppressed: result.suppressed,
     patch: result.patch,
+    script: (graph as { script?: string }).script ?? '',
     skipped: result.summary.skipped,
   };
 });
@@ -385,9 +388,13 @@ app.on('certificate-error', (event, _webContents, url, _error, _certificate, cal
   callback(false);
 });
 
-/** Лог входа в хаб — пишем и в консоль, и в файл, чтобы разобраться без переустановки. */
+/**
+ * Лог входа в хаб — пишем и в консоль, и в файл, чтобы разобраться без переустановки.
+ * Все строки маскируются: cookie, CSRF-токен и XSRF-ключ в журнал попадать не должны.
+ */
 function hubLog(...args: unknown[]): void {
-  const line = `[${new Date().toISOString()}] ${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`;
+  const raw = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+  const line = maskSecrets(`[${new Date().toISOString()}] ${raw}`);
   console.log(line);
   try {
     const file = resolve(app.getPath('userData'), 'hub-login.log');
@@ -440,7 +447,8 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
       const url = String((params as { url?: string })?.url ?? '');
       captured.wsUrl = url;
       grabTokenFromUrl(url);
-      hubLog('WS создан:', url);
+      // В журнал — только адрес без CSRF-токена.
+      hubLog('WS создан:', maskUrl(url));
     }
     if (method === 'Network.webSocketWillSendHandshakeRequest') {
       grabXrfFromHeaders((params as { request?: { headers?: Record<string, string> } })?.request?.headers);
@@ -459,13 +467,13 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     : `${opts.hubUrl}/sense/app`;
   hubLog('открываем:', target);
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
-    hubLog('did-fail-load:', code, desc, url);
+    hubLog('did-fail-load:', code, desc, maskUrl(String(url ?? '')));
   });
   win.webContents.on('console-message', (_e, level, message) => {
     if (level >= 2) hubLog('консоль страницы:', message);
   });
   win.webContents.on('did-finish-load', () => {
-    hubLog('страница загружена:', win.webContents.getURL(), '|', win.webContents.getTitle());
+    hubLog('страница загружена:', maskUrl(win.webContents.getURL()), '|', win.webContents.getTitle());
   });
   await win.loadURL(target);
 
@@ -553,17 +561,14 @@ ipcMain.handle('core:list-apps', async (_e, opts: {
   url: string; cookie?: string; xrfKey?: string; csrfToken?: string; user?: string;
   password?: string; insecure?: boolean;
 }) => {
-  let session: { close: () => Promise<void> } | null = null;
   try {
-    const conn = await openQix(opts);
-    session = conn.session;
     // Общий код ядра: сам выбирает метод — GetAppList для Qlik Sense,
     // GetDocList для QlikView (на «чужой» метод сервер отвечает «Method not found»).
+    // Сессию открывает сам listApps: лишняя сессия здесь только мешала бы
+    // (движок не отдаёт два открытых документа подряд).
     return await listApps(opts);
   } catch (err) {
-    return { error: String((err as Error)?.message ?? err) };
-  } finally {
-    try { await session?.close(); } catch { /* закрываем мягко */ }
+    return { error: maskSecrets(String((err as Error)?.message ?? err)) };
   }
 });
 
@@ -587,10 +592,13 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   const result = analyze(graph as never, { platform: opts.platform });
   return {
     appName: result.summary.appName,
+    appId: result.summary.appId,
     summary: result.summary,
     findings: result.findings,
+    suppressed: result.suppressed,
     patch: result.patch,
     ruleStats: result.ruleStats,
+    script: (graph as { script?: string }).script ?? '',
   };
 });
 

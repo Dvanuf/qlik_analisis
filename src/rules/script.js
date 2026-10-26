@@ -4,7 +4,8 @@
  * Сервер не нужен — достаточно текста скрипта.
  */
 import { canonicalFieldName } from '../normalize.js';
-import { stripComments } from '../script/parse.js';
+import { analyzeScriptIntegrity } from '../script/integrity.js';
+import { matchesExcludedTable } from './settings.js';
 
 const CATEGORY = 'Script';
 
@@ -14,53 +15,23 @@ const SEVERITY = {
   S009: 'warning', S010: 'error', S011: 'info', S012: 'info',
 };
 
-const finding = (ruleId, title, target, message, detail, recommendation) => ({
+/**
+ * Находка скриптового правила.
+ * Дополнительно можно передать важность (понижение), номер строки и таблицу —
+ * они нужны для привязки к скрипту и для подавления.
+ */
+const finding = (ruleId, title, target, message, detail, recommendation, extra = {}) => ({
   ruleId,
   category: CATEGORY,
-  severity: SEVERITY[ruleId] ?? 'info',
+  severity: extra.severity ?? SEVERITY[ruleId] ?? 'info',
   title,
   target,
   message,
   detail,
   recommendation,
+  ...(extra.line != null ? { line: extra.line } : {}),
+  ...(extra.table ? { table: extra.table } : {}),
 });
-
-/** Структурная проверка скрипта: незакрытые строки и скобки. */
-function checkScriptStructure(script) {
-  const problems = [];
-  // Комментарии убираем: апостроф в комментарии («Don't») не должен считаться строкой.
-  const src = stripComments(String(script ?? ''));
-  let quote = null;
-  let depth = 0;
-  let line = 1;
-  let brackets = 0;
-  for (let i = 0; i < src.length; i += 1) {
-    const c = src[i];
-    if (c === '\n') line += 1;
-    if (quote) {
-      if (c === '\\') { i += 1; continue; }
-      if (c === quote) quote = null;
-      continue;
-    }
-    if (c === '"' || c === "'") {
-      // Открывает строку только при наличии закрывающей кавычки дальше.
-      if (src.indexOf(c, i + 1) === -1) {
-        problems.push({ code: 'UNCLOSED_STRING', message: `Незакрытая строковая константа (строка ${line})` });
-      } else {
-        quote = c;
-      }
-      continue;
-    }
-    if (c === '[') { brackets += 1; continue; }
-    if (c === ']') { brackets = Math.max(0, brackets - 1); continue; }
-    if (brackets > 0) continue; // внутри пути ([lib://…]) скобки не считаем
-    if (c === '(') depth += 1;
-    if (c === ')') depth -= 1;
-  }
-  if (depth > 0) problems.push({ code: 'UNCLOSED_PAREN', message: `Незакрытых круглых скобок: ${depth}` });
-  if (depth < 0) problems.push({ code: 'EXTRA_PAREN', message: 'Лишняя закрывающая скобка' });
-  return problems;
-}
 
 /** Глубина цепочки RESIDENT: 0 — прямая загрузка, 2+ — цепочка перезаписей. */
 function residentDepth(model) {
@@ -102,7 +73,8 @@ export const scriptRules = [
           { kind: 'table', name: l.table, id: l.table },
           `Таблица «${l.table}» загружается без списка полей`,
           `Источник: ${l.source || 'не указан'}`,
-          'Указать список полей явно.'));
+          'Указать список полей явно.',
+          { line: l.line, table: l.table }));
       }
       return out;
     },
@@ -117,13 +89,18 @@ export const scriptRules = [
     recommendation: 'Добавить WHERE в LOAD, чтобы сократить объём памяти при загрузке.',
     run(ctx) {
       const out = [];
+      // Служебные таблицы (Fields, Info, tmp_*) исключаются: они грузятся целиком
+      // по умолчанию, и на них предупреждение только создаёт шум.
+      const excluded = ctx.config?.exclusions?.S002?.tables ?? [];
       for (const l of ctx.script.loads) {
         if (l.hasWhere || !l.source) continue;
+        if (matchesExcludedTable(l.table, excluded)) continue;
         out.push(finding('S002', 'Загрузка без фильтра WHERE',
           { kind: 'table', name: l.table, id: l.table },
           `Таблица «${l.table}» загружается без WHERE`,
           `Источник: ${l.source}`,
-          'Перенести фильтрацию в LOAD (WHERE).'));
+          'Перенести фильтрацию в LOAD (WHERE).',
+          { line: l.line, table: l.table }));
       }
       return out;
     },
@@ -144,7 +121,8 @@ export const scriptRules = [
           { kind: 'table', name: table, id: table },
           `Таблица «${table}» построена через цепочку RESIDENT (глубина ${d})`,
           'Данные перезаписываются в памяти несколько раз подряд.',
-          'Объединить трансформации или сохранять промежуточный результат в QVD.'));
+          'Объединить трансформации или сохранять промежуточный результат в QVD.',
+          { table }));
       }
       return out;
     },
@@ -165,7 +143,8 @@ export const scriptRules = [
           { kind: 'table', name: c.target || '?', id: c.target || '?' },
           `CONCATENATE для «${c.target || 'неизвестной таблицы'}» без NoConcatenate`,
           'При разных наборах полей Qlik создаст синтетический ключ.',
-          'Добавить NoConcatenate и проверить наборы полей.'));
+          'Добавить NoConcatenate и проверить наборы полей.',
+          { line: c.line, table: c.target }));
       }
       return out;
     },
@@ -193,7 +172,8 @@ export const scriptRules = [
           { kind: 'table', name, id: name },
           `Таблица «${name}» загружается ${count} раза`,
           'Возможны задвоенные строки или потеря данных.',
-          'Объединить загрузки в одну или развести по разным именам.'));
+          'Объединить загрузки в одну или развести по разным именам.',
+          { table: name }));
       }
       return out;
     },
@@ -224,7 +204,8 @@ export const scriptRules = [
             { kind: 'table', name: j.table || '(текущая)', id: j.table || '' },
             `JOIN (${j.joinType}) по полю «${f}», которое не является ключом`,
             j.raw.slice(0, 160),
-            'Соединять по ключу или создать ключ AutoNumber.'));
+            'Соединять по ключу или создать ключ AutoNumber.',
+            { line: j.line, table: j.table }));
         }
       }
       return out;
@@ -300,17 +281,18 @@ export const scriptRules = [
       // Системные/сессионные таблицы Qlik Sense (tmp_qs_sess и подобные) создаёт движок,
       // а не скрипт — на них не жалуемся.
       const isSystemTable = (name) => /^(tmp_|sys_|__)/i.test(name);
-      const check = (table, raw, kind) => {
+      const check = (table, raw, kind, line) => {
         if (!table || known.has(canonicalFieldName(table))) return;
         if (isSystemTable(table)) return;
         out.push(finding('S009', 'Ссылка на неизвестную таблицу',
           { kind: 'table', name: table, id: table },
           `${kind} ссылается на таблицу «${table}», которой нет в скрипте`,
           raw.slice(0, 160),
-          'Исправить имя или добавить загрузку этой таблицы.'));
+          'Исправить имя или добавить загрузку этой таблицы.',
+          { line, table }));
       };
-      for (const r of ctx.script.residents) check(r.table, r.raw, 'RESIDENT');
-      for (const j of ctx.script.joins) check(j.table, j.raw, 'JOIN');
+      for (const r of ctx.script.residents) check(r.table, r.raw, 'RESIDENT', r.line);
+      for (const j of ctx.script.joins) check(j.table, j.raw, 'JOIN', j.line);
       return out;
     },
   },
@@ -324,12 +306,19 @@ export const scriptRules = [
     recommendation: 'Исправить скрипт (Ctrl+ → Check syntax в редакторе).',
     run(ctx) {
       const out = [];
-      for (const p of checkScriptStructure(ctx.graph.script)) {
+      // Целостность скрипта: если текст пришёл не полностью, «незакрытая строка»
+      // означает дефект чтения, а не дефект скрипта — важность понижается.
+      const info = ctx.graph.meta?.scriptInfo ?? analyzeScriptIntegrity(ctx.graph.script);
+      const maybePartial = info.truncated || info.maybeTruncated;
+      for (const p of info.problems) {
         out.push(finding('S010', 'Структурная ошибка в скрипте',
           { kind: 'app', name: 'скрипт загрузки', id: 'script' },
-          p.message,
-          `Код: ${p.code}`,
-          'Исправить скрипт и проверить синтаксис.'));
+          maybePartial ? `${p.message} — возможно, скрипт получен не полностью` : p.message,
+          `Код: ${p.code}. ${maybePartial
+            ? 'Скрипт прочитан не полностью (нет завершающей «;» или строка не закрыта) — проверка может давать ложные срабатывания.'
+            : 'Проверьте скрипт в редакторе Qlik (Ctrl+ → Check syntax).'}`,
+          'Исправить скрипт и проверить синтаксис.',
+          { severity: maybePartial ? 'warning' : SEVERITY.S010, line: p.line }));
       }
       return out;
     },
@@ -369,7 +358,8 @@ export const scriptRules = [
           { kind: 'table', name: l.table, id: l.table },
           `Файл «${src}» загружается без указания формата`,
           'Qlik будет определять структуру автоматически — медленно и нестабильно.',
-          'Указать формат явно в скобках после имени файла.'));
+          'Указать формат явно в скобках после имени файла.',
+          { line: l.line, table: l.table }));
       }
       return out;
     },

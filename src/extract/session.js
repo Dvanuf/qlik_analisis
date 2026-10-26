@@ -8,6 +8,7 @@ import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { buildEngineUrl, ENIGMA_SCHEMA } from './engine.js';
 import { hubRootUrl, hubAppUrl, engineDataUrl, appIdFromUrl } from './url.js';
+import { maskUrl } from '../logging/mask.js';
 
 /**
  * Пути REST API хаба, где может лежать список приложений.
@@ -191,8 +192,13 @@ export async function listApps(options = {}) {
     url, cookie, xrfKey, csrfToken, user, password, insecure, log = null,
   } = options;
   // Что именно пробовали — попадёт в текст ошибки, чтобы не гадать.
+  // Адреса маскируются: в URL может быть CSRF-токен.
   const notes = [];
-  const note = (m) => { notes.push(m); log?.(m); };
+  const note = (m) => {
+    const safe = maskUrl(String(m));
+    notes.push(safe);
+    log?.(safe);
+  };
 
   // 1. Движок, метод GetDocList — работает и на Qlik Sense, и на QlikView.
   //    Сессия открывается по адресу приложения: корневые адреса хаба

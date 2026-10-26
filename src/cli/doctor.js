@@ -6,6 +6,8 @@ import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
 import { extractFromEngine } from '../extract/engine.js';
+import { analyzeScriptIntegrity } from '../script/integrity.js';
+import { maskUrl } from '../logging/mask.js';
 
 export const ERROR_HINTS = {
   301: 'Сервер перенаправляет запрос: указан не адрес движка. Для Qlik Sense нужен путь '
@@ -101,7 +103,14 @@ export function hintFor(message) {
  */
 export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
   const steps = [];
-  const emit = (step) => { steps.push(step); if (typeof onStep === 'function') onStep(step); };
+  // Шаг с одним и тем же именем выводится только один раз: повтор заменяет
+  // предыдущую запись (иначе «Проверка порта» печаталась дважды).
+  const emit = (step) => {
+    const existing = steps.findIndex((s) => s.name === step.name);
+    const entry = { ...step, index: existing >= 0 ? existing : steps.length };
+    if (existing >= 0) steps[existing] = entry; else steps.push(entry);
+    if (typeof onStep === 'function') onStep(entry);
+  };
   const ok = (name, detail) => emit({ name, status: 'OK', detail });
   const fail = (name, detail, hint) => emit({ name, status: 'FAIL', detail, hint });
   const warn = (name, detail) => emit({ name, status: 'WARN', detail });
@@ -112,7 +121,8 @@ export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
     return { steps, failed: true };
   }
 
-  ok('URL', target.url);
+  // В выводе не должно быть CSRF-токена и cookie — только адрес без секретов.
+  ok('URL', maskUrl(target.url));
 
   const urlObj = new URL(target.url);
   const port = Number(target.port ?? (urlObj.port || (urlObj.protocol === 'wss:' ? 443 : 4747)));
@@ -176,9 +186,33 @@ export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
       }),
     ]);
     ok('WebSocket + OpenDoc', 'Соединение установлено, приложение открыто');
-    ok('Скрипт загрузки', graph.script ? `${graph.script.length} символов` : 'скрипт недоступен');
-    ok('Объекты приложения', String(graph.objects.length));
-    ok('Модель данных', `${graph.tables.length} таблиц, ${graph.fields.length} полей`);
+
+    // Нулевые значения — не успех: показываем жёлтым и объясняем причину.
+    const script = graph.script ?? '';
+    if (!script.trim()) {
+      warn('Скрипт загрузки', 'скрипт недоступен — API не вернул текст скрипта');
+    } else {
+      const info = analyzeScriptIntegrity(script);
+      const detail = `${script.length} символов, ${info.lines} строк`;
+      if (info.truncated || info.maybeTruncated) {
+        warn('Скрипт загрузки', `${detail} — возможно, получен не полностью (нет завершающей «;»)`);
+      } else {
+        ok('Скрипт загрузки', detail);
+      }
+    }
+
+    if (!graph.objects.length) {
+      warn('Объекты приложения', '0 — API не вернул список объектов (листы и чарты на этой платформе недоступны)');
+    } else {
+      ok('Объекты приложения', String(graph.objects.length));
+    }
+
+    if (!graph.tables.length && !graph.fields.length) {
+      warn('Модель данных', '0 таблиц, 0 полей — API не вернул модель данных');
+    } else {
+      ok('Модель данных', `${graph.tables.length} таблиц, ${graph.fields.length} полей`);
+    }
+
     if (graph.meta?.skipped?.length) {
       warn('Пропущенные возможности', graph.meta.skipped.map((s) => `${s.capability}: ${s.reason}`).join('; '));
     }

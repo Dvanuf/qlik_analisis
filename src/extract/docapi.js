@@ -7,6 +7,7 @@
  */
 import { parseLoadScript } from './loadscript.js';
 import { PLATFORM_VIEW } from '../rules/platforms.js';
+import { analyzeScriptIntegrity } from '../script/integrity.js';
 
 const OBJECT_TYPES = [
   'sheet', 'story', 'chart', 'dimension', 'measure', 'textbox', 'button',
@@ -195,6 +196,8 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
   const parsedScript = parseLoadScript(graph.script);
   graph.meta.scriptFields = parsedScript.scriptFields;
   graph.meta.scriptOperations = parsedScript.operations;
+  // Признаки обрезанного скрипта: часть API отдаёт текст не полностью.
+  graph.meta.scriptInfo = analyzeScriptIntegrity(graph.script);
 
   log(`Doc API: скрипт ${graph.script.length} симв., таблиц ${graph.tables.length}, полей ${graph.fields.length}, объектов ${graph.objects.length}`);
 

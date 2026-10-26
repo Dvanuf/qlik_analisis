@@ -5,6 +5,9 @@ dist/
 .DS_Store
 .env
 
+# Заглушка npm для electron-builder (создаётся во время сборки релиза)
+desktop/.build-stub/
+
 # Артефакты сборок не коммитим (100+ МБ), но реестр версий — коммитим
 desktop/release/*
 !desktop/release/README.md

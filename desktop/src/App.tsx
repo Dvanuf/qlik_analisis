@@ -19,24 +19,41 @@ type RuleInfo = {
   }[];
 };
 
-type DoctorStep = { name: string; status: 'OK' | 'WARN' | 'FAIL'; detail: string; hint?: string };
+type DoctorStep = { name: string; status: 'OK' | 'WARN' | 'FAIL'; detail: string; hint?: string; index?: number };
 
 type Finding = {
   ruleId: string; category: string; severity: string; title: string;
   message: string; recommendation: string; detail?: string;
   target?: { kind: string; name: string; id?: string };
+  /** Счётчик свёрнутых одинаковых находок. */
+  count?: number;
+  /** Таблицы, где находка встречается. */
+  tables?: string[];
+  /** Номер строки в скрипте. */
+  line?: number;
+  /** Подавлена находка (скрыта по умолчанию). */
+  suppressed?: boolean;
+  suppressReason?: string;
 };
 
 type AnalysisResult = {
   appName?: string;
+  appId?: string;
   file?: string;
   summary: {
-    findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number> };
+    findings: {
+      total: number; byCategory: Record<string, number>; bySeverity: Record<string, number>;
+      merged?: number; suppressed?: number;
+    };
     counts: Record<string, number>;
     savings?: { removableFields: number; removableRows: number };
+    score?: number;
+    scoreDetails?: { formula: string; checks: number; penalty: number };
   };
   findings: Finding[];
-  patch: { script: string };
+  suppressed?: Finding[];
+  patch: { script: string; autoNumbers?: { field: string; key: string }[] };
+  script?: string;
   skipped?: { capability: string; reason: string }[];
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
@@ -242,8 +259,16 @@ export default function App() {
       setCsrfToken(creds.csrfToken ?? '');
       setHubStatus('Сессия хаба восстановлена из защищённого хранилища');
     });
+    // Шаги приходят по мере проверки и по индексу: повторяющиеся шаги
+    // заменяют предыдущую запись, а не добавляются вторым списком.
     const offDoctor = window.qa.onDoctorStep((step) => {
-      setDoctorSteps((prev) => [...prev, step]);
+      setDoctorSteps((prev) => {
+        const index = step.index ?? prev.length;
+        const next = [...prev];
+        while (next.length <= index) next.push({ name: '', status: 'OK', detail: '' });
+        next[index] = step;
+        return next;
+      });
     });
     const offBatch = window.qa.onBatchProgress((p) => setBatchProgress(p));
     return () => {
@@ -265,6 +290,14 @@ export default function App() {
       setDoctorSteps([{ name: 'Проверка подключения', status: 'FAIL', detail: String(err) }]);
     }
     setBusy('');
+  }
+
+  /** Размер файла приложения: неизвестные значения не выдаём за «0 МБ». */
+  function formatSize(size?: number | null): string {
+    if (size == null) return 'размер неизвестен';
+    if (size <= 0) return 'размер неизвестен';
+    if (size < 1048576) return '< 1 МБ';
+    return `${Math.round(size / 1048576).toLocaleString('ru-RU')} МБ`;
   }
 
   async function loadApps() {
@@ -622,7 +655,7 @@ export default function App() {
                 <select value={appId} onChange={(e) => setAppId(e.target.value)}>
                   {apps.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.title} {a.size ? `— ${Math.round(a.size / 1048576)} МБ` : ''}
+                      {a.title} {a.size ? `— ${formatSize(a.size)}` : ''}
                     </option>
                   ))}
                 </select>
@@ -680,6 +713,16 @@ export default function App() {
                   Экспорт отчёта
                 </button>
               </div>
+              {(analysis.summary.findings.merged || analysis.summary.findings.suppressed) ? (
+                <p className="muted small">
+                  {analysis.summary.findings.merged
+                    ? `Одинаковых находок объединено: ${analysis.summary.findings.merged}. `
+                    : ''}
+                  {analysis.summary.findings.suppressed
+                    ? `Подавлено находок: ${analysis.summary.findings.suppressed}.`
+                    : ''}
+                </p>
+              ) : null}
               {exportNote && <p className="muted small">{exportNote}</p>}
 
               {analysis.patch.script && (
@@ -736,8 +779,14 @@ export default function App() {
                       <td>{f.category}</td>
                       <td>
                         <b>{f.title}</b>
+                        {f.count && f.count > 1 && (
+                          <span className="pill count" title="Одинаковых находок объединено">×{f.count}</span>
+                        )}
                         <div className="muted">{f.message}</div>
                         {f.detail && <div className="muted small">{f.detail}</div>}
+                        {f.tables && f.tables.length > 1 && (
+                          <div className="muted small">Таблицы: {f.tables.join(', ')}</div>
+                        )}
                       </td>
                       <td>{f.target?.name ?? '—'}</td>
                       <td className="muted">{f.recommendation}</td>
@@ -821,7 +870,7 @@ export default function App() {
                   {filteredBatch.map((r) => (
                     <tr key={r.appId}>
                       <td>{r.title}</td>
-                      <td>{r.size ? `${Math.round(r.size / 1048576)} МБ` : '—'}</td>
+                      <td>{formatSize(r.size)}</td>
                       <td>{r.summary?.findings.total ?? 0}</td>
                       <td>{r.summary?.findings.byCategory.Script ?? 0}</td>
                       <td>{r.summary?.findings.byCategory.Resources ?? 0}</td>
