@@ -21,6 +21,9 @@ import { parseScript } from '../../src/script/parse.js';
 import { maskSecrets, maskUrl } from '../../src/logging/mask.js';
 import { readRulesConfig, writeRulesConfig, sanitizeRulesConfig, RULES_CONFIG_FILE } from '../../src/rules/config.js';
 import { applyPatchToScript } from '../../src/report/fixes.js';
+import { openHistory, saveRun, listRuns, compareRuns, latestRunForApp, RULES_VERSION } from '../../src/history.js';
+import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
+import { buildXlsx } from '../../src/report/xlsx.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -385,10 +388,115 @@ ipcMain.handle('core:export-summary', async (_e, payload: {
 /** Настройки правил: чтение и сохранение файла конфигурации. */
 ipcMain.handle('core:rules-config', () => readRulesConfig(rulesConfigPath()));
 
+/** Путь к локальной базе истории анализов. */
+function historyPath(): string {
+  return resolve(app.getPath('userData'), 'history.sqlite');
+}
+
+/** Сохранение прогона в историю. */
+ipcMain.handle('core:history-save', async (_e, payload: {
+  appId: string; appName?: string; at?: string; score?: number;
+  summary?: unknown; findings?: unknown[];
+}) => {
+  const db = await openHistory(historyPath());
+  try {
+    const runId = saveRun(db, {
+      appId: payload.appId,
+      appName: payload.appName ?? '',
+      at: payload.at,
+      score: payload.score ?? 0,
+      summary: (payload.summary ?? {}) as never,
+      findings: (payload.findings ?? []) as never[],
+      rulesVersion: RULES_VERSION,
+    });
+    return { runId };
+  } finally {
+    db.close();
+  }
+});
+
+/** Список прогонов из истории. */
+ipcMain.handle('core:history-list', async (_e, opts: { appId?: string; limit?: number }) => {
+  const db = await openHistory(historyPath());
+  try {
+    return listRuns(db, opts ?? {});
+  } finally {
+    db.close();
+  }
+});
+
+/** Последний прогон по приложению. */
+ipcMain.handle('core:history-latest', async (_e, opts: { appId: string }) => {
+  const db = await openHistory(historyPath());
+  try {
+    return latestRunForApp(db, opts.appId);
+  } finally {
+    db.close();
+  }
+});
+
+/** Сравнение прогона с базовой линией. */
+ipcMain.handle('core:history-compare', async (_e, opts: { baselineId: number; currentId: number }) => {
+  const db = await openHistory(historyPath());
+  try {
+    return compareRuns(db, opts.baselineId, opts.currentId);
+  } finally {
+    db.close();
+  }
+});
+
+/** Выгрузка плоской таблицы находок в CSV. */
+ipcMain.handle('core:export-findings-csv', async (_e, payload: { rows: Record<string, string | number>[]; fileName?: string }) => {
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const file = resolve(dir, `${payload.fileName ?? 'Находки'} ${stamp}.csv`);
+  writeFileSync(file, renderCsv(payload.rows ?? []), 'utf8');
+  return { path: file };
+});
+
+/** Выгрузка плоской таблицы находок в Excel. */
+ipcMain.handle('core:export-findings-xlsx', async (_e, payload: { rows: Record<string, string | number>[]; fileName?: string }) => {
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const file = resolve(dir, `${payload.fileName ?? 'Находки'} ${stamp}.xlsx`);
+  const rows = (payload.rows ?? []).map((r) => FINDINGS_COLUMNS.map((c) => r[c.key] ?? ''));
+  writeFileSync(file, buildXlsx(FINDINGS_COLUMNS.map((c) => c.title), rows), 'utf8');
+  return { path: file };
+});
+
 ipcMain.handle('core:rules-config-save', (_e, config: object) => {
   const clean = sanitizeRulesConfig(config, ALL_RULES.map((r) => r.id));
   const path = writeRulesConfig(rulesConfigPath(), clean);
   return { path, config: clean };
+});
+
+/** Экспорт настроек правил в выбранный файл. */
+ipcMain.handle('core:rules-config-export', async () => {
+  const res = await dialog.showSaveDialog({
+    title: 'Сохранить настройки правил',
+    defaultPath: 'rules.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (res.canceled || !res.filePath) return { canceled: true };
+  const config = readRulesConfig(rulesConfigPath());
+  writeFileSync(res.filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  return { canceled: false, path: res.filePath };
+});
+
+/** Импорт настроек правил из выбранного файла. */
+ipcMain.handle('core:rules-config-import', async () => {
+  const res = await dialog.showOpenDialog({
+    title: 'Загрузить настройки правил',
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (res.canceled || !res.filePaths[0]) return { canceled: true };
+  const raw = JSON.parse(readFileSync(res.filePaths[0], 'utf8'));
+  const clean = sanitizeRulesConfig(raw, ALL_RULES.map((r) => r.id));
+  const path = writeRulesConfig(rulesConfigPath(), clean);
+  return { canceled: false, path, config: clean };
 });
 
 /**

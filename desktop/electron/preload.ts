@@ -8,7 +8,20 @@ const api = {
   appInfo: () => ipcRenderer.invoke('app:info'),
   rulesConfig: () => ipcRenderer.invoke('core:rules-config'),
   saveRulesConfig: (config: unknown) => ipcRenderer.invoke('core:rules-config-save', config),
+  exportRulesConfig: () => ipcRenderer.invoke('core:rules-config-export'),
+  importRulesConfig: () => ipcRenderer.invoke('core:rules-config-import'),
   exportScript: (payload: { appName?: string; script: string; patch?: { script?: string } }) => ipcRenderer.invoke('core:export-script', payload),
+  /** История прогонов в локальной базе SQLite. */
+  historySave: (payload: {
+    appId: string; appName?: string; at?: string; score?: number;
+    summary?: unknown; findings?: unknown[];
+  }) => ipcRenderer.invoke('core:history-save', payload),
+  historyList: (opts?: { appId?: string; limit?: number }) => ipcRenderer.invoke('core:history-list', opts ?? {}),
+  historyLatest: (opts: { appId: string }) => ipcRenderer.invoke('core:history-latest', opts),
+  historyCompare: (opts: { baselineId: number; currentId: number }) => ipcRenderer.invoke('core:history-compare', opts),
+  /** Выгрузка плоской таблицы находок в CSV и Excel. */
+  exportFindingsCsv: (payload: { rows: Record<string, string | number>[]; fileName?: string }) => ipcRenderer.invoke('core:export-findings-csv', payload),
+  exportFindingsXlsx: (payload: { rows: Record<string, string | number>[]; fileName?: string }) => ipcRenderer.invoke('core:export-findings-xlsx', payload),
   rules: () => ipcRenderer.invoke('core:rules'),
   analyzeFile: (filePath: string) => ipcRenderer.invoke('core:analyze-file', filePath),
   doctor: (opts: {

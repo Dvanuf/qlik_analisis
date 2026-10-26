@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
 import ConnectTab from './tabs/ConnectTab.js';
 import AnalysisTab from './tabs/AnalysisTab.js';
+import RulesTab from './tabs/RulesTab.js';
+import SummaryTab from './tabs/SummaryTab.js';
 import type {
   AnalysisResult, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
-  DoctorStep, Platform, RuleInfo, RulesConfig, Severity, Tab,
+  Comparison, DoctorStep, HistoryRun, Platform, RuleInfo, RulesConfig, Severity, Tab,
 } from './types.js';
 
 
@@ -51,8 +53,23 @@ declare global {
       }): Promise<{ htmlPath: string; jsonPath: string }>;
       rulesConfig(): Promise<unknown>;
       saveRulesConfig(config: unknown): Promise<{ path: string; config: unknown }>;
+      exportRulesConfig(): Promise<{ canceled: boolean; path?: string }>;
+      importRulesConfig(): Promise<{ canceled: boolean; path?: string; config?: unknown }>;
       exportScript(payload: {
         appName?: string; script: string; patch?: { script?: string };
+      }): Promise<{ path: string }>;
+      historySave(payload: {
+        appId: string; appName?: string; at?: string; score?: number;
+        summary?: unknown; findings?: unknown[];
+      }): Promise<{ runId: number }>;
+      historyList(opts?: { appId?: string; limit?: number }): Promise<HistoryRun[]>;
+      historyLatest(opts: { appId: string }): Promise<HistoryRun | null>;
+      historyCompare(opts: { baselineId: number; currentId: number }): Promise<Comparison>;
+      exportFindingsCsv(payload: {
+        rows: Record<string, string | number>[]; fileName?: string;
+      }): Promise<{ path: string }>;
+      exportFindingsXlsx(payload: {
+        rows: Record<string, string | number>[]; fileName?: string;
       }): Promise<{ path: string }>;
     };
   }
@@ -106,6 +123,10 @@ export default function App() {
   const [exportNote, setExportNote] = useState('');
   // Настройки правил: отключения, важность, пороги, исключения, подавления.
   const [rulesConfig, setRulesConfig] = useState<RulesConfig | null>(null);
+  // История прогонов в локальной базе и сравнение с базовой линией.
+  const [history, setHistory] = useState<HistoryRun[]>([]);
+  const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [onlyNew, setOnlyNew] = useState(false);
 
   // Настройки подключения живут между запусками: без этого после перезапуска
   // поле URL возвращается к заглушке и список приложений не грузится.
@@ -325,6 +346,131 @@ export default function App() {
     }
   }
 
+  /** Экспорт настроек правил в файл. */
+  async function exportRulesConfig() {
+    try {
+      const res = await window.qa.exportRulesConfig();
+      if (res.canceled) return;
+      setExportNote(`Настройки правил выгружены: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось выгрузить настройки правил: ${String(err)}`);
+    }
+  }
+
+  /** Импорт настроек правил из файла. */
+  async function importRulesConfig() {
+    try {
+      const res = await window.qa.importRulesConfig();
+      if (res.canceled) return;
+      if (res.config) setRulesConfig(res.config as RulesConfig);
+      setExportNote(`Настройки правил загружены: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось загрузить настройки правил: ${String(err)}`);
+    }
+  }
+
+  /** Плоская таблица находок по всем приложениям прогона. */
+  function flatRows() {
+    const rows: Record<string, string | number>[] = [];
+    for (const r of batch?.results ?? []) {
+      const meta = {
+        runAt: r.at ?? new Date().toISOString(),
+        app: r.title,
+        stream: r.stream ?? '',
+        owner: r.owner ?? '',
+      };
+      for (const f of r.findings ?? []) {
+        rows.push({
+          runAt: meta.runAt,
+          app: meta.app,
+          stream: meta.stream,
+          owner: meta.owner,
+          ruleId: f.ruleId ?? '',
+          category: f.category ?? '',
+          severity: f.severity === 'error' ? 'Ошибка'
+            : f.severity === 'warning' ? 'Предупреждение' : 'Замечание',
+          object: f.target?.name ?? '',
+          table: f.table ?? (f.target?.kind === 'table' ? f.target.name : ''),
+          line: f.line ?? '',
+          message: f.message ?? '',
+        });
+      }
+    }
+    return rows;
+  }
+
+  /** Сохранение прогона в локальную базу истории. */
+  async function saveHistory() {
+    if (!batch?.results?.length) return;
+    try {
+      let saved = 0;
+      for (const r of batch.results) {
+        if (r.error || !r.findings) continue;
+        await window.qa.historySave({
+          appId: r.appId,
+          appName: r.title,
+          at: r.at,
+          score: r.summary?.score ?? 0,
+          summary: r.summary,
+          findings: r.findings,
+        });
+        saved += 1;
+      }
+      setExportNote(`В историю сохранено прогонов: ${saved}`);
+      await loadHistory();
+    } catch (err) {
+      setExportNote(`Не удалось сохранить историю: ${String(err)}`);
+    }
+  }
+
+  /** Загрузка списка прогонов из истории. */
+  async function loadHistory() {
+    try {
+      const runs = await window.qa.historyList({ limit: 100 });
+      setHistory(runs);
+    } catch (err) {
+      setExportNote(`История недоступна: ${String(err)}`);
+    }
+  }
+
+  /** Сравнение прогона с базовой линией. */
+  async function compareHistory(baselineId: number) {
+    try {
+      const baseline = history.find((h) => h.id === baselineId);
+      if (!baseline) return;
+      const current = await window.qa.historyLatest({ appId: baseline.appId });
+      if (!current || current.id === baselineId) {
+        setExportNote('Нет более нового прогона для сравнения.');
+        return;
+      }
+      const cmp = await window.qa.historyCompare({ baselineId, currentId: current.id });
+      setComparison(cmp);
+      setExportNote(`Сравнение: база ${baselineId} → ${current.id}`);
+    } catch (err) {
+      setExportNote(`Не удалось сравнить прогоны: ${String(err)}`);
+    }
+  }
+
+  /** Выгрузка плоской таблицы в CSV. */
+  async function exportCsv() {
+    try {
+      const res = await window.qa.exportFindingsCsv({ rows: flatRows(), fileName: 'Находки' });
+      setExportNote(`CSV сохранён: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить CSV: ${String(err)}`);
+    }
+  }
+
+  /** Выгрузка плоской таблицы в Excel. */
+  async function exportXlsx() {
+    try {
+      const res = await window.qa.exportFindingsXlsx({ rows: flatRows(), fileName: 'Находки' });
+      setExportNote(`Excel сохранён: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить Excel: ${String(err)}`);
+    }
+  }
+
   /** Экспорт сводного отчёта по пакетному прогону. */
   async function exportBatch() {
     if (!batch) return;
@@ -494,135 +640,32 @@ export default function App() {
       )}
 
       {tab === 'summary' && (
-        <section className="card wide">
-          <h2>Сводный отчёт по всем приложениям</h2>
-
-          {batch ? (
-            <>
-              <div className="cards">
-                <div className="card">
-                  <div className="card-num">{batch.totals.apps}</div>
-                  <div className="card-label">приложений</div>
-                </div>
-                <div className="card">
-                  <div className="card-num">{batch.totals.findings}</div>
-                  <div className="card-label">находок всего</div>
-                </div>
-                {Object.entries(batch.totals.bySeverity).map(([k, v]) => (
-                  <div className="card" key={k}>
-                    <div className="card-num">{v}</div>
-                    <div className="card-label">{k}</div>
-                  </div>
-                ))}
-                <div className="card">
-                  <div className="card-num">{batch.totals.removableRows.toLocaleString('ru-RU')}</div>
-                  <div className="card-label">строк можно убрать</div>
-                </div>
-              </div>
-
-              <div className="toolbar">
-                <button className={batchCat === 'all' ? 'active' : ''} onClick={() => setBatchCat('all')}>
-                  Все приложения
-                </button>
-                {batchCatOptions.map((c) => (
-                  <button key={c} className={batchCat === c ? 'active' : ''} onClick={() => setBatchCat(c)}>
-                    {c}
-                  </button>
-                ))}
-                <input
-                  className="search"
-                  value={batchSearch}
-                  onChange={(e) => setBatchSearch(e.target.value)}
-                  placeholder="Поиск по названию приложения…"
-                />
-                <span className="muted">показано {filteredBatch.length} из {batch.results.length}</span>
-              </div>
-
-              <div className="actions">
-                <button className="primary" onClick={() => void exportBatch()}>
-                  Экспорт сводного отчёта
-                </button>
-              </div>
-
-              <table className="batchTable">
-                <thead>
-                  <tr>
-                    <th>Приложение</th><th>Размер</th><th>Всего</th>
-                    <th>Script</th><th>Resources</th><th>Quality</th><th>Practices</th><th>Статус</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBatch.map((r) => (
-                    <tr key={r.appId}>
-                      <td>{r.title}</td>
-                      <td>{formatSize(r.size)}</td>
-                      <td>{r.summary?.findings.total ?? 0}</td>
-                      <td>{r.summary?.findings.byCategory.Script ?? 0}</td>
-                      <td>{r.summary?.findings.byCategory.Resources ?? 0}</td>
-                      <td>{r.summary?.findings.byCategory.Quality ?? 0}</td>
-                      <td>{r.summary?.findings.byCategory.Practices ?? 0}</td>
-                      <td>{r.error ? <span className="err">{r.error}</span> : (r.fromCache ? 'из кэша' : 'ок')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          ) : (
-            <p className="muted">
-              Сводный анализ ещё не запускался. Откройте вкладку «Подключение» и нажмите
-              «Анализировать все».
-            </p>
-          )}
-        </section>
+        <SummaryTab
+          batch={batch}
+          exportNote={exportNote}
+          onExport={() => void exportBatch()}
+          onExportCsv={() => void exportCsv()}
+          onExportXlsx={() => void exportXlsx()}
+          history={history}
+          comparison={comparison}
+          onlyNew={onlyNew}
+          onOnlyNew={setOnlyNew}
+          onSaveHistory={() => void saveHistory()}
+          onCompare={(id) => void compareHistory(id)}
+          onLoadHistory={() => void loadHistory()}
+        />
       )}
 
       {tab === 'rules' && (
-        <section className="card wide">
-          <h2>Каталог правил ({ruleInfo?.total ?? 0})</h2>
-          <div className="toolbar">
-            <button className={ruleCat === 'all' ? 'active' : ''} onClick={() => setRuleCat('all')}>
-              Все категории
-            </button>
-            {categories.map((c) => (
-              <button key={c} className={ruleCat === c ? 'active' : ''} onClick={() => setRuleCat(c)}>
-                {c}
-              </button>
-            ))}
-            <input
-              className="search"
-              value={ruleSearch}
-              onChange={(e) => setRuleSearch(e.target.value)}
-              placeholder="Поиск по правилу или описанию…"
-            />
-            <span className="muted">показано {filteredRules.length}</span>
-          </div>
-          <table className="rules">
-            <thead>
-              <tr>
-                <th>ID</th><th>Категория</th><th>Уровень</th><th>Правило</th>
-                <th>Рекомендация</th><th>Платформы</th><th>Срабатываний</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRules.map((r) => (
-                <tr key={r.id}>
-                  <td><code>{r.id}</code></td>
-                  <td>{r.category}</td>
-                  <td><span className={`pill ${r.severity}`}>{r.severity}</span></td>
-                  <td title={r.description}>
-                    <b>{r.title}</b>
-                    <div className="muted small">{r.description}</div>
-                  </td>
-                  <td className="muted small">{r.recommendation}</td>
-                  <td className="muted small">
-                    {(r.platforms ?? []).map((p) => (p === 'qlik-sense' ? 'Qlik Sense' : 'QlikView')).join(', ')}
-                  </td>
-                  <td><b>{countsByRule.get(r.id) ?? 0}</b></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        <RulesTab
+          ruleInfo={ruleInfo}
+          rulesConfig={rulesConfig}
+          countsByRule={Object.fromEntries(countsByRule)}
+          note={exportNote}
+          onSave={(c) => void saveRulesConfig(c)}
+          onExport={() => void exportRulesConfig()}
+          onImport={() => void importRulesConfig()}
+        />
       )}
     </div>
   );

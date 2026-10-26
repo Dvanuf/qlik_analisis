@@ -82,6 +82,14 @@ export type BatchProgress = {
 export type BatchItem = {
   appId: string; title: string; size?: number | null; error?: string;
   fromCache?: boolean;
+  /** Поток и владелец приложения (если сервер их отдаёт). */
+  stream?: string | null;
+  owner?: string | null;
+  /** Дата прогона и дата изменения приложения. */
+  at?: string;
+  lastReload?: string | null;
+  /** Находки приложения — нужны для выгрузки и истории. */
+  findings?: Finding[];
   summary?: {
     findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number> };
     savings?: { removableFields: number; removableRows: number };
@@ -94,6 +102,20 @@ export type BatchTotals = {
   byCategory: Record<string, number>;
   bySeverity: Record<string, number>;
   removableRows: number; removableFields: number;
+};
+
+/** Прогон анализа в локальной базе истории. */
+export type HistoryRun = {
+  id: number; appId: string; appName: string; at: string;
+  rulesVersion: string; score: number;
+  errors: number; warnings: number; infos: number; total: number;
+};
+
+/** Сравнение прогона с базовой линией. */
+export type Comparison = {
+  baselineId: number; currentId: number;
+  added: Finding[]; fixed: Finding[]; unchanged: Finding[];
+  counts: { added: number; fixed: number; unchanged: number };
 };
 
 /** Настройки правил из файла конфигурации. */
