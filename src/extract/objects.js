@@ -5,6 +5,12 @@
  * незнакомый ему тип, отказ приходит на весь вызов — и тогда теряются
  * сразу все объекты приложения. Поэтому типы запрашиваются блоками,
  * а неудавшийся блок разбирается по одному типу: остальные не теряются.
+ *
+ * Формат элемента различается у разных API:
+ *  - QIX App API: {qId, qType, qMeta};
+ *  - Doc API:      {qInfo: {qId, qType}, qMeta, qData}.
+ * Поэтому элементы приводятся к общему виду функцией normalizeObjectItem —
+ * иначе сервер отдаёт объекты, а код их молча отбрасывает.
  */
 
 /** Типы объектов, которые запрашиваем у движка. */
@@ -15,6 +21,30 @@ export const OBJECT_TYPES = [
   'funnel', 'histogram', 'boxplot', 'heatmap', 'radar', 'waterfall', 'bullet',
   'sparkline', 'map', 'extension', 'variable',
 ];
+
+/**
+ * Приводит элемент списка объектов к общему виду.
+ *
+ * @param {object} item — элемент ответа getObjects
+ * @returns {{id: string, type: string, name: string, description: string}|null}
+ *   null, если элемент без идентификатора (такой использовать нельзя).
+ */
+export function normalizeObjectItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  // QIX App API — поля лежат прямо в элементе, Doc API — внутри qInfo.
+  const info = item.qInfo && typeof item.qInfo === 'object' ? item.qInfo : item;
+  const id = String(info.qId ?? '');
+  const type = String(info.qType ?? '');
+  if (!id) return null;
+  const meta = item.qMeta && typeof item.qMeta === 'object' ? item.qMeta : {};
+  return {
+    id,
+    type,
+    // Название объекта сервер отдаёт по-разному: qName, qTitle или title.
+    name: String(meta.qName ?? meta.qTitle ?? meta.title ?? ''),
+    description: String(meta.qDescription ?? meta.description ?? ''),
+  };
+}
 
 /** Разбивает список на блоки по n элементов. */
 export function chunk(list, n) {
@@ -27,12 +57,14 @@ export function chunk(list, n) {
 /**
  * Запрашивает у движка список объектов указанных типов.
  *
- * @param {object} app — объект App QIX (умеет getObjects)
+ * @param {object} app — объект App QIX или документ Doc API (умеет getObjects)
  * @param {string[]} [types] — типы объектов
  * @param {object} [options]
  * @param {number} [options.batchSize] — сколько типов спрашивать за один вызов
  * @param {number} [options.timeoutMs] — предел ожидания одного вызова
- * @returns {Promise<{items: object[], skipped: {type: string, reason: string}[]}>}
+ * @returns {Promise<{items: object[], skipped: {type: string, reason: string}[], listed: number}>}
+ *   listed — сколько объектов сервер отдал по списку типов (0 — типы ему
+ *   неизвестны, и список объектов заведомо неполный).
  */
 export async function fetchObjects(app, types = OBJECT_TYPES, options = {}) {
   const { batchSize = 8, timeoutMs = 20000 } = options;
@@ -53,6 +85,8 @@ export async function fetchObjects(app, types = OBJECT_TYPES, options = {}) {
           timer.unref?.();
         }),
       ]);
+      // QIX App API отдаёт {qItems: [...]}, Doc API — массив элементов.
+      if (Array.isArray(res)) return res;
       return res?.qItems ?? [];
     } finally {
       clearTimeout(timer);
@@ -74,17 +108,80 @@ export async function fetchObjects(app, types = OBJECT_TYPES, options = {}) {
     }
   }
 
-  // Один и тот же объект может прийти в двух типах (например, лист и лист-история):
-  // оставляем первое вхождение, чтобы не считать объект дважды.
+  return { items: dedupeObjects(items), skipped, listed: items.length };
+}
+
+/**
+ * Убирает повторы и приводит элементы к общему виду.
+ *
+ * @param {object[]} raw — элементы ответа getObjects
+ * @returns {object[]} нормализованные объекты
+ */
+export function dedupeObjects(raw) {
+  const normalized = [];
+  for (const item of raw ?? []) {
+    const obj = normalizeObjectItem(item);
+    if (obj) normalized.push(obj);
+  }
+  return dedupeNormalized(normalized);
+}
+
+/**
+ * Убирает повторы среди уже нормализованных объектов.
+ *
+ * @param {object[]} objects — нормализованные объекты
+ * @returns {object[]} объекты без повторов
+ */
+export function dedupeNormalized(objects) {
   const seen = new Set();
   const unique = [];
-  for (const item of items) {
-    const id = item?.qId;
-    if (!id) continue;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    unique.push(item);
+  for (const obj of objects ?? []) {
+    if (!obj?.id) continue;
+    // Один и тот же объект может прийти в двух типах (например, лист и лист-история):
+    // оставляем первое вхождение, чтобы не считать объект дважды.
+    if (seen.has(obj.id)) continue;
+    seen.add(obj.id);
+    unique.push(obj);
   }
+  return unique;
+}
 
-  return { items: unique, skipped };
+/**
+ * Читает layout объекта.
+ *
+ * @param {object} app — объект App QIX или документ Doc API
+ * @param {string} id — идентификатор объекта
+ * @returns {Promise<object|null>} layout либо null, если объект не читается
+ */
+export async function fetchLayout(app, id) {
+  try {
+    const obj = await app.getObject(id);
+    return await obj.getLayout();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Собирает объекты, лежащие на листах (qChildList).
+ *
+ * Список типов у движка конечен и отстаёт от версии Sense: новые объекты
+ * (KPI, фильтры, кнопки) в getObjects не попадают, но они перечислены
+ * в списке содержимого листа. Без этого обхода часть фронт-энда не видна.
+ *
+ * @param {object} app — объект App QIX или документ Doc API
+ * @param {object[]} sheetObjects — листы и истории (уже нормализованные)
+ * @returns {Promise<object[]>} объекты с листов (нормализованные)
+ */
+export async function fetchSheetChildren(app, sheetObjects) {
+  const found = [];
+  for (const sheet of sheetObjects ?? []) {
+    const layout = await fetchLayout(app, sheet.id);
+    const children = layout?.qChildList?.qItems ?? [];
+    for (const child of children) {
+      const obj = normalizeObjectItem(child);
+      if (obj) found.push(obj);
+    }
+  }
+  return dedupeNormalized(found);
 }

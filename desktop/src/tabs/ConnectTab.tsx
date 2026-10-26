@@ -11,6 +11,7 @@ import { normalizeEngineUrl } from '../../../src/extract/url.js';
 import type { AppItem, BatchProgress, DoctorStep, Platform } from '../types.js';
 
 const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
+  { id: 'auto', label: 'Определить автоматически', hint: 'По типам объектов приложения — так надёжнее' },
   { id: 'qlik-sense', label: 'Qlik Sense', hint: 'QIX App API: объекты, master items, закладки' },
   { id: 'qlikview', label: 'QlikView 12', hint: 'Doc API: скрипт и модель данных' },
 ];

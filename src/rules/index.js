@@ -81,7 +81,11 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
       const note = Array.isArray(res) ? null : (res.note ?? null);
       if (note) {
         const stat = statById.get(rule.id);
-        if (stat) stat.note = note;
+        // Правило объяснило, почему проверка не выполнялась, — это пропуск.
+        if (stat) {
+          stat.note = note;
+          stat.skipped = true;
+        }
       }
       for (const f of list) {
         const ruleId = f.ruleId ?? rule.id;

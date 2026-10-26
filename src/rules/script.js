@@ -241,9 +241,9 @@ export const scriptRules = [
     run(ctx) {
       const out = [];
       const script = String(ctx.graph.script ?? '');
-      // Переменная может использоваться только во фронт-енде — без данных движка
-      // это недоказуемо, поэтому в файловом режиме проверка не выполняется.
-      const hasFrontEnd = (ctx.graph.objects ?? []).length > 0;
+      // Переменная может использоваться только во фронт-енде — без сведений
+      // от движка это недоказуемо, поэтому без них проверка не выполняется.
+      const hasFrontEnd = ctx.index?.frontEndUsageKnown === true;
       if (!hasFrontEnd) {
         return {
           findings: [],

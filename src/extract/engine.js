@@ -340,7 +340,7 @@ export async function extractFromEngine(config) {
     // --- Связи между таблицами (правило про внешний join) ---
     // Текст ответа сервера сохраняем: по нему видно, поддерживает ли сервер
     // метод и почему нет — иначе причина неприменимости R011 остаётся загадкой.
-    const { associations, reason } = await fetchAssociations(app);
+    const { associations, reason } = await fetchAssociations(app, graph.tables);
     if (associations) {
       graph.meta.associations = associations;
       capabilities.push('associations');

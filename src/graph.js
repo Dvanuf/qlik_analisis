@@ -136,11 +136,39 @@ export function buildIndex(graph, scriptModel = null) {
      * Без них нельзя доказать, что поле «не используется» — такие правила пропускаются.
      */
     frontEndAvailable: (graph.objects ?? []).length > 0,
+    /**
+     * Известно ли, как фронт-енд использует поля.
+     *
+     * Объекты могут прийти без сведений о полях: на части развёртываний Doc API
+     * отдаёт листы и таблицы, но не отдаёт, какие поля в них используются. Тогда
+     * «поле не используется» — недоказуемое утверждение, и такие правила
+     * пропускаются с объяснением, а не выдают массу ложных находок.
+     */
+    frontEndUsageKnown: frontEndUsageKnown(graph, fieldUsage),
     /** Все поля, реально используемые во фронт-енде */
     usedFields: new Set([...fieldUsage.values()].filter((f) => f.usedInFrontEnd).map((f) => f.id)),
     /** Поля, встречающиеся только в скрипте */
     scriptOnlyFields: new Set([...fieldUsage.values()].filter((f) => f.usedInScript && !f.usedInFrontEnd).map((f) => f.id)),
   };
+}
+
+/**
+ * Понятно ли, что фронт-енд использует поля.
+ *
+ * @param {object} graph
+ * @param {Map} fieldUsage — индекс использования полей
+ * @returns {boolean}
+ */
+function frontEndUsageKnown(graph, fieldUsage) {
+  if (!(graph.objects ?? []).length) return false;
+  // Ссылок на поля в объектах нет вовсе — значит, API не отдаёт сведений
+  // об их использовании. Если и в модели данных полей нет, вопрос снят.
+  let referenced = 0;
+  for (const entry of fieldUsage.values()) {
+    if (entry.usedInFrontEnd) referenced += 1;
+  }
+  if (referenced > 0) return true;
+  return (graph.fields ?? []).length === 0;
 }
 
 /** Утилита: список выражений приложения с указанием владельца. */

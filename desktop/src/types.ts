@@ -3,7 +3,13 @@
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
 export type Tab = 'connect' | 'analysis' | 'summary' | 'rules';
-export type Platform = 'qlik-sense' | 'qlikview';
+/**
+ * Платформа приложения.
+ * 'auto' — определить по данным сервера (по умолчанию): один и тот же
+ * Sense-сервер бывает доступен через Doc API, поэтому платформа определяется
+ * по набору типов объектов, а не по способу подключения.
+ */
+export type Platform = 'qlik-sense' | 'qlikview' | 'auto';
 export type Severity = 'error' | 'warning' | 'info';
 
 export type AppInfo = {

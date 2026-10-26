@@ -25,16 +25,54 @@ export const PLATFORM_SENSE = 'qlik-sense';
 export const PLATFORM_VIEW = 'qlikview';
 /** Платформа не определена — офлайн-режим, фильтр по платформе не применяется. */
 export const PLATFORM_ANY = 'any';
+/**
+ * Платформу определяет сервер — по набору типов объектов приложения.
+ * Один и тот же Sense-сервер бывает доступен через Doc API, поэтому по
+ * способу подключения судить нельзя.
+ */
+export const PLATFORM_AUTO = 'auto';
 
 /** Известные платформы (для валидации значения из CLI/конфига). */
-export const PLATFORMS = [PLATFORM_SENSE, PLATFORM_VIEW];
+export const PLATFORMS = [PLATFORM_SENSE, PLATFORM_VIEW, PLATFORM_AUTO];
 
 /** Человекочитаемые названия платформ — для отчёта и пометок. */
 export const PLATFORM_LABELS = {
   [PLATFORM_SENSE]: 'Qlik Sense',
   [PLATFORM_VIEW]: 'QlikView',
+  [PLATFORM_AUTO]: 'определяется по данным сервера',
   [PLATFORM_ANY]: 'определяется автоматически',
 };
+
+/**
+ * Типы объектов, которые встречаются только в Qlik Sense.
+ *
+ * QlikView 12 знает другой набор типов (chart, bar, line, pivot, button…),
+ * а перечисленные ниже появились в Sense 12: KPI, фильтры, кнопки действий,
+ * истории, слайды. Их присутствие — верный признак Sense, даже когда
+ * подключение выполнено через Doc API.
+ */
+export const SENSE_ONLY_TYPES = new Set([
+  'UniKPI', 'UniBarChart', 'filterpane', 'action-button', 'piechart',
+  'scatterplot', 'uni_shecklist', 'text-image', 'slide', 'sn-table',
+  'hybridchart', 'pivotchart',
+]);
+
+/**
+ * Определяет платформу по собранным объектам.
+ *
+ * Различать платформы по типу API ненадёжно: один и тот же Sense-сервер
+ * бывает доступен через Doc API, и тогда приложение ошибочно считалось
+ * QlikView, а все правила по фронт-энду пропускались.
+ *
+ * @param {object[]} objects — собранные объекты приложения
+ * @returns {string} 'qlik-sense' | 'qlikview'
+ */
+export function detectPlatform(objects) {
+  for (const obj of objects ?? []) {
+    if (SENSE_ONLY_TYPES.has(obj?.type)) return PLATFORM_SENSE;
+  }
+  return PLATFORM_VIEW;
+}
 
 /** Обе платформы. */
 const BOTH = [PLATFORM_SENSE, PLATFORM_VIEW];

@@ -60,7 +60,9 @@ export function splitStatements(script) {
 
     if (quote) {
       buf += c;
-      if (c === '\\') { buf += src[i + 1] ?? ''; i += 2; continue; }
+      // Обратный слэш в Qlik не экранирует: '\\' — обычный символ.
+      // Экранирование — удвоение кавычки ('').
+      if (c === quote && src[i + 1] === quote) { buf += src[i + 1]; i += 2; continue; }
       if (c === quote) quote = null;
       if (c === '\n') line += 1;
       i += 1;
@@ -135,7 +137,9 @@ export function stripComments(src) {
     const rest = s.slice(i, i + 2);
     if (quote) {
       out += c;
-      if (c === '\\') { out += s[i + 1] ?? ''; i += 2; continue; }
+      // Обратный слэш в Qlik не экранирует: '\\' — обычный символ.
+      // Экранирование — удвоение кавычки ('').
+      if (c === quote && s[i + 1] === quote) { out += s[i + 1]; i += 2; continue; }
       if (c === quote) quote = null;
       i += 1;
       continue;

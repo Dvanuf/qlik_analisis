@@ -84,6 +84,7 @@ const SEVERITIES: { id: Severity; label: string }[] = [
 ];
 
 const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
+  { id: 'auto', label: 'Определить автоматически', hint: 'По типам объектов приложения — так надёжнее' },
   { id: 'qlik-sense', label: 'Qlik Sense', hint: 'QIX App API: объекты, master items, закладки' },
   { id: 'qlikview', label: 'QlikView 12', hint: 'Doc API: скрипт и модель данных' },
 ];
@@ -91,7 +92,9 @@ const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
 export default function App() {
   const [tab, setTab] = useState<Tab>('connect');
   const [platform, setPlatform] = useState<Platform>(
-    () => (localStorage.getItem('qa.platform') as Platform) ?? 'qlikview',
+    // По умолчанию платформу определяет сервер: тот же Sense-сервер бывает
+    // доступен через Doc API, и по способу подключения судить нельзя.
+    () => (localStorage.getItem('qa.platform') as Platform) ?? 'auto',
   );
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [ruleInfo, setRuleInfo] = useState<RuleInfo | null>(null);

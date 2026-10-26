@@ -3,7 +3,7 @@
  */
 import { buildIndex } from './graph.js';
 import { runRules, CATEGORIES, SEVERITIES } from './rules/index.js';
-import { PLATFORM_ANY } from './rules/platforms.js';
+import { PLATFORM_ANY, PLATFORM_AUTO } from './rules/platforms.js';
 import { parseScript } from './script/parse.js';
 import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
@@ -16,9 +16,13 @@ import { computeScore } from './score.js';
 export function analyze(graph, config = {}) {
   const scriptModel = parseScript(graph.script ?? '');
   const index = buildIndex(graph, scriptModel);
-  // Платформа: явный флаг/конфиг важнее, иначе берётся из графа —
-  // экстрактор проставляет её по типу API (QIX Engine API или QlikView Doc API).
-  const platform = config.platform ?? graph.meta?.platform ?? PLATFORM_ANY;
+  // Платформа: явный выбор пользователя важнее; 'auto' — определить по данным
+  // сервера (экстрактор выводит её из набора типов объектов). Если данных нет —
+  // платформа не определена, и правила проверяются по мере достаточности.
+  const requested = config.platform ?? PLATFORM_AUTO;
+  const platform = requested === PLATFORM_AUTO
+    ? (graph.meta?.platform ?? PLATFORM_ANY)
+    : requested;
   const { findings: rawFindings, ruleStats, errors } = runRules(graph, index, { ...config, platform }, scriptModel);
 
   // Одинаковые находки («правило + объект + текст») сворачиваются в одну запись.

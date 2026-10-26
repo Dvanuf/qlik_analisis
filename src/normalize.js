@@ -68,7 +68,9 @@ export function tokenize(src) {
       let value = '';
       let closed = false;
       while (j < s.length) {
-        if (s[j] === '\\') { value += s[j + 1] ?? ''; j += 2; continue; }
+        // В Qlik обратный слэш не экранирует ('\' — строка из одного слэша).
+        // Экранирование — удвоение кавычки ('').
+        if (s[j] === quote && s[j + 1] === quote) { value += quote; j += 2; continue; }
         if (s[j] === quote) { closed = true; j += 1; break; }
         value += s[j];
         j += 1;

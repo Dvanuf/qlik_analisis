@@ -9,16 +9,43 @@ import { parseLoadScript } from './loadscript.js';
 import { PLATFORM_VIEW } from '../rules/platforms.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
 import { fetchAssociations } from './associations.js';
+import { fetchObjects, fetchLayout, fetchSheetChildren, OBJECT_TYPES } from './objects.js';
+import { detectPlatform } from '../rules/platforms.js';
 
-const OBJECT_TYPES = [
-  'sheet', 'story', 'chart', 'dimension', 'measure', 'textbox', 'button',
-  'slider', 'selection', 'inputbox', 'group', 'container', 'pivot', 'table',
-  'listbox', 'treemap', 'bar', 'line', 'pie', 'scatter', 'combo', 'gauge',
-  'funnel', 'histogram', 'boxplot', 'heatmap', 'radar', 'waterfall', 'bullet',
-  'sparkline', 'map', 'extension',
-];
+/**
+ * Приводит значение qGroupFieldDefs к виду выражения.
+ *
+ * Там бывают и имена полей (`User ID`), и выражения (`=Month`, `=Sum([Amount])`).
+ * Имя с пробелами без скобок не является ссылкой на поле, поэтому разбор
+ * выражений его не узнаёт — и поле ошибочно считается неиспользуемым.
+ *
+ * @param {string} value — значение из qGroupFieldDefs
+ * @returns {string} выражение
+ */
+function asFieldExpression(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  // Знак равенства означает выражение измерения: `=Month` или `=Sum([Amount])`.
+  if (raw.startsWith('=')) {
+    const text = raw.slice(1).trim();
+    if (!text) return '';
+    // Простое имя поля оформляем ссылкой — разбор выражений её узнаёт.
+    if (/^[\wа-яА-Я]+$/.test(text)) return `[${text}]`;
+    // Настоящее выражение (функции, операторы) оставляем как есть.
+    return text;
+  }
+  // Имя поля: с пробелами оно ссылкой не считается — нужны скобки.
+  if (/^\[.*\]$/.test(raw)) return raw;
+  return `[${raw}]`;
+}
 
-/** Рекурсивно вытаскивает выражения из layout объекта. */
+/**
+ * Рекурсивно вытаскивает выражения из layout объекта.
+ *
+ * Кроме привычных qDef/qFormula, сервер Sense 12 отдаёт поля измерений
+ * в qDimensionInfo.qGroupFieldDefs — это названия полей, по ним видно,
+ * какие поля объект использует.
+ */
 function collectExpressions(node, out = [], seen = new Set()) {
   if (!node || typeof node !== 'object') return out;
   if (seen.has(node)) return out;
@@ -32,7 +59,14 @@ function collectExpressions(node, out = [], seen = new Set()) {
     else if ((key === 'qFormula' || key === 'qExpr' || key === 'qExpression') && typeof value === 'string') {
       out.push({ kind: 'dimension', expr: value });
     } else if (key === 'qFieldDefs' && Array.isArray(value)) {
-      value.forEach((f) => { if (typeof f === 'string') out.push({ kind: 'dimension', expr: f }); });
+      value.forEach((f) => {
+        if (typeof f === 'string') out.push({ kind: 'dimension', expr: asFieldExpression(f) });
+      });
+    } else if (key === 'qGroupFieldDefs' && Array.isArray(value)) {
+      // Поля, на которых построено измерение объекта.
+      value.forEach((f) => {
+        if (typeof f === 'string') out.push({ kind: 'dimension', expr: asFieldExpression(f) });
+      });
     } else if (key === 'qExpressions' && Array.isArray(value)) {
       value.forEach((f) => { if (typeof f === 'string') out.push({ kind: 'measure', expr: f }); });
     } else if (typeof value === 'object') collectExpressions(value, out, seen);
@@ -44,8 +78,9 @@ function readMeta(layout) {
   const meta = layout?.qMeta ?? {};
   const layoutPart = layout?.qLayout ?? {};
   return {
-    name: String(meta.qName ?? meta.qTitle ?? layoutPart.qTitle ?? ''),
-    description: String(meta.qDescription ?? layoutPart.qDescription ?? ''),
+    // Название объекта сервер отдаёт по-разному: qName, qTitle или title.
+    name: String(meta.qName ?? meta.qTitle ?? meta.title ?? layoutPart.qTitle ?? ''),
+    description: String(meta.qDescription ?? meta.description ?? layoutPart.qDescription ?? ''),
   };
 }
 
@@ -79,7 +114,8 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
       source: 'doc-api',
       api: 'QlikView Doc API',
       generatedAt: new Date().toISOString(),
-      // Doc API 12 — только QlikView.
+      // Платформа уточняется по собранным объектам: через Doc API доступен
+      // и Qlik Sense (см. detectPlatform), поэтому по одному API судить нельзя.
       platform: PLATFORM_VIEW,
       capabilities,
       skipped,
@@ -144,18 +180,30 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
   }
 
   // --- Объекты (листы и визуализации) ---
-  const objectList = await app.getObjects({ qTypes: OBJECT_TYPES }).catch((err) => {
-    skipped.push({ capability: 'objects', reason: err?.message ?? String(err) });
-    return [];
-  });
-  const items = Array.isArray(objectList) ? objectList : (objectList?.qItems ?? []);
+  // Элементы приходят в двух форматах: QIX App API — {qId, qType},
+  // Doc API — {qInfo: {qId, qType}}. Разбор приводит их к общему виду,
+  // иначе сервер отдаёт объекты, а они молча отбрасываются.
+  const { items: listedObjects, skipped: failedTypes } = await fetchObjects(app, OBJECT_TYPES);
+  for (const f of failedTypes) {
+    skipped.push({ capability: 'objects', reason: `тип ${f.type}: ${f.reason}` });
+  }
+
+  // Объекты, лежащие на листах: их нет в списке типов движка, но без них
+  // часть фронт-энда (KPI, фильтры, кнопки) остаётся невидимой.
+  const sheetLike = listedObjects.filter((o) => o.type === 'sheet' || o.type === 'story');
+  const children = await fetchSheetChildren(app, sheetLike);
+  const items = [...listedObjects];
+  const knownIds = new Set(listedObjects.map((o) => o.id));
+  for (const child of children) {
+    if (knownIds.has(child.id)) continue;
+    knownIds.add(child.id);
+    items.push(child);
+  }
   if (items.length) capabilities.push('objects');
 
   for (const info of items) {
-    const id = info?.qId;
-    const type = info?.qType;
-    if (!id) continue;
-    const layout = await app.getObject(id).then((o) => o.getLayout()).catch(() => null);
+    const { id, type } = info;
+    const layout = await fetchLayout(app, id);
     if (!layout) continue;
     const meta = readMeta(layout);
     if (type === 'sheet' || type === 'story') {
@@ -171,16 +219,21 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
       unique.push(e);
     }
     graph.objects.push({
-      id, name: meta.name || id, type,
-      description: meta.description, expressions: unique, layoutMs: null,
+      id, name: meta.name || info.name || id, type,
+      description: meta.description || info.description,
+      expressions: unique, layoutMs: null,
     });
   }
 
   // --- Связи между таблицами (для правила про внешний join) ---
-  // Метод есть только в QIX (Qlik Sense). В Doc API (QlikView 12) его нет —
-  // это ограничение платформы, а не сбой. Текст ответа сервера сохраняем:
-  // по нему видно, поддерживает ли сервер метод, и почему нет.
-  const { associations, reason } = await fetchAssociations(app);
+  // Метод требует имена двух таблиц, поэтому сравниваются пары таблиц
+  // с общими полями. Текст ответа сервера сохраняем: по нему видно,
+  // поддерживает ли сервер метод и почему нет.
+  const { associations, reason } = await fetchAssociations(app, graph.tables);
+
+  // Платформа определяется по собранным объектам: Doc API используется и
+  // в QlikView, и в Qlik Sense, а набор типов объектов различает их однозначно.
+  graph.meta.platform = detectPlatform(graph.objects);
   if (associations) {
     graph.meta.associations = associations;
     capabilities.push('associations');

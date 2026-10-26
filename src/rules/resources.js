@@ -18,10 +18,10 @@ export const resourceRules = [
     run(ctx) {
       const findings = [];
       // Без данных фронт-енда нельзя доказать, что поле не используется.
-      if (!ctx.index?.frontEndAvailable) {
+      if (!ctx.index?.frontEndUsageKnown) {
         return {
           findings: [],
-          note: 'Пропущено: не удалось получить список объектов приложения — без них usage поля не определить.',
+          note: 'Пропущено: сервер не отдал сведений об использовании полей в объектах — без них это недоказуемо.',
         };
       }
       for (const entry of ctx.index.fieldUsage.values()) {
@@ -58,11 +58,11 @@ export const resourceRules = [
     run(ctx) {
       const findings = [];
       // «Используется только в скрипте» — утверждение о фронт-енде:
-      // без списка объектов его нельзя доказать.
-      if (!ctx.index?.frontEndAvailable) {
+      // без сведений об использовании полей его нельзя доказать.
+      if (!ctx.index?.frontEndUsageKnown) {
         return {
           findings: [],
-          note: 'Пропущено: не удалось получить список объектов приложения — без них usage поля не определить.',
+          note: 'Пропущено: сервер не отдал сведений об использовании полей в объектах — без них это недоказуемо.',
         };
       }
       for (const key of ctx.index.scriptOnlyFields) {
@@ -92,10 +92,10 @@ export const resourceRules = [
     recommendation: 'Добавить DROP TABLE в конец скрипта загрузки.',
     run(ctx) {
       const findings = [];
-      if (!ctx.index?.frontEndAvailable) {
+      if (!ctx.index?.frontEndUsageKnown) {
         return {
           findings: [],
-          note: 'Пропущено: не удалось получить список объектов приложения — без них usage таблицы не определить.',
+          note: 'Пропущено: сервер не отдал сведений об использовании полей в объектах — без них это недоказуемо.',
         };
       }
       for (const t of ctx.graph.tables ?? []) {

@@ -160,10 +160,23 @@ cd ..
 npm test                                   # ядро
 cd desktop && npm run typecheck && npm run smoke
 cd .. && git add -A && git commit -m "release: v0.1.13" && git tag v0.1.13
+git push origin main --tags                # публикация на GitHub — обязательный шаг
 ```
 
 Затем: обновить `CHANGELOG.md`, `desktop/release/README.md`, скопировать
 `.dmg`/`.exe` на рабочий стол.
+
+**Публикация на GitHub обязательна.** Без `git push` версия остаётся только
+на этой машине: теги и исходники не появляются в репозитории, и восстановить
+версию по тегу с другого компьютера нельзя. Перед push проверь, что ничего не
+забыто:
+
+```bash
+git status --short          # пусто — всё закоммичено
+git tag                     # тег новой версии на месте
+git push origin main --tags
+git ls-remote --tags origin | tail -5   # теги появились на сервере
+```
 
 ---
 
