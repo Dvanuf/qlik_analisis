@@ -121,6 +121,27 @@ export function pushStep(steps, step) {
 }
 
 /**
+ * Объясняет, почему сервер не отдал объекты приложения.
+ *
+ * Обезличенная надпись («API не вернул список объектов») прятала настоящую
+ * причину, по которой часть правил не сработала. Текст ответа сервера
+ * сохраняется при сборе данных — здесь он превращается в понятную фразу.
+ *
+ * @param {object} graph — граф приложения
+ * @returns {string} причина (пустая строка, если объекты получены)
+ */
+export function describeMissingObjects(graph) {
+  const reasons = (graph?.meta?.skipped ?? [])
+    .filter((s) => s.capability === 'objects')
+    .map((s) => s.reason)
+    .filter(Boolean);
+  if (!reasons.length) {
+    return '0 — API не вернул список объектов (листы и чарты на этой платформе недоступны)';
+  }
+  return `0 — сервер не отдал объекты: ${reasons.join('; ')}`;
+}
+
+/**
  * @param {object} target — параметры подключения
  * @param {(step: {name: string, status: string, detail: string, hint?: string, index?: number}) => void} [onStep]
  * @param {number} [connectTimeoutMs]
@@ -233,7 +254,8 @@ export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
     }
 
     if (!graph.objects.length) {
-      warn('Объекты приложения', '0 — API не вернул список объектов (листы и чарты на этой платформе недоступны)');
+      // Показываем настоящую причину от сервера: обезличенная надпись её прятала.
+      warn('Объекты приложения', describeMissingObjects(graph));
     } else {
       ok('Объекты приложения', String(graph.objects.length));
     }

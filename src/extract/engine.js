@@ -15,6 +15,8 @@ import { extractViaDocApi } from './docapi.js';
 import { PLATFORM_SENSE } from '../rules/platforms.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
 import { maskUrl } from '../logging/mask.js';
+import { fetchObjects, OBJECT_TYPES } from './objects.js';
+import { fetchAssociations } from './associations.js';
 // Схема встраивается в бандл: в собранном приложении node_modules нет,
 // и require.resolve('enigma.js/schemas/…') не сработает.
 import embeddedSchema from 'enigma.js/schemas/12.34.11.json' with { type: 'json' };
@@ -29,15 +31,6 @@ function requireFromDisk(id) {
   if (!nodeRequire) nodeRequire = createRequire(import.meta.url);
   return nodeRequire(id);
 }
-
-/** Типы объектов, которые запрашиваем у движка. */
-const OBJECT_TYPES = [
-  'sheet', 'story', 'chart', 'dimension', 'measure', 'textbox', 'button',
-  'slider', 'selection', 'inputbox', 'group', 'container', 'pivot', 'table',
-  'listbox', 'treemap', 'bar', 'line', 'pie', 'scatter', 'combo', 'gauge',
-  'funnel', 'histogram', 'boxplot', 'heatmap', 'radar', 'waterfall', 'bullet',
-  'sparkline', 'map', 'extension', 'variable',
-];
 
 function loadSchema(schemaPath) {
   // 1) Явный путь к схеме (--schema).
@@ -287,9 +280,14 @@ export async function extractFromEngine(config) {
     }
 
     // --- Объекты приложения ---
+    // Типы запрашиваем блоками: сервер отвергает вызов целиком, если в списке
+    // есть незнакомый ему тип, — тогда потерялись бы сразу все объекты.
     const objectList = await attempt('objects', async () => {
-      const res = await app.getObjects({ qTypes: OBJECT_TYPES });
-      return res?.qItems ?? [];
+      const { items, skipped: failed } = await fetchObjects(app, OBJECT_TYPES);
+      for (const f of failed) {
+        skipped.push({ capability: 'objects', reason: `тип ${f.type}: ${f.reason}` });
+      }
+      return items;
     }, []);
 
     for (const info of objectList ?? []) {
@@ -340,8 +338,15 @@ export async function extractFromEngine(config) {
     }
 
     // --- Связи между таблицами (правило про внешний join) ---
-    const assoc = await attempt('associations', async () => app.getAssociationScores([], [], 0), []);
-    if (Array.isArray(assoc)) graph.meta.associations = assoc;
+    // Текст ответа сервера сохраняем: по нему видно, поддерживает ли сервер
+    // метод и почему нет — иначе причина неприменимости R011 остаётся загадкой.
+    const { associations, reason } = await fetchAssociations(app);
+    if (associations) {
+      graph.meta.associations = associations;
+      capabilities.push('associations');
+    } else {
+      skipped.push({ capability: 'associations', reason });
+    }
 
     // --- Закладки ---
     const bm = await attempt('bookmarks', async () => {

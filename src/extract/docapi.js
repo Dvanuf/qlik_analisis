@@ -8,6 +8,7 @@
 import { parseLoadScript } from './loadscript.js';
 import { PLATFORM_VIEW } from '../rules/platforms.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
+import { fetchAssociations } from './associations.js';
 
 const OBJECT_TYPES = [
   'sheet', 'story', 'chart', 'dimension', 'measure', 'textbox', 'button',
@@ -176,15 +177,15 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
   }
 
   // --- Связи между таблицами (для правила про внешний join) ---
-  const assoc = await app.getAssociationScores?.([], [], 0).catch(() => null);
-  if (Array.isArray(assoc)) {
-    graph.meta.associations = assoc;
+  // Метод есть только в QIX (Qlik Sense). В Doc API (QlikView 12) его нет —
+  // это ограничение платформы, а не сбой. Текст ответа сервера сохраняем:
+  // по нему видно, поддерживает ли сервер метод, и почему нет.
+  const { associations, reason } = await fetchAssociations(app);
+  if (associations) {
+    graph.meta.associations = associations;
     capabilities.push('associations');
   } else {
-    skipped.push({
-      capability: 'associations',
-      reason: 'Связи между таблицами недоступны в этой версии API — правило R011 не применимо.',
-    });
+    skipped.push({ capability: 'associations', reason });
   }
 
   // --- Переменные ---

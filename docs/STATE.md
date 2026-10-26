@@ -3,7 +3,7 @@
 Документ отвечает на вопрос «с чего начать новую задачу». Правила работы с AI —
 в [`AGENTS.md`](../AGENTS.md), история версий — в [`CHANGELOG.md`](../CHANGELOG.md).
 
-**Обновлено:** 26.10.2026 · **Текущая версия:** 0.5.0 (тег `v0.5.0`)
+**Обновлено:** 26.10.2026 · **Текущая версия:** 0.5.3 (тег `v0.5.3`)
 
 ---
 
@@ -13,7 +13,7 @@
 |---|---|
 | Исходники | `/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer` |
 | Архив всех сборок | `<проект>/desktop/release/` |
-| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.5.0-{arm64.dmg,x64.exe}` |
+| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.5.3-{arm64.dmg,x64.exe}` |
 | Лог входа в хаб | `~/Library/Application Support/qlik-analyzer-desktop/hub-login.log` |
 | Настройки правил | `~/Library/Application Support/qlik-analyzer-desktop/rules.json` |
 | История прогонов | `~/Library/Application Support/qlik-analyzer-desktop/history.sqlite` |
@@ -21,7 +21,7 @@
 
 ---
 
-## 2. Что сделано (0.1.13 → 0.5.0)
+## 2. Что сделано (0.1.13 → 0.5.3)
 
 | Версия | Суть |
 |---|---|
@@ -34,6 +34,8 @@
 | 0.3.0 | **Этап 2 плана:** вкладка «Анализ» — карточки метрик и скор 0–100, фильтры-чипы, колонки «Таблица»/«Строка», просмотр скрипта, diff правок, подавление находок |
 | 0.4.0 | **Этап 3 плана:** вкладка «Правила» — редактор правил (вкл/выкл, важность, пороги), файл настроек с экспортом и импортом |
 | 0.5.0 | **Этап 4 плана:** сводный отчёт — тепловая карта, топ-10 правил, колонки скор/владелец/поток/дата, история в SQLite со сравнением, экспорт CSV и Excel |
+| 0.5.1–0.5.3 | **Хаб:** понятная диагностика отказа 403, видимое окно входа, кнопка «Войти в хаб» доступна всегда и не блокирует интерфейс, показано состояние сессии |
+| 0.5.3 (пересборка) | **Целостность сессии и сбор объектов:** файл сессии пишется атомарно и проверяется при чтении; объекты приложения запрашиваются по типам с обходом отказа (сервер отвергает весь блок при незнакомом типе); в диагностике и в отчёте видно настоящую причину, по которой сервер не отдал объекты и связи между таблицами |
 
 ---
 
@@ -86,24 +88,33 @@ env -u ELECTRON_RUN_AS_NODE ./desktop/node_modules/electron/dist/Electron.app/Co
 
 ## 5. Особенности окружения (обязательно к знанию)
 
-**Node.js в системе НЕ установлен.** Рабочий Node берётся из Electron:
+**Node.js v24 лежит в `<рабочая папка>/.tools/node/bin`** (не в системном PATH —
+команда `node` может не сработать, тогда используй полный путь). Сборку
+и electron-builder удобнее делать через Electron, который лежит в проекте:
 
 ```bash
 PROJ=/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer
+TOOLS=/Users/anufriev_d_v/.cline/data/workspaces/chat/.tools/node/bin
 ELECTRON="$PROJ/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
 
 # тесты
 cd "$PROJ" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" --test "test/*.test.js"
 # типы
 cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" ./node_modules/typescript/bin/tsc --noEmit
+# сборка main и preload
+cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" scripts/build-main.mjs
 # сборка renderer
 cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vite/bin/vite.js build
+# релиз (артефакты в desktop/release/)
+cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" scripts/build-release.mjs
 ```
 
 Ловушки:
 
 - В терминале VSCode выставлено `ELECTRON_RUN_AS_NODE=1`. Для запуска самого
   приложения нужно `env -u ELECTRON_RUN_AS_NODE`.
+- Скрипты запускаются как `scripts/build-main.mjs` — **без** слова `node` перед
+  путём (иначе Node ищет файл `node` и падает с MODULE_NOT_FOUND).
 - `electron-builder` не запускается через CLI (yargs получает путь к скрипту как
   аргумент) — работает **программный API** `build({ targets, config })`.
 - Под Electron-as-node нужно `process.noAsar = true`, иначе сборщик падает на
@@ -114,6 +125,8 @@ cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vite/bin/v
   `${productName}-${version}-arm64.${ext}`.
 - `npm list` для сбора зависимостей: production-зависимостей нет, достаточно
   заглушки `{"name":…,"version":…,"dependencies":{}}`.
+- `safeStorage.decryptStringAsync` в Electron 45 возвращает объект, а не строку —
+  для чтения файла сессии используйте `safeStorage.decryptString`.
 
 ---
 
@@ -132,14 +145,19 @@ cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vite/bin/v
 | Маскирование секретов в логах, отчётах и URL | `src/logging/mask.js` |
 | Вкладки интерфейса (Подключение / Анализ / Сводный отчёт / Правила) | `desktop/src/tabs/` |
 | Сборка релиза одной командой | `desktop/scripts/build-release.mjs` |
+| Целостность файла сессии хаба (нормализация, проверка, отказ от мусора) | `src/session/credentials.js` |
+| Сбор объектов приложения по типам с обходом отказа сервера | `src/extract/objects.js` |
+| Связи между таблицами с сохранением текста ошибки сервера | `src/extract/associations.js` |
 
 ## 7. Открытые вопросы и что не сделано
 
-- **Объекты приложений не собираются** на этом сервере (Doc API их не отдаёт) —
-  правила по выражениям чартов (Q001–Q006, P001–P011) на ваших приложениях
-  не сработают. Это ограничение платформы, не ошибка инструмента.
+- **Объекты приложений не собирались** на этом сервере: `getObjects` отдавал 0
+  объектов без объяснения причины. Теперь типы запрашиваются блоками, а
+  отказавший блок разбирается по одному типу, и в диагностике видно, какой
+  именно тип сервер не принял. **Проверка на живом сервере не завершена:**
+  сессия хаба истекла, нужен новый вход из приложения.
 - **Правило R011** (связи между таблицами) неприменимо: `getAssociationScores`
-  на этом сервере недоступен.
+  на этом сервере недоступен. Причина теперь сохраняется в отчёте целиком.
 - **Пакетный анализ 223 приложений** не проверялся целиком — только 3 подряд.
   Стоит прогнать на ограниченной выборке (`--limit 10`) и замерить время.
 - **Кэш пакетного анализа** (`desktop/release/../.cache`) не проверен на
@@ -154,7 +172,7 @@ cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vite/bin/v
 1. Прочитать [`AGENTS.md`](../AGENTS.md) — правила работы, пути, соглашения.
 2. Прочитать этот файл — состояние и особенности сервера.
 3. `git log --oneline -10` и `git tag` — что уже сделано.
-4. Проверить `npm test` (через Electron-as-node) — 162 теста, должно быть зелено.
+4. Проверить `npm test` (через Electron-as-node) — 178 тестов, должно быть зелено.
 5. Сформулировать задачу в формате из `AGENTS.md` и приступить.
 
 Этап 5 плана (ИИ-ревью, сверка с GitLab, режим CLI) выполняется только после

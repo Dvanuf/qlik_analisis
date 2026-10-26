@@ -5,7 +5,7 @@
  * только данные через IPC и не имеет прямого доступа к файловой системе.
  */
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
@@ -24,6 +24,7 @@ import { applyPatchToScript } from '../../src/report/fixes.js';
 import { openHistory, saveRun, listRuns, compareRuns, latestRunForApp, RULES_VERSION } from '../../src/history.js';
 import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
 import { buildXlsx } from '../../src/report/xlsx.js';
+import { normalizeCredentials, isSessionUsable, parseCredentials } from '../../src/session/credentials.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -523,9 +524,16 @@ ipcMain.handle('core:save-credentials', (_e, creds: {
   hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
 }) => {
   // Время получения сессии: по нему видно, что сессия истекла и пора войти заново.
-  const payload = { ...creds, at: creds.at ?? new Date().toISOString() };
+  // Значения приводим к строкам в ядре: если сюда попадёт объект, в файл ляжет
+  // «[object Object]» — такой файл потом не читается и сессия не восстанавливается.
+  const payload = normalizeCredentials(creds);
+  if (!isSessionUsable(payload)) throw new Error('Сессия хаба пуста — сохранять нечего.');
   const blob = safeStorage.encryptString(JSON.stringify(payload));
-  writeFileSync(resolve(app.getPath('userData'), CREDS_FILE), blob);
+  const file = resolve(app.getPath('userData'), CREDS_FILE);
+  // Пишем через временный файл: оборванная запись не должна оставлять мусор.
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, blob);
+  renameSync(tmp, file);
   return true;
 });
 
@@ -533,7 +541,9 @@ ipcMain.handle('core:load-credentials', () => {
   const file = resolve(app.getPath('userData'), CREDS_FILE);
   if (!existsSync(file)) return null;
   try {
-    return JSON.parse(safeStorage.decryptString(readFileSync(file)));
+    // Файл мог быть записан старой сборкой или прерванной записью — тогда в нём
+    // не JSON, а мусор. Такой файл молча ломал бы восстановление сессии.
+    return parseCredentials(safeStorage.decryptString(readFileSync(file)));
   } catch {
     return null;
   }
