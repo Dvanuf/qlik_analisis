@@ -41,7 +41,7 @@ const api = {
   /** Открывает окно входа в хаб и возвращает cookie + ключи рукопожатия. */
   openHub: (opts: { hubUrl: string; appId?: string; insecure?: boolean }) => ipcRenderer.invoke('core:open-hub', opts),
   saveCredentials: (creds: {
-    hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string;
+    hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
   }) => ipcRenderer.invoke('core:save-credentials', creds),
   loadCredentials: () => ipcRenderer.invoke('core:load-credentials'),
   clearCredentials: () => ipcRenderer.invoke('core:clear-credentials'),

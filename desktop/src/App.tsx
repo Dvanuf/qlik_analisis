@@ -33,9 +33,11 @@ declare global {
         cookie?: string; xrfKey?: string; csrfToken?: string; wsUrl?: string;
       } | null>;
       saveCredentials(creds: {
-        hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string;
+        hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
       }): Promise<boolean>;
-      loadCredentials(): Promise<{ hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string } | null>;
+      loadCredentials(): Promise<{
+        hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
+      } | null>;
       clearCredentials(): Promise<boolean>;
       onDoctorStep(cb: (step: DoctorStep) => void): () => void;
       analyzeAll(opts: {
@@ -117,6 +119,12 @@ export default function App() {
   const [batchCat, setBatchCat] = useState('all');
   const [batchSearch, setBatchSearch] = useState('');
   const [hubStatus, setHubStatus] = useState('');
+  // Вход в хаб идёт в отдельном окне: интерфейс при этом не блокируется.
+  const [signingIn, setSigningIn] = useState(false);
+  // Когда сессия получена (для показа «сессия от …»).
+  const [sessionAt, setSessionAt] = useState<string | null>(null);
+  // Ошибка авторизации (403) — предлагаем обновить сессию.
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [batch, setBatch] = useState<{ results: BatchItem[]; totals: BatchTotals } | null>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -154,10 +162,13 @@ export default function App() {
   /** Вход в хаб: открывается окно, пользователь вводит доменный пароль. */
   async function signIn() {
     if (!hubUrl) { setHubStatus('Сначала укажите корректный URL движка'); return; }
+    setSigningIn(true);
+    setSessionError(null);
     setBusy('Открываем хаб — авторизуйтесь в окне браузера…');
     setHubStatus(
       'Открылось отдельное окно входа в Qlik — введите в нём доменный логин и пароль. '
-      + 'Если окно не видно, посмотрите за основным окном приложения или в доке.',
+      + 'Если окно не видно, посмотрите за основным окном приложения или в доке. '
+      + 'Окно можно закрыть — вход прервётся.',
     );
     try {
       const targetApp = appId || appIdFromUrl;
@@ -178,17 +189,19 @@ export default function App() {
           cookie: res.cookie,
           xrfKey: res.xrfKey,
           csrfToken: res.csrfToken,
+          at: new Date().toISOString(),
         });
         const missing = [
           res.csrfToken ? null : 'CSRF-токен',
           res.xrfKey ? null : 'XSRF-ключ',
         ].filter(Boolean);
+        setSessionAt(new Date().toISOString());
         setHubStatus(
           `Вход выполнен: cookie ${res.cookie ? '✓' : '✗'}, `
           + `CSRF-токен ${res.csrfToken ? '✓' : '✗'}, XSRF-ключ ${res.xrfKey ? '✓' : '✗'}`
           + (missing.length
             ? ` — не получен: ${missing.join(', ')}. Подробности в файле hub-login.log.`
-            : ''),
+            : ' — сессия сохранена в зашифрованном виде.'),
         );
       } else {
         setHubStatus('Авторизация не завершена: окно закрыто или cookie не получена. '
@@ -197,6 +210,7 @@ export default function App() {
     } catch (err) {
       setHubStatus(`Ошибка входа: ${String(err)}`);
     }
+    setSigningIn(false);
     setBusy('');
   }
 
@@ -210,7 +224,9 @@ export default function App() {
       setCookie(creds.cookie);
       setXrfKey(creds.xrfKey ?? '');
       setCsrfToken(creds.csrfToken ?? '');
-      setHubStatus('Сессия хаба восстановлена из защищённого хранилища');
+      setSessionAt(creds.at ?? null);
+      setHubStatus('Сессия хаба восстановлена из защищённого хранилища. '
+        + 'Если хаб отвечает 403 — сессия истекла, нажмите «Войти в хаб» ещё раз.');
     });
     // Шаги приходят по мере проверки и по индексу: повторяющиеся шаги
     // заменяют предыдущую запись, а не добавляются вторым списком.
@@ -232,6 +248,11 @@ export default function App() {
 
   const conn = { url, user, password, cookie, xrfKey, csrfToken, insecure };
 
+  /** Похоже ли это на отказ хаба из-за истёкшей сессии (403). */
+  function isAuthError(text: string): boolean {
+    return /\b403\b|доступ запрещён|Unexpected server response/i.test(text);
+  }
+
   async function runDoctor() {
     setTab('connect');
     setBusy('Проверка подключения…');
@@ -239,8 +260,15 @@ export default function App() {
     try {
       const res = await window.qa.doctor(conn);
       setDoctorSteps(res.steps);
+      const failed = res.steps.find((s) => s.status === 'FAIL');
+      if (failed && isAuthError(`${failed.detail} ${failed.hint ?? ''}`)) {
+        setSessionError('Хаб отклонил подключение (403) — сессия истекла или не получена.');
+      }
     } catch (err) {
       setDoctorSteps([{ name: 'Проверка подключения', status: 'FAIL', detail: String(err) }]);
+      if (isAuthError(String(err))) {
+        setSessionError('Хаб отклонил подключение (403) — сессия истекла или не получена.');
+      }
     }
     setBusy('');
   }
@@ -263,9 +291,15 @@ export default function App() {
       } else {
         setApps([]);
         setDoctorSteps([{ name: 'Список приложений', status: 'FAIL', detail: res.error }]);
+        if (isAuthError(res.error)) {
+          setSessionError('Хаб отклонил запрос списка приложений (403) — сессия истекла или не получена.');
+        }
       }
     } catch (err) {
       setDoctorSteps([{ name: 'Список приложений', status: 'FAIL', detail: String(err) }]);
+      if (isAuthError(String(err))) {
+        setSessionError('Хаб отклонил запрос списка приложений (403) — сессия истекла или не получена.');
+      }
     }
     setBusy('');
   }
@@ -618,6 +652,10 @@ export default function App() {
           doctorSteps={doctorSteps}
           hubStatus={hubStatus}
           busy={busy}
+          signingIn={signingIn}
+          sessionAt={sessionAt}
+          sessionError={sessionError}
+          onRefreshSession={() => void signIn()}
           batchRunning={batchRunning}
           batchProgress={batchProgress}
           onSignIn={() => void signIn()}

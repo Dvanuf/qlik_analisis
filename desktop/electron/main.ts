@@ -520,9 +520,11 @@ ipcMain.handle('core:export-script', async (_e, payload: {
 const CREDS_FILE = 'hub-credentials.bin';
 
 ipcMain.handle('core:save-credentials', (_e, creds: {
-  hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string;
+  hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
 }) => {
-  const blob = safeStorage.encryptString(JSON.stringify(creds));
+  // Время получения сессии: по нему видно, что сессия истекла и пора войти заново.
+  const payload = { ...creds, at: creds.at ?? new Date().toISOString() };
+  const blob = safeStorage.encryptString(JSON.stringify(payload));
   writeFileSync(resolve(app.getPath('userData'), CREDS_FILE), blob);
   return true;
 });

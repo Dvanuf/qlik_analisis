@@ -39,6 +39,12 @@ type Props = {
   busy: string;
   batchRunning: boolean;
   batchProgress: BatchProgress | null;
+  /** Идёт вход в хаб — интерфейс при этом не блокируется. */
+  signingIn: boolean;
+  /** Когда сессия хаба была получена. */
+  sessionAt: string | null;
+  /** Ошибка авторизации (403) — предлагаем обновить сессию. */
+  sessionError: string | null;
   onSignIn: () => void;
   onLoadApps: () => void;
   onAnalyze: () => void;
@@ -46,6 +52,8 @@ type Props = {
   onAnalyzeFile: () => void;
   onDoctor: () => void;
   onCancelBatch: () => void;
+  /** Повторный вход в хаб (обновление истёкшей сессии). */
+  onRefreshSession: () => void;
 };
 
 /** Иконка статуса проверки: цвет не единственный носитель смысла. */
@@ -61,7 +69,9 @@ export default function ConnectTab(props: Props) {
     user, onUser, password, onPassword, cookie, onCookie, xrfKey, onXrfKey, csrfToken, onCsrfToken,
     apps, appId, onAppId, selectedIds, onSelectedIds,
     doctorSteps, hubStatus, busy, batchRunning, batchProgress,
+    signingIn, sessionAt, sessionError,
     onSignIn, onLoadApps, onAnalyze, onAnalyzeAll, onAnalyzeFile, onDoctor, onCancelBatch,
+    onRefreshSession,
   } = props;
 
   const [query, setQuery] = useState('');
@@ -211,9 +221,32 @@ export default function ConnectTab(props: Props) {
         </button>
       </div>
 
+      {/* --- Состояние сессии хаба --- */}
+      <div className={`notice${sessionError ? ' warn' : ''}`}>
+        {sessionError ? (
+          <>
+            <b>{sessionError}</b>
+            <div className="actions">
+              <button onClick={onRefreshSession} disabled={signingIn}>
+                Обновить сессию (войти в хаб заново)
+              </button>
+            </div>
+          </>
+        ) : signedIn ? (
+          <>
+            Сессия хаба получена
+            {sessionAt ? ` (${new Date(sessionAt).toLocaleString('ru-RU')})` : ''}.
+            Cookie и CSRF-токен сохранены в зашифрованном виде.
+            {signingIn ? ' Идёт новый вход…' : ''}
+          </>
+        ) : (
+          'Сессии хаба нет — нажмите «Войти в хаб» и авторизуйтесь в открывшемся окне.'
+        )}
+      </div>
+
       {/* --- Главное действие --- */}
       <div className="actions">
-        <button className="primary" onClick={mainAction.run} disabled={Boolean(busy)}>
+        <button className="primary" onClick={mainAction.run} disabled={signingIn}>
           {mainAction.label}
         </button>
       </div>
@@ -221,6 +254,9 @@ export default function ConnectTab(props: Props) {
       {/* --- Вторичные действия --- */}
       <div className="actions">
         <span className="muted small" style={{ alignSelf: 'center' }}>Дополнительно:</span>
+        <button onClick={onSignIn} disabled={signingIn}>
+          {signedIn ? 'Войти в хаб заново' : 'Войти в хаб'}
+        </button>
         <button onClick={onDoctor} disabled={Boolean(busy)}>Проверить подключение</button>
         <button onClick={onAnalyzeFile} disabled={Boolean(busy)}>Анализ файла…</button>
         <button onClick={() => onAnalyzeAll()} disabled={Boolean(busy) || batchRunning}>
