@@ -1,89 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { normalizeEngineUrl, cleanEngineUrl } from '../../src/extract/url.js';
+import { cleanEngineUrl } from '../../src/extract/url.js';
+import ConnectTab from './tabs/ConnectTab.js';
+import type {
+  AnalysisResult, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
+  DoctorStep, Platform, RuleInfo, Severity, Tab,
+} from './types.js';
 
-type Tab = 'connect' | 'analysis' | 'summary' | 'rules';
-type Platform = 'qlik-sense' | 'qlikview';
-type Severity = 'error' | 'warning' | 'info';
-
-type AppInfo = {
-  appVersion: string; electron: string; chrome: string; node: string; v8: string;
-  platform: string; arch: string; locale: string; cwd: string;
-};
-
-type RuleInfo = {
-  total: number;
-  categories: { name: string; count: number }[];
-  rules: {
-    id: string; category: string; severity: string; title: string; description: string;
-    recommendation: string; platforms: string[];
-  }[];
-};
-
-type DoctorStep = { name: string; status: 'OK' | 'WARN' | 'FAIL'; detail: string; hint?: string; index?: number };
-
-type Finding = {
-  ruleId: string; category: string; severity: string; title: string;
-  message: string; recommendation: string; detail?: string;
-  target?: { kind: string; name: string; id?: string };
-  /** Счётчик свёрнутых одинаковых находок. */
-  count?: number;
-  /** Таблицы, где находка встречается. */
-  tables?: string[];
-  /** Номер строки в скрипте. */
-  line?: number;
-  /** Подавлена находка (скрыта по умолчанию). */
-  suppressed?: boolean;
-  suppressReason?: string;
-};
-
-type AnalysisResult = {
-  appName?: string;
-  appId?: string;
-  file?: string;
-  summary: {
-    findings: {
-      total: number; byCategory: Record<string, number>; bySeverity: Record<string, number>;
-      merged?: number; suppressed?: number;
-    };
-    counts: Record<string, number>;
-    savings?: { removableFields: number; removableRows: number };
-    score?: number;
-    scoreDetails?: { formula: string; checks: number; penalty: number };
-  };
-  findings: Finding[];
-  suppressed?: Finding[];
-  patch: { script: string; autoNumbers?: { field: string; key: string }[] };
-  script?: string;
-  skipped?: { capability: string; reason: string }[];
-  ruleStats?: {
-    id: string; category: string; severity: string; title: string;
-    count: number; skipped: boolean; note: string | null;
-  }[];
-};
-
-type AppItem = { id: string; title: string; size: number | null };
-
-type BatchProgress = {
-  phase: 'start' | 'done' | 'error' | 'stopped';
-  index: number; total: number; appId?: string;
-  title?: string; findings?: number; error?: string; fromCache?: boolean;
-};
-
-type BatchItem = {
-  appId: string; title: string; size?: number | null; error?: string;
-  fromCache?: boolean;
-  summary?: {
-    findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number> };
-    savings?: { removableFields: number; removableRows: number };
-  } | null;
-};
-
-type BatchTotals = {
-  apps: number; errors: number; findings: number;
-  byCategory: Record<string, number>;
-  bySeverity: Record<string, number>;
-  removableRows: number; removableFields: number;
-};
 
 declare global {
   interface Window {
@@ -116,7 +38,7 @@ declare global {
       analyzeAll(opts: {
         url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean; platform?: string;
-        pauseMs?: number; useCache?: boolean;
+        pauseMs?: number; useCache?: boolean; appIds?: string[];
       }): Promise<{ results: BatchItem[]; totals: BatchTotals }>;
       cancelBatch(): Promise<boolean>;
       onBatchProgress(cb: (p: BatchProgress) => void): () => void;
@@ -163,6 +85,8 @@ export default function App() {
 
   const [apps, setApps] = useState<AppItem[]>([]);
   const [appId, setAppId] = useState('');
+  // Приложения, отмеченные для пакетного анализа.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
 
   const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
@@ -173,7 +97,6 @@ export default function App() {
   const [batchCat, setBatchCat] = useState('all');
   const [batchSearch, setBatchSearch] = useState('');
   const [hubStatus, setHubStatus] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [batch, setBatch] = useState<{ results: BatchItem[]; totals: BatchTotals } | null>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -331,13 +254,13 @@ export default function App() {
     setBusy('');
   }
 
-  /** Пакетный анализ всех приложений сервера. */
-  async function analyzeAll() {
+  /** Пакетный анализ: всех приложений сервера или только выбранных. */
+  async function analyzeAll(appIds?: string[]) {
     setBatchRunning(true);
     setBatchProgress(null);
     setBusy('Пакетный анализ запущен…');
     try {
-      const res = await window.qa.analyzeAll({ ...conn, platform, pauseMs: 1000 });
+      const res = await window.qa.analyzeAll({ ...conn, platform, pauseMs: 1000, appIds });
       setBatch(res);
       setTab('summary');
     } catch (err) {
@@ -486,6 +409,7 @@ export default function App() {
             </span>
           </div>
           <div className="platform">
+            <span className="platform-label">Платформа:</span>
             {PLATFORMS.map((p) => (
               <button
                 key={p.id}
@@ -513,170 +437,30 @@ export default function App() {
       {busy && <div className="busy">{busy}</div>}
 
       {tab === 'connect' && (
-        <section className="card wide">
-          <h2>Подключение к Qlik</h2>
-
-          <details className="howto" open>
-            <summary>Как подключиться</summary>
-            <ol>
-              <li>
-                Укажите <b>URL движка</b>: <code>wss://&lt;host&gt;/app/&lt;appId&gt;</code>
-                {' '}(через хаб, порт 443) или <code>ws://&lt;host&gt;:4747/app/&lt;appId&gt;</code>.
-              </li>
-              <li>
-                Нажмите <b>«Войти в хаб»</b> → в открывшемся окне введите доменный логин и пароль.
-                Cookie и CSRF-токен подставятся сами — вручную ничего копировать не нужно.
-              </li>
-              <li>
-                <b>«Загрузить список приложений»</b> → выберите приложение → <b>«Анализировать»</b>.
-              </li>
-              <li>
-                Результаты одного приложения — на вкладке <b>«Анализ»</b>: сводка, находки с фильтрами,
-                готовые правки скрипта. Кнопка <b>«Экспорт отчёта»</b> сохраняет HTML+JSON в «Документы/QlikAnalyzer».
-              </li>
-              <li>
-                <b>«Анализировать все»</b> — прогон по всем приложениям сервера; результат открывается
-                на вкладке <b>«Сводный отчёт»</b> (таблица приложений, фильтр по категории, поиск).
-              </li>
-            </ol>
-            <p className="muted small">
-              Проверяем 45 правил в 4 категориях (Quality · Resources · Practices · Script).
-              Отчёты: «Документы/QlikAnalyzer». Лог входа: <code>hub-login.log</code> рядом с данными приложения.
-            </p>
-          </details>
-
-          <div className="form">
-            <label>
-              URL движка
-              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="wss://host/app/&lt;appId&gt;" />
-              <span className="muted">
-                <button
-                  type="button"
-                  className="link"
-                  title="Привести адрес к виду wss://<host>/app/<appId>"
-                  onClick={() => setUrl(normalizeEngineUrl(url, { appId: appId || undefined }))}
-                >
-                  привести в формат
-                </button>
-              </span>
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={insecure} onChange={(e) => setInsecure(e.target.checked)} />
-              самоподписанный сертификат
-            </label>
-          </div>
-
-          <details className="advanced" open={showAdvanced}>
-            <summary onClick={() => setShowAdvanced((v) => !v)}>
-              Дополнительно — ручной ввод (для других развёртываний)
-            </summary>
-            <div className="form">
-              <label>
-                Пользователь (домен\логин)
-                <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="CORP\user" />
-              </label>
-              <label>
-                Пароль
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </label>
-              <label>
-                Cookie сессии хаба
-                <input
-                  type="password"
-                  value={cookie}
-                  onChange={(e) => setCookie(e.target.value)}
-                  placeholder="X-Qlik-Session=…"
-                />
-              </label>
-              <label>
-                XSRF-ключ хаба
-                <input
-                  type="password"
-                  value={xrfKey}
-                  onChange={(e) => setXrfKey(e.target.value)}
-                  placeholder="X-Qlik-XrfKey: …"
-                />
-              </label>
-              <label>
-                CSRF-токен
-                <input
-                  type="password"
-                  value={csrfToken}
-                  onChange={(e) => setCsrfToken(e.target.value)}
-                  placeholder="qlik-csrf-token=…"
-                />
-              </label>
-            </div>
-          </details>
-
-          <div className="actions">
-            <button className="primary" onClick={() => void signIn()}>
-              Войти в хаб (откроется окно авторизации)
-            </button>
-            <button onClick={() => void runDoctor()}>Проверить подключение</button>
-            <button onClick={() => void loadApps()}>Загрузить список приложений</button>
-            <button onClick={() => void analyzeFile()}>Анализ файла…</button>
-            <button onClick={() => void analyzeAll()} disabled={batchRunning}>
-              Анализировать все
-            </button>
-            {batchRunning && (
-              <button onClick={() => void cancelBatch()}>Прервать</button>
-            )}
-          </div>
-
-          {batchProgress && (
-            <p className="muted small">
-              {batchProgress.phase === 'start' && (
-                <>Обработано {batchProgress.index} из {batchProgress.total}: {batchProgress.title}…</>
-              )}
-              {batchProgress.phase === 'done' && (
-                <>Готово {batchProgress.index + 1} из {batchProgress.total}: {batchProgress.title} — {batchProgress.findings} находок
-                  {batchProgress.fromCache ? ' (из кэша)' : ''}</>
-              )}
-              {batchProgress.phase === 'error' && (
-                <>Ошибка на {batchProgress.title}: {batchProgress.error}</>
-              )}
-            </p>
-          )}
-
-          {hubStatus && (
-            <p className={hubStatus.startsWith('Вход выполнен') ? 'ok' : 'muted'}>
-              {hubStatus}
-              {hubStatus.startsWith('Вход выполнен') && (
-                <> — <span className="muted">данные сохранены в зашифрованном виде; ручное копирование из DevTools больше не нужно</span></>
-              )}
-            </p>
-          )}
-
-          {apps.length > 0 && (
-            <div className="appList">
-              <label>
-                Приложение ({apps.length})
-                <select value={appId} onChange={(e) => setAppId(e.target.value)}>
-                  {apps.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.title} {a.size ? `— ${formatSize(a.size)}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button onClick={() => void analyzeSelected()}>
-                Анализировать (платформа: {PLATFORMS.find((p) => p.id === platform)?.label})
-              </button>
-            </div>
-          )}
-
-          {doctorSteps.length > 0 && (
-            <ul className="steps">
-              {doctorSteps.map((s, i) => (
-                <li key={i} className={s.status.toLowerCase()}>
-                  <b>{s.name}</b>: {s.detail}
-                  {s.hint && <div className="hint">→ {s.hint}</div>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <ConnectTab
+          url={url} onUrl={setUrl}
+          insecure={insecure} onInsecure={setInsecure}
+          platform={platform} onPlatform={setPlatform}
+          user={user} onUser={setUser}
+          password={password} onPassword={setPassword}
+          cookie={cookie} onCookie={setCookie}
+          xrfKey={xrfKey} onXrfKey={setXrfKey}
+          csrfToken={csrfToken} onCsrfToken={setCsrfToken}
+          apps={apps} appId={appId} onAppId={setAppId}
+          selectedIds={selectedIds} onSelectedIds={setSelectedIds}
+          doctorSteps={doctorSteps}
+          hubStatus={hubStatus}
+          busy={busy}
+          batchRunning={batchRunning}
+          batchProgress={batchProgress}
+          onSignIn={() => void signIn()}
+          onLoadApps={() => void loadApps()}
+          onAnalyze={() => void analyzeSelected()}
+          onAnalyzeAll={(ids) => void analyzeAll(ids)}
+          onAnalyzeFile={() => void analyzeFile()}
+          onDoctor={() => void runDoctor()}
+          onCancelBatch={() => void cancelBatch()}
+        />
       )}
 
       {tab === 'analysis' && (

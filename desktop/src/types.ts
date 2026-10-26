@@ -1,0 +1,101 @@
+/**
+ * Общие типы десктоп-приложения.
+ * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
+ */
+export type Tab = 'connect' | 'analysis' | 'summary' | 'rules';
+export type Platform = 'qlik-sense' | 'qlikview';
+export type Severity = 'error' | 'warning' | 'info';
+
+export type AppInfo = {
+  appVersion: string; electron: string; chrome: string; node: string; v8: string;
+  platform: string; arch: string; locale: string; cwd: string;
+};
+
+export type RuleInfo = {
+  total: number;
+  categories: { name: string; count: number }[];
+  rules: {
+    id: string; category: string; severity: string; title: string; description: string;
+    recommendation: string; platforms: string[];
+  }[];
+};
+
+export type DoctorStep = {
+  name: string; status: 'OK' | 'WARN' | 'FAIL'; detail: string; hint?: string; index?: number;
+};
+
+export type Finding = {
+  ruleId: string; category: string; severity: string; title: string;
+  message: string; recommendation: string; detail?: string;
+  target?: { kind: string; name: string; id?: string };
+  /** Счётчик свёрнутых одинаковых находок. */
+  count?: number;
+  /** Таблицы, где находка встречается. */
+  tables?: string[];
+  /** Номер строки в скрипте. */
+  line?: number;
+  /** Подавлена находка (скрыта по умолчанию). */
+  suppressed?: boolean;
+  suppressReason?: string;
+};
+
+export type AnalysisResult = {
+  appName?: string;
+  appId?: string;
+  file?: string;
+  summary: {
+    findings: {
+      total: number; byCategory: Record<string, number>; bySeverity: Record<string, number>;
+      merged?: number; suppressed?: number;
+    };
+    counts: Record<string, number>;
+    savings?: { removableFields: number; removableRows: number };
+    score?: number;
+    scoreDetails?: { formula: string; checks: number; penalty: number };
+  };
+  findings: Finding[];
+  suppressed?: Finding[];
+  patch: { script: string; autoNumbers?: { field: string; key: string }[] };
+  script?: string;
+  skipped?: { capability: string; reason: string }[];
+  ruleStats?: {
+    id: string; category: string; severity: string; title: string;
+    count: number; skipped: boolean; note: string | null;
+  }[];
+};
+
+export type AppItem = {
+  id: string; title: string; size: number | null;
+  /** Поток и владелец — заполняются, если сервер их отдаёт. */
+  stream?: string; owner?: string;
+  lastReload?: string | null;
+};
+
+export type BatchProgress = {
+  phase: 'start' | 'done' | 'error' | 'stopped';
+  index: number; total: number; appId?: string;
+  title?: string; findings?: number; error?: string; fromCache?: boolean;
+};
+
+export type BatchItem = {
+  appId: string; title: string; size?: number | null; error?: string;
+  fromCache?: boolean;
+  summary?: {
+    findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number> };
+    savings?: { removableFields: number; removableRows: number };
+    score?: number;
+  } | null;
+};
+
+export type BatchTotals = {
+  apps: number; errors: number; findings: number;
+  byCategory: Record<string, number>;
+  bySeverity: Record<string, number>;
+  removableRows: number; removableFields: number;
+};
+
+/** Параметры подключения, общие для всех вызовов ядра. */
+export type Connection = {
+  url: string; user: string; password: string; cookie: string;
+  xrfKey: string; csrfToken: string; insecure: boolean;
+};

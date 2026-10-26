@@ -114,6 +114,29 @@ function httpGetJson(url, { headers = {}, insecure = false, redirects = 5 } = {}
 }
 
 /**
+ * Поток и владелец приложения.
+ *
+ * Не все платформы их отдают: у QlikView Doc API в GetDocList таких полей нет,
+ * тогда в интерфейсе показывается «не указан», а фильтры группируют такие
+ * приложения вместе.
+ *
+ * @param {object} d — элемент ответа сервера
+ */
+export function appMeta(d) {
+  const pick = (...keys) => {
+    for (const k of keys) {
+      const v = d?.[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return null;
+  };
+  return {
+    stream: pick('qStream', 'stream', 'qAppStream', 'qGroup', 'group'),
+    owner: pick('qOwner', 'owner', 'qAppOwner', 'qUser', 'user', 'qModifiedBy'),
+  };
+}
+
+/**
  * Список приложений через REST API хаба (Qlik Sense): GET /api/v1/apps.
  *
  * Требует сессионную cookie `X-Qlik-Session` и ключ `X-Qlik-XrfKey` —
@@ -150,6 +173,7 @@ export async function listAppsViaHub({ url, cookie, xrfKey, insecure, log = null
         title: a.title ?? a.qTitle ?? a.name ?? '',
         size: a.fileSize ?? a.qFileSize ?? null,
         lastReload: a.modifiedDate ?? a.qLastReloadTime ?? null,
+        ...appMeta(a),
       }));
     } catch (err) {
       log?.(`хаб ${path}: ${err?.message ?? err}`);
@@ -185,6 +209,7 @@ export async function listApps(options = {}) {
       title: d.qTitle ?? d.qDocName ?? '',
       size: d.qFileSize ?? null,
       lastReload: d.qLastReloadTime ?? null,
+      ...appMeta(d),
     }));
   }
 
@@ -225,6 +250,7 @@ export async function listApps(options = {}) {
         title: d.qTitle ?? d.qDocName ?? '',
         size: d.qFileSize ?? null,
         lastReload: d.qLastReloadTime ?? null,
+        ...appMeta(d),
       }));
     } catch (err) {
       lastError = err;

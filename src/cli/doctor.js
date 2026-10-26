@@ -101,14 +101,32 @@ export function hintFor(message) {
  * @param {(step: object) => void} [onStep] — колбэк для пошагового вывода
  * @param {number} [connectTimeoutMs] — предел на установку соединения и OpenDoc
  */
+/**
+ * Добавляет шаг в список диагностики.
+ *
+ * Шаг с одним и тем же именем выводится только один раз: повтор заменяет
+ * предыдущую запись (иначе «Проверка порта» печаталась дважды).
+ *
+ * @param {object[]} steps — накопленные шаги
+ * @param {object} step — новый шаг {name, status, detail, hint?}
+ * @returns {object} шаг с присвоенным индексом
+ */
+export function pushStep(steps, step) {
+  const existing = steps.findIndex((s) => s.name === step.name);
+  const entry = { ...step, index: existing >= 0 ? existing : steps.length };
+  if (existing >= 0) steps[existing] = entry; else steps.push(entry);
+  return entry;
+}
+
+/**
+ * @param {object} target — параметры подключения
+ * @param {(step: {name: string, status: string, detail: string, hint?: string, index?: number}) => void} [onStep]
+ * @param {number} [connectTimeoutMs]
+ */
 export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
   const steps = [];
-  // Шаг с одним и тем же именем выводится только один раз: повтор заменяет
-  // предыдущую запись (иначе «Проверка порта» печаталась дважды).
   const emit = (step) => {
-    const existing = steps.findIndex((s) => s.name === step.name);
-    const entry = { ...step, index: existing >= 0 ? existing : steps.length };
-    if (existing >= 0) steps[existing] = entry; else steps.push(entry);
+    const entry = pushStep(steps, step);
     if (typeof onStep === 'function') onStep(entry);
   };
   const ok = (name, detail) => emit({ name, status: 'OK', detail });

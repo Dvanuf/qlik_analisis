@@ -34,6 +34,8 @@ const api = {
     url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
     user?: string; password?: string; insecure?: boolean; platform?: string;
     pauseMs?: number; useCache?: boolean;
+    /** Ограничить прогон выбранными приложениями. */
+    appIds?: string[];
   }) => ipcRenderer.invoke('core:analyze-all', opts),
   cancelBatch: () => ipcRenderer.invoke('core:cancel-batch'),
   /** Прогресс пакетного анализа: подписка возвращает функцию отписки. */

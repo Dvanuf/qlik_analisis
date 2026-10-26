@@ -97,6 +97,27 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
 
+        // Вкладка «Подключение»: пошаговый сценарий и главная кнопка.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+              .filter(function (b) { return b.textContent.indexOf('Подключение') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 600));
+        const connect = await win.webContents.executeJavaScript(`
+          (function () {
+            return JSON.stringify({
+              steps: document.querySelectorAll('.wizard .step').length,
+              current: document.querySelectorAll('.wizard .step.current').length,
+              mainButtons: document.querySelectorAll('.actions button.primary').length,
+              platformLabel: (document.querySelector('.platform-label') || {}).textContent || ''
+            });
+          })()
+        `);
+
         const image = await win.webContents.capturePage();
         // В упакованном приложении app.asar доступен только для чтения —
         // скриншот пишем в каталог пользователя.
@@ -125,6 +146,7 @@ async function runSmokeCheck(): Promise<void> {
           categories: CATEGORIES,
           findingsOnFixture,
           catalog: JSON.parse(String(catalog)),
+          connect: JSON.parse(String(connect)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {
@@ -272,7 +294,7 @@ let batchCancelRequested = false;
 ipcMain.handle('core:analyze-all', async (_e, opts: {
   url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
   user?: string; password?: string; insecure?: boolean; platform?: string;
-  pauseMs?: number; useCache?: boolean;
+  pauseMs?: number; useCache?: boolean; appIds?: string[];
 }) => {
   const { analyzeAll } = await import('../../src/batch.js');
   batchCancelRequested = false;
@@ -288,6 +310,8 @@ ipcMain.handle('core:analyze-all', async (_e, opts: {
     platform: opts.platform,
     rules: { platform: opts.platform },
     pauseMs: opts.pauseMs ?? 1000,
+    // Пустой список — анализируем все приложения сервера.
+    appIds: opts.appIds?.length ? opts.appIds : undefined,
     cacheDir: resolve(app.getPath('userData'), 'cache'),
     useCache: opts.useCache !== false,
     shouldStop: () => batchCancelRequested,
