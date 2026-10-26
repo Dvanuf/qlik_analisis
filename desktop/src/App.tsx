@@ -155,7 +155,10 @@ export default function App() {
   async function signIn() {
     if (!hubUrl) { setHubStatus('Сначала укажите корректный URL движка'); return; }
     setBusy('Открываем хаб — авторизуйтесь в окне браузера…');
-    setHubStatus('Ожидаем авторизацию в окне хаба… (в окне должна открыться страница приложения)');
+    setHubStatus(
+      'Открылось отдельное окно входа в Qlik — введите в нём доменный логин и пароль. '
+      + 'Если окно не видно, посмотрите за основным окном приложения или в доке.',
+    );
     try {
       const targetApp = appId || appIdFromUrl;
       const res = await window.qa.openHub({

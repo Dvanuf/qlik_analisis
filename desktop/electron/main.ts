@@ -590,8 +590,24 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     width: 1180,
     height: 860,
     title: 'Вход в Qlik — авторизуйтесь в браузере',
+    // Окно показываем после загрузки страницы: иначе пользователь видит
+    // чёрный прямоугольник и думает, что ничего не произошло.
+    show: false,
+    backgroundColor: '#ffffff',
     webPreferences: { partition, contextIsolation: true, nodeIntegration: false },
   });
+
+  /** Показать окно входа и вывести его на передний план. */
+  const showLoginWindow = (): void => {
+    if (win.isDestroyed()) return;
+    if (!win.isVisible()) win.show();
+    win.focus();
+    win.moveTop();
+    // На macOS окно может остаться за основным окном приложения.
+    app.focus({ steal: true });
+    hubLog('окно входа показано — авторизуйтесь в нём');
+  };
+  win.once('ready-to-show', showLoginWindow);
 
   // --- Перехват рукопожатия движка ---
   // CSRF-токен и XSRF-ключ ходят и в WS-рукопожатии, и в HTTP-запросах к движку.
@@ -646,6 +662,7 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     hubLog('страница загружена:', maskUrl(win.webContents.getURL()), '|', win.webContents.getTitle());
   });
   await win.loadURL(target);
+  showLoginWindow();
 
   // 2) Подключаем отладчик и перезагружаем страницу: рукопожатие движка
   //    гарантированно попадёт в перехват.
