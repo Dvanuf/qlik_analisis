@@ -19,6 +19,8 @@ import { renderHtml } from '../../src/report/html.js';
 import { runDoctor } from '../../src/cli/doctor.js';
 import { parseScript } from '../../src/script/parse.js';
 import { maskSecrets, maskUrl } from '../../src/logging/mask.js';
+import { readRulesConfig, writeRulesConfig, sanitizeRulesConfig, RULES_CONFIG_FILE } from '../../src/rules/config.js';
+import { applyPatchToScript } from '../../src/report/fixes.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -194,6 +196,16 @@ ipcMain.handle('core:rules', () => ({
   })),
 }));
 
+/** Путь к файлу конфигурации правил в каталоге данных приложения. */
+function rulesConfigPath(): string {
+  return resolve(app.getPath('userData'), RULES_CONFIG_FILE);
+}
+
+/** Настройки правил из файла (влияют на каждый анализ). */
+function currentRules(): object {
+  return readRulesConfig(rulesConfigPath()).rules ?? {};
+}
+
 ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
   const full = resolve(filePath);
   const isQvw = full.toLowerCase().endsWith('.qvw');
@@ -202,7 +214,7 @@ ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
     file: full,
     fileType: isQvw ? 'qvw' : (isQvsApp && !looksLikeText(full) ? 'qvs' : 'script'),
   });
-  const result = analyze(graph as never, {});
+  const result = analyze(graph as never, { rules: currentRules() });
   return {
     file: full,
     summary: result.summary,
@@ -308,7 +320,7 @@ ipcMain.handle('core:analyze-all', async (_e, opts: {
     insecure: opts.insecure,
     // undefined = платформа определяется автоматически по типу API экстрактора.
     platform: opts.platform,
-    rules: { platform: opts.platform },
+    rules: { platform: opts.platform, ...currentRules() },
     pauseMs: opts.pauseMs ?? 1000,
     // Пустой список — анализируем все приложения сервера.
     appIds: opts.appIds?.length ? opts.appIds : undefined,
@@ -368,6 +380,32 @@ ipcMain.handle('core:export-summary', async (_e, payload: {
   writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   await shell.openPath(htmlPath);
   return { htmlPath, jsonPath };
+});
+
+/** Настройки правил: чтение и сохранение файла конфигурации. */
+ipcMain.handle('core:rules-config', () => readRulesConfig(rulesConfigPath()));
+
+ipcMain.handle('core:rules-config-save', (_e, config: object) => {
+  const clean = sanitizeRulesConfig(config, ALL_RULES.map((r) => r.id));
+  const path = writeRulesConfig(rulesConfigPath(), clean);
+  return { path, config: clean };
+});
+
+/**
+ * Экспорт изменённого скрипта в файл .qvs (обычный текстовый скрипт —
+ * именно так его выгружает сам Qlik Sense Desktop).
+ */
+ipcMain.handle('core:export-script', async (_e, payload: {
+  appName?: string; script: string; patch?: { script?: string };
+}) => {
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const safeName = String(payload.appName || 'app').replace(/[^\wа-яА-Я ._-]/g, '_').slice(0, 60);
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const file = resolve(dir, `${safeName} ${stamp}-скрипт.qvs`);
+  const text = applyPatchToScript(payload.script ?? '', payload.patch ?? {});
+  writeFileSync(file, text, 'utf8');
+  return { path: file };
 });
 
 /** Сессионная cookie хаба и ключи хранятся в зашифрованном виде (safeStorage). */
@@ -613,7 +651,7 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     password: opts.password,
     insecure: opts.insecure,
   });
-  const result = analyze(graph as never, { platform: opts.platform });
+  const result = analyze(graph as never, { platform: opts.platform, rules: currentRules() });
   return {
     appName: result.summary.appName,
     appId: result.summary.appId,

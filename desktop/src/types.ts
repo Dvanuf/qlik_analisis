@@ -32,6 +32,8 @@ export type Finding = {
   count?: number;
   /** Таблицы, где находка встречается. */
   tables?: string[];
+  /** Таблица, к которой относится находка. */
+  table?: string;
   /** Номер строки в скрипте. */
   line?: number;
   /** Подавлена находка (скрыта по умолчанию). */
@@ -92,6 +94,17 @@ export type BatchTotals = {
   byCategory: Record<string, number>;
   bySeverity: Record<string, number>;
   removableRows: number; removableFields: number;
+};
+
+/** Настройки правил из файла конфигурации. */
+export type RulesConfig = {
+  rules: {
+    disabled: string[];
+    severity: Record<string, string>;
+    thresholds: Record<string, Record<string, number>>;
+    exclusions: Record<string, { tables?: string[] }>;
+    suppress: { ruleId: string; app?: string; table?: string }[];
+  };
 };
 
 /** Параметры подключения, общие для всех вызовов ядра. */

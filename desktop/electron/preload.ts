@@ -6,6 +6,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const api = {
   appInfo: () => ipcRenderer.invoke('app:info'),
+  rulesConfig: () => ipcRenderer.invoke('core:rules-config'),
+  saveRulesConfig: (config: unknown) => ipcRenderer.invoke('core:rules-config-save', config),
+  exportScript: (payload: { appName?: string; script: string; patch?: { script?: string } }) => ipcRenderer.invoke('core:export-script', payload),
   rules: () => ipcRenderer.invoke('core:rules'),
   analyzeFile: (filePath: string) => ipcRenderer.invoke('core:analyze-file', filePath),
   doctor: (opts: {

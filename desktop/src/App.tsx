@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
 import ConnectTab from './tabs/ConnectTab.js';
+import AnalysisTab from './tabs/AnalysisTab.js';
 import type {
   AnalysisResult, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
-  DoctorStep, Platform, RuleInfo, Severity, Tab,
+  DoctorStep, Platform, RuleInfo, RulesConfig, Severity, Tab,
 } from './types.js';
 
 
@@ -48,6 +49,11 @@ declare global {
       exportSummary(payload: {
         totals: unknown; results: unknown; platform?: string;
       }): Promise<{ htmlPath: string; jsonPath: string }>;
+      rulesConfig(): Promise<unknown>;
+      saveRulesConfig(config: unknown): Promise<{ path: string; config: unknown }>;
+      exportScript(payload: {
+        appName?: string; script: string; patch?: { script?: string };
+      }): Promise<{ path: string }>;
     };
   }
 }
@@ -89,9 +95,6 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
 
-  const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
-  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState('');
   const [ruleSearch, setRuleSearch] = useState('');
   const [ruleCat, setRuleCat] = useState('all');
   const [batchCat, setBatchCat] = useState('all');
@@ -101,6 +104,8 @@ export default function App() {
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [exportNote, setExportNote] = useState('');
+  // Настройки правил: отключения, важность, пороги, исключения, подавления.
+  const [rulesConfig, setRulesConfig] = useState<RulesConfig | null>(null);
 
   // Настройки подключения живут между запусками: без этого после перезапуска
   // поле URL возвращается к заглушке и список приложений не грузится.
@@ -174,6 +179,7 @@ export default function App() {
   useEffect(() => {
     void window.qa.appInfo().then(setInfo);
     void window.qa.rules().then(setRuleInfo);
+    void window.qa.rulesConfig().then((c) => setRulesConfig(c as RulesConfig));
     // Восстанавливаем сохранённую сессию хаба (зашифрована safeStorage).
     void window.qa.loadCredentials().then((creds) => {
       if (!creds?.cookie) return;
@@ -293,6 +299,32 @@ export default function App() {
     }
   }
 
+  /** Сохранение настроек правил в файл конфигурации. */
+  async function saveRulesConfig(config: RulesConfig) {
+    try {
+      const res = await window.qa.saveRulesConfig(config);
+      setRulesConfig(res.config as RulesConfig);
+      setExportNote(`Настройки правил сохранены: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить настройки правил: ${String(err)}`);
+    }
+  }
+
+  /** Экспорт изменённого скрипта в файл .qvs (исходное приложение не меняется). */
+  async function exportScript() {
+    if (!analysis) return;
+    try {
+      const res = await window.qa.exportScript({
+        appName: analysis.appName ?? analysis.file ?? 'Приложение',
+        script: analysis.script ?? '',
+        patch: analysis.patch,
+      });
+      setExportNote(`Изменённый скрипт сохранён: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить скрипт: ${String(err)}`);
+    }
+  }
+
   /** Экспорт сводного отчёта по пакетному прогону. */
   async function exportBatch() {
     if (!batch) return;
@@ -326,20 +358,6 @@ export default function App() {
     () => (ruleInfo ? ruleInfo.categories.map((c) => c.name) : []),
     [ruleInfo],
   );
-
-  const filtered = useMemo(() => {
-    const all = analysis?.findings ?? [];
-    return all.filter((f) => {
-      if (sevFilter.size && !sevFilter.has(f.severity as Severity)) return false;
-      if (catFilter.size && !catFilter.has(f.category)) return false;
-      if (search.trim()) {
-        const q = search.trim().toLowerCase();
-        const hay = `${f.ruleId} ${f.title} ${f.message} ${f.target?.name ?? ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [analysis, sevFilter, catFilter, search]);
 
   const filteredRules = useMemo(() => {
     const all = ruleInfo?.rules ?? [];
@@ -464,132 +482,15 @@ export default function App() {
       )}
 
       {tab === 'analysis' && (
-        <section className="card wide">
-          <h2>
-            Результаты анализа
-            {analysis?.appName ? ` — ${analysis.appName}` : ''}
-            {analysis?.file ? ` — ${analysis.file}` : ''}
-          </h2>
-
-          {analysis ? (
-            <>
-              <div className="cards">
-                <div className="card">
-                  <div className="card-num">{analysis.summary.findings.total}</div>
-                  <div className="card-label">всего находок</div>
-                </div>
-                {categories.map((c) => (
-                  <div className="card" key={c}>
-                    <div className="card-num">{analysis.summary.findings.byCategory[c] ?? 0}</div>
-                    <div className="card-label">{c}</div>
-                  </div>
-                ))}
-                {SEVERITIES.map((s) => (
-                  <div className="card" key={s.id}>
-                    <div className="card-num">{analysis.summary.findings.bySeverity[s.id] ?? 0}</div>
-                    <div className="card-label">{s.label.toLowerCase()}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="actions">
-                <button className="primary" onClick={() => void exportCurrent()}>
-                  Экспорт отчёта
-                </button>
-              </div>
-              {(analysis.summary.findings.merged || analysis.summary.findings.suppressed) ? (
-                <p className="muted small">
-                  {analysis.summary.findings.merged
-                    ? `Одинаковых находок объединено: ${analysis.summary.findings.merged}. `
-                    : ''}
-                  {analysis.summary.findings.suppressed
-                    ? `Подавлено находок: ${analysis.summary.findings.suppressed}.`
-                    : ''}
-                </p>
-              ) : null}
-              {exportNote && <p className="muted small">{exportNote}</p>}
-
-              {analysis.patch.script && (
-                <>
-                  <h3>Предлагаемые правки скрипта</h3>
-                  <pre className="patch">{analysis.patch.script}</pre>
-                </>
-              )}
-
-              <h3>Находки</h3>
-              <div className="toolbar">
-                {SEVERITIES.map((s) => (
-                  <button
-                    key={s.id}
-                    className={sevFilter.has(s.id) ? 'active' : ''}
-                    onClick={() => setSevFilter(toggle(sevFilter, s.id))}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-                <span className="sep" />
-                <button className={catFilter.size === 0 ? 'active' : ''} onClick={() => setCatFilter(new Set())}>
-                  Все категории
-                </button>
-                {categories.map((c) => (
-                  <button
-                    key={c}
-                    className={catFilter.has(c) ? 'active' : ''}
-                    onClick={() => setCatFilter(toggle(catFilter, c))}
-                  >
-                    {c}
-                  </button>
-                ))}
-                <input
-                  className="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск по находкам…"
-                />
-                <span className="muted">показано {filtered.length} из {analysis.findings.length}</span>
-              </div>
-
-              <table className="findings">
-                <thead>
-                  <tr>
-                    <th>Уровень</th><th>Правило</th><th>Категория</th><th>Находка</th><th>Объект</th><th>Рекомендация</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((f, i) => (
-                    <tr key={`${f.ruleId}-${i}`}>
-                      <td><span className={`pill ${f.severity}`}>{f.severity}</span></td>
-                      <td><code>{f.ruleId}</code></td>
-                      <td>{f.category}</td>
-                      <td>
-                        <b>{f.title}</b>
-                        {f.count && f.count > 1 && (
-                          <span className="pill count" title="Одинаковых находок объединено">×{f.count}</span>
-                        )}
-                        <div className="muted">{f.message}</div>
-                        {f.detail && <div className="muted small">{f.detail}</div>}
-                        {f.tables && f.tables.length > 1 && (
-                          <div className="muted small">Таблицы: {f.tables.join(', ')}</div>
-                        )}
-                      </td>
-                      <td>{f.target?.name ?? '—'}</td>
-                      <td className="muted">{f.recommendation}</td>
-                    </tr>
-                  ))}
-                  {filtered.length === 0 && (
-                    <tr><td colSpan={6} className="muted">Ничего не найдено под текущими фильтрами.</td></tr>
-                  )}
-                </tbody>
-              </table>
-
-              {analysis.skipped?.map((s) => (
-                <p key={s.capability} className="warn">Пропущено: {s.reason}</p>
-              ))}
-            </>
-          ) : (
-            <p className="muted">Анализ ещё не запускался. Откройте вкладку «Подключение».</p>
-          )}
-        </section>
+        <AnalysisTab
+          analysis={analysis}
+          categories={categories}
+          exportNote={exportNote}
+          onExport={() => void exportCurrent()}
+          onExportScript={() => void exportScript()}
+          rulesConfig={rulesConfig}
+          onSaveRulesConfig={(c) => void saveRulesConfig(c)}
+        />
       )}
 
       {tab === 'summary' && (
