@@ -110,3 +110,18 @@ test('диагностика без URL даёт один понятный ша�
   assert.equal(steps[0].status, 'FAIL');
   assert.match(steps[0].hint, /--url|--host/);
 });
+
+test('диагностика: без сессии хаба подсказывает «Войти в хаб»', async () => {
+  const { steps } = await runDoctor({ url: 'wss://localhost:1/app' });
+  const session = steps.find((s) => s.name === 'Сессия хаба');
+  assert.ok(session, 'есть отдельный шаг про сессию хаба');
+  assert.equal(session.status, 'WARN');
+  assert.match(session.hint, /Войти в хаб/);
+});
+
+test('диагностика: подсказка про 403 говорит про вход в хаб', async () => {
+  const { hintFor } = await import('../src/cli/doctor.js');
+  const hint = hintFor('Unexpected server response: 403');
+  assert.match(hint, /Войти в хаб/);
+  assert.match(hint, /CSRF/);
+});

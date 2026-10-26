@@ -26,7 +26,9 @@ export const ERROR_HINTS = {
   4240: 'Нет свободных движков — увеличьте лицензии или уменьшите нагрузку.',
   1006: 'Соединение закрыто аномально — часто это 401/403 (авторизация) или прокси.',
   401: 'Не пройдена авторизация — проверьте пользователя, пароль или API-ключ.',
-  403: 'Доступ запрещён — проверьте права и заголовок X-Qlik-User.',
+  403: 'Доступ запрещён (403). Чаще всего нет сессии хаба: нажмите «Войти в хаб» и авторизуйтесь '
+    + 'в открывшемся окне — без cookie и CSRF-токена хаб отклоняет рукопожатие движка. '
+    + 'Также проверьте права пользователя и заголовок X-Qlik-User.',
   'ECONNREFUSED': 'Порт закрыт — проверьте, что Qlik Sense Server запущен и слушает этот порт.',
   'ENOTFOUND': 'Хост не найден — проверьте DNS-имя сервера.',
   'CERT_HAS_EXPIRED': 'Сертификат сервера просрочен — используйте --insecure или обновите сертификат.',
@@ -131,7 +133,7 @@ export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
   };
   const ok = (name, detail) => emit({ name, status: 'OK', detail });
   const fail = (name, detail, hint) => emit({ name, status: 'FAIL', detail, hint });
-  const warn = (name, detail) => emit({ name, status: 'WARN', detail });
+  const warn = (name, detail, hint) => emit({ name, status: 'WARN', detail, hint });
 
   if (!target.url) {
     fail('Конфигурация подключения', 'Не задан URL движка',
@@ -141,6 +143,17 @@ export async function runDoctor(target, onStep, connectTimeoutMs = 20000) {
 
   // В выводе не должно быть CSRF-токена и cookie — только адрес без секретов.
   ok('URL', maskUrl(target.url));
+
+  // Хаб без сессии: рукопожатие движка будет отклонено с 403.
+  // Ловим это заранее — иначе пользователь видит «доступ запрещён» без причины.
+  if (!target.cookie && !target.csrfToken && /^wss:/i.test(String(target.url ?? ''))) {
+    warn(
+      'Сессия хаба',
+      'cookie и CSRF-токен не получены — хаб отклонит рукопожатие движка (403)',
+      'Нажмите «Войти в хаб» (главная кнопка) и авторизуйтесь в открывшемся окне браузера. '
+      + 'Приложение само подхватит cookie и CSRF-токен и сохранит их в зашифрованном виде.',
+    );
+  }
 
   const urlObj = new URL(target.url);
   const port = Number(target.port ?? (urlObj.port || (urlObj.protocol === 'wss:' ? 443 : 4747)));
