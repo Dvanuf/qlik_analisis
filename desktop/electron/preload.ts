@@ -23,6 +23,10 @@ const api = {
   exportFindingsCsv: (payload: { rows: Record<string, string | number>[]; fileName?: string }) => ipcRenderer.invoke('core:export-findings-csv', payload),
   exportFindingsXlsx: (payload: { rows: Record<string, string | number>[]; fileName?: string }) => ipcRenderer.invoke('core:export-findings-xlsx', payload),
   rules: () => ipcRenderer.invoke('core:rules'),
+  /** Каталог готовых функций скрипта: список, выгрузка в .qvs, разбор своей библиотеки. */
+  library: () => ipcRenderer.invoke('core:library'),
+  libraryQvs: (ids: string[]) => ipcRenderer.invoke('core:library-qvs', ids),
+  librarySubs: (script: string) => ipcRenderer.invoke('core:library-subs', script),
   analyzeFile: (filePath: string) => ipcRenderer.invoke('core:analyze-file', filePath),
   doctor: (opts: {
     url: string; user?: string; password?: string; qlikUser?: string; insecure?: boolean;

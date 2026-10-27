@@ -4,6 +4,7 @@
  * Маршруты:
  *   GET  /api/me                 — кто вошёл (имя, роль)
  *   GET  /api/rules              — каталог правил
+ *   GET  /api/library            — каталог готовых функций скрипта
  *   GET  /api/apps               — список приложений сервера Qlik
  *   POST /api/analyze            — поставить анализ приложения в очередь { appId }
  *   POST /api/analyze-all        — поставить пакетный анализ в очередь
@@ -23,6 +24,7 @@ import { resolve, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authenticate, challengeHeader } from './auth.js';
 import { analyzeApp, analyzeAllApps, fetchApps, rulesCatalog } from './qlik.js';
+import { listLibrary } from '../../src/script/library.js';
 import { JobQueue } from './queue.js';
 import { ReportStore } from './store.js';
 
@@ -97,6 +99,8 @@ export function createApp(options) {
             findings: result.findings,
             patch: result.patch,
             ruleStats: result.ruleStats,
+            // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
+            outline: result.outline,
           },
           requestedBy: ctx.requestedBy,
         });
@@ -177,6 +181,12 @@ export function createApp(options) {
 
       if (pathname === '/api/rules') {
         sendJson(res, 200, rulesCatalog());
+        return;
+      }
+
+      // Каталог готовых функций скрипта: документация, сигнатуры и код.
+      if (pathname === '/api/library') {
+        sendJson(res, 200, { functions: listLibrary() });
         return;
       }
 

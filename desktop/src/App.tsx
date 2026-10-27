@@ -3,10 +3,12 @@ import { cleanEngineUrl } from '../../src/extract/url.js';
 import ConnectTab from './tabs/ConnectTab.js';
 import AnalysisTab from './tabs/AnalysisTab.js';
 import RulesTab from './tabs/RulesTab.js';
+import LibraryTab from './tabs/LibraryTab.js';
 import SummaryTab from './tabs/SummaryTab.js';
 import type {
   AnalysisResult, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
-  Comparison, DoctorStep, HistoryRun, Platform, RuleInfo, RulesConfig, Severity, Tab,
+  Comparison, DoctorStep, HistoryRun, LibraryFunction, Platform, RuleInfo, RulesConfig,
+  Severity, Tab,
 } from './types.js';
 
 
@@ -15,6 +17,10 @@ declare global {
     qa: {
       appInfo(): Promise<AppInfo>;
       rules(): Promise<RuleInfo>;
+      /** Каталог готовых функций скрипта. */
+      library(): Promise<{ functions: LibraryFunction[] }>;
+      libraryQvs(ids: string[]): Promise<{ canceled: boolean; path?: string }>;
+      librarySubs(script: string): Promise<{ subs: { name: string; params: string[] }[] }>;
       analyzeFile(path: string): Promise<AnalysisResult>;
       doctor(opts: {
         url: string; user?: string; password?: string; insecure?: boolean;
@@ -98,6 +104,7 @@ export default function App() {
   );
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [ruleInfo, setRuleInfo] = useState<RuleInfo | null>(null);
+  const [libraryFunctions, setLibraryFunctions] = useState<LibraryFunction[]>([]);
   const [busy, setBusy] = useState('');
   const [doctorSteps, setDoctorSteps] = useState<DoctorStep[]>([]);
 
@@ -220,6 +227,7 @@ export default function App() {
   useEffect(() => {
     void window.qa.appInfo().then(setInfo);
     void window.qa.rules().then(setRuleInfo);
+    void window.qa.library().then((r) => setLibraryFunctions(r.functions ?? []));
     void window.qa.rulesConfig().then((c) => setRulesConfig(c as RulesConfig));
     // Восстанавливаем сохранённую сессию хаба (зашифрована safeStorage).
     void window.qa.loadCredentials().then((creds) => {
@@ -627,12 +635,13 @@ export default function App() {
           </div>
         </div>
         <nav className="tabs">
-          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['summary', 'Сводный отчёт'], ['rules', 'Правила']] as [Tab, string][]).map(([id, label]) => (
+          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['summary', 'Сводный отчёт'], ['rules', 'Правила'], ['library', 'Каталог функций']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
               {label}
               {id === 'analysis' && analysis ? ` (${analysis.summary.findings.total})` : ''}
               {id === 'summary' && batch ? ` (${batch.totals.apps})` : ''}
               {id === 'rules' && ruleInfo ? ` (${ruleInfo.total})` : ''}
+              {id === 'library' && libraryFunctions.length ? ` (${libraryFunctions.length})` : ''}
             </button>
           ))}
         </nav>
@@ -710,6 +719,15 @@ export default function App() {
           onSave={(c) => void saveRulesConfig(c)}
           onExport={() => void exportRulesConfig()}
           onImport={() => void importRulesConfig()}
+        />
+      )}
+
+      {tab === 'library' && (
+        <LibraryTab
+          functions={libraryFunctions}
+          onCopy={(text) => void navigator.clipboard.writeText(text)}
+          onSaveQvs={(ids) => void window.qa.libraryQvs(ids)}
+          onParseLibrary={async (script) => (await window.qa.librarySubs(script)).subs}
         />
       )}
     </div>

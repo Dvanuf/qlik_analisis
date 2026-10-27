@@ -18,6 +18,7 @@ import { extractFromFile } from '../../src/connectors/file.js';
 import { renderHtml } from '../../src/report/html.js';
 import { runDoctor } from '../../src/cli/doctor.js';
 import { parseScript } from '../../src/script/parse.js';
+import { listLibrary, libraryAsQvs, librarySubs } from '../../src/script/library.js';
 import { maskSecrets, maskUrl } from '../../src/logging/mask.js';
 import { readRulesConfig, writeRulesConfig, sanitizeRulesConfig, RULES_CONFIG_FILE } from '../../src/rules/config.js';
 import { applyPatchToScript } from '../../src/report/fixes.js';
@@ -103,6 +104,27 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
 
+        // Вкладка «Каталог функций»: записи с сигнатурами и кодом.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+              .filter(function (b) { return b.textContent.indexOf('Каталог функций') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 700));
+        const library = await win.webContents.executeJavaScript(`
+          (function () {
+            var cards = document.querySelectorAll('.card');
+            return JSON.stringify({
+              cards: cards.length,
+              signatures: document.querySelectorAll('code').length,
+              hasSearch: document.querySelectorAll('input[type="search"]').length
+            });
+          })()
+        `);
+
         // Вкладка «Подключение»: пошаговый сценарий и главная кнопка.
         await win.webContents.executeJavaScript(`
           (function () {
@@ -152,6 +174,7 @@ async function runSmokeCheck(): Promise<void> {
           categories: CATEGORIES,
           findingsOnFixture,
           catalog: JSON.parse(String(catalog)),
+          library: JSON.parse(String(library)),
           connect: JSON.parse(String(connect)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
@@ -205,6 +228,23 @@ function rulesConfigPath(): string {
   return resolve(app.getPath('userData'), RULES_CONFIG_FILE);
 }
 
+// Каталог готовых функций скрипта: список, код выбранных подпрограмм
+// и разбор собственной библиотеки .qvs.
+ipcMain.handle('core:library', () => ({ functions: listLibrary() }));
+
+ipcMain.handle('core:library-qvs', async (_e, ids: string[]) => {
+  const { fileName, content } = libraryAsQvs(ids);
+  const result = await dialog.showSaveDialog({
+    title: 'Сохранить библиотеку скрипта',
+    defaultPath: fileName,
+    filters: [{ name: 'Qlik Script', extensions: ['qvs'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  writeFileSync(result.filePath, content, 'utf8');
+  return { canceled: false, path: result.filePath };
+});
+
+ipcMain.handle('core:library-subs', (_e, script: string) => ({ subs: librarySubs(script ?? '') }));
 /** Настройки правил из файла (влияют на каждый анализ). */
 function currentRules(): object {
   return readRulesConfig(rulesConfigPath()).rules ?? {};
@@ -798,6 +838,8 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     patch: result.patch,
     ruleStats: result.ruleStats,
     script: (graph as { script?: string }).script ?? '',
+    // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
+    outline: result.outline,
   };
 });
 

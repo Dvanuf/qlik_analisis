@@ -21,6 +21,11 @@ import {
 } from '../src/extract/metadata.js';
 import { hasCalcCondition } from '../src/extract/objects.js';
 import { extractObjectExpressions } from '../src/extract/expressions.js';
+import { parseScript } from '../src/script/parse.js';
+import { buildOutline, searchScript } from '../src/script/outline.js';
+import {
+  listLibrary, libraryCall, libraryAsQvs, librarySubs,
+} from '../src/script/library.js';
 
 /**
  * Сессия хаба.
@@ -553,4 +558,137 @@ test('разбор выражений: поле с пробелами оформ
     qHyperCube: { qDimensionInfo: [{ qGroupFieldDefs: ['User ID'] }] },
   });
   assert.equal(ex.expressions[0].expr, '[User ID]');
+});
+
+/**
+ * Outline скрипта: разделы, шаги, поток построения, недостижимый код.
+ */
+
+const OUTLINE_SCRIPT = `
+[Раздел загрузки]
+Products:
+LOAD p1, p2 FROM [products.csv];
+
+[Раздел обработки]
+Sales:
+LOAD * FROM [sales.csv] RESIDENT Products;
+
+SUB GetTotal(t)
+  LOAD x FROM [$(vPath)];
+END SUB
+
+CALL GetTotal('Sales');
+
+EXIT SCRIPT;
+LET vNever = 1;
+`;
+
+test('разбор скрипта: подпрограммы, вызовы и разделы', () => {
+  const model = parseScript(OUTLINE_SCRIPT);
+  assert.equal(model.sections.length, 2);
+  assert.deepEqual(model.sections.map((s) => s.name), ['Раздел загрузки', 'Раздел обработки']);
+  assert.equal(model.subs.length, 1);
+  assert.equal(model.subs[0].name, 'GetTotal');
+  assert.deepEqual(model.subs[0].params, ['t']);
+  assert.equal(model.subCalls.length, 1);
+  assert.equal(model.subCalls[0].name, 'GetTotal');
+  assert.deepEqual(model.subCalls[0].args, ['Sales']);
+});
+
+test('outline: разделы содержат свои таблицы и подпрограммы', () => {
+  const outline = buildOutline(parseScript(OUTLINE_SCRIPT));
+  const first = outline.sections.find((s) => s.name === 'Раздел загрузки');
+  assert.ok(first.tables.includes('Products'), 'таблица продуктов попала в свой раздел');
+  const second = outline.sections.find((s) => s.name === 'Раздел обработки');
+  assert.ok(second.tables.includes('Sales'), 'таблица продаж попала в свой раздел');
+  assert.ok(second.subs.includes('GetTotal'), 'подпрограмма попала в свой раздел');
+});
+
+test('outline: шаги таблицы описывают построение по порядку скрипта', () => {
+  const outline = buildOutline(parseScript(OUTLINE_SCRIPT));
+  const steps = outline.steps.filter((s) => s.table === 'Sales');
+  assert.equal(steps.length, 1, 'у таблицы Sales один шаг — перезапись через RESIDENT');
+  assert.match(steps[0].text, /RESIDENT/);
+  const products = outline.steps.filter((s) => s.table === 'Products');
+  assert.match(products[0].text, /Загрузка данных/);
+});
+
+test('outline: поток построения показывает resident-источник', () => {
+  const outline = buildOutline(parseScript(OUTLINE_SCRIPT));
+  const sales = outline.residentFlow.find((f) => f.table === 'Sales');
+  assert.ok(sales, 'таблица Sales есть в потоке');
+  assert.ok(sales.sources.includes('Products'), 'указано, из чего таблица построена');
+});
+
+test('outline: код после EXIT SCRIPT помечается как недостижимый', () => {
+  const outline = buildOutline(parseScript(OUTLINE_SCRIPT));
+  assert.ok(outline.unreachable.length >= 1, 'найден недостижимый оператор');
+  assert.match(outline.unreachable[0].raw, /vNever/);
+});
+
+test('S013: недостижимый код после EXIT SCRIPT — находка', () => {
+  const graph = graphWithObjects([], { script: OUTLINE_SCRIPT });
+  const result = analyze(graph, { platform: 'auto' });
+  const s013 = result.findings.filter((f) => f.ruleId === 'S013');
+  assert.equal(s013.length, 1);
+  assert.match(s013[0].message, /EXIT SCRIPT/);
+});
+
+test('поиск по скрипту: таблица, подпрограмма и переменная', () => {
+  const model = parseScript(OUTLINE_SCRIPT);
+  const tables = searchScript(model, 'sales');
+  assert.ok(tables.some((f) => f.kind === 'таблица' && f.name === 'Sales'));
+  const subs = searchScript(model, 'GetTotal');
+  assert.ok(subs.length >= 1, 'найдена подпрограмма и её вызов');
+  const vars = searchScript(model, 'vNever');
+  assert.ok(vars.length >= 1, 'найдена переменная');
+});
+
+/**
+ * Каталог готовых функций скрипта.
+ */
+
+test('каталог функций: у каждой записи есть документация и сигнатура', () => {
+  const all = listLibrary();
+  assert.ok(all.length >= 10, 'каталог непустой');
+  for (const e of all) {
+    assert.ok(e.id && e.title, 'есть идентификатор и название');
+    assert.ok(e.description, `у ${e.id} есть описание`);
+    assert.ok(e.signature.includes('('), `у ${e.id} есть сигнатура`);
+    assert.ok(e.code.includes('SUB'), `у ${e.id} есть код подпрограммы`);
+  }
+});
+
+test('каталог функций: код каждой записи разбирается нашим разбором', () => {
+  for (const e of listLibrary()) {
+    const subs = librarySubs(e.code);
+    assert.equal(subs.length, 1, `у ${e.id} ровно одна подпрограмма`);
+    assert.equal(subs[0].name, e.id, `имя ${e.id} совпадает с сигнатурой`);
+    const sigParams = e.signature.slice(e.signature.indexOf('(') + 1, e.signature.lastIndexOf(')'))
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    assert.deepEqual(subs[0].params, sigParams, `параметры ${e.id} совпадают с сигнатурой`);
+  }
+});
+
+test('каталог функций: вызов CALL и файл .qvs', () => {
+  assert.equal(libraryCall('GenericLoad', ["'data.csv'", '"csv"']), "CALL GenericLoad('data.csv', \"csv\");");
+  assert.equal(libraryCall('нет-такой'), '');
+  const qvs = libraryAsQvs(['GenericLoad', 'MasterCalendar']);
+  assert.equal(qvs.fileName, 'qlik-analyzer-library.qvs');
+  assert.equal(librarySubs(qvs.content).length, 2);
+  assert.ok(qvs.content.includes('SUB GenericLoad'));
+});
+
+test('каталог функций: своя библиотека .qvs перечисляет подпрограммы', () => {
+  const subs = librarySubs(`
+SUB MyLoader(Path)
+  LOAD * FROM [\$(Path)];
+END SUB
+
+SUB MyHelper(a, b)
+  LET x = a + b;
+END SUB`);
+  assert.equal(subs.length, 2);
+  assert.deepEqual(subs[0].params, ['Path']);
+  assert.deepEqual(subs[1].params, ['a', 'b']);
 });

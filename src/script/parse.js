@@ -34,6 +34,28 @@ function splitTopLevel(text, sep = ',') {
  * Для каждого оператора и комментария запоминается номер строки — он нужен
  * для привязки находок к месту в скрипте и для директив `// qa-ignore`.
  */
+/**
+ * Маркер блока в начале строки: раздел скрипта, подпрограмма или её конец.
+ *
+ * Такие конструкции не заканчиваются точкой с запятой, поэтому обычное
+ * деление по «;» склеивало их со следующим оператором.
+ */
+const BLOCK_MARKER = /^\s*(\[[^\]\r\n]+\]|SUB\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)\r\n]*\)|END\s+SUB)/i;
+
+/** Строка-маркер не должна быть путём к файлу: [lib://Data/File.csv]. */
+function isBlockMarker(text) {
+  const m = String(text ?? '').match(BLOCK_MARKER);
+  if (!m) return null;
+  const body = m[1];
+  if (body.startsWith('[') && /[:\\/]/.test(body)) return null;
+  return body;
+}
+
+/**
+ * Делит скрипт на операторы.
+ * @param {string} script
+ * @returns {{statements: {kind: string, text: string, line: number}[], comments: object[]}}
+ */
 export function splitStatements(script) {
   const src = String(script ?? '');
   const statements = [];
@@ -56,6 +78,20 @@ export function splitStatements(script) {
   while (i < src.length) {
     const c = src[i];
     const rest = src.slice(i, i + 2);
+
+    // Маркер блока в начале строки — отдельный оператор.
+    if (!quote && brackets === 0 && (i === 0 || src[i - 1] === '\n')) {
+      const marker = isBlockMarker(src.slice(i, src.indexOf('\n', i) === -1 ? src.length : src.indexOf('\n', i)));
+      if (marker) {
+        push();
+        const end = src.indexOf('\n', i);
+        const stop = end === -1 ? src.length : end;
+        statements.push({ kind: 'statement', text: marker, line });
+        i = stop;
+        continue;
+      }
+    }
+
     if (!bufStarted && c !== ' ' && c !== '\t' && c !== '\r') { stmtLine = line; bufStarted = true; }
 
     if (quote) {
@@ -192,6 +228,15 @@ export function parseScript(script) {
     tables: [],
     hasWhereFilter: false,
     hasDropField: false,
+    // Подпрограммы: определения и вызовы.
+    subs: [],
+    subCalls: [],
+    // Подключаемые файлы: include.
+    includes: [],
+    // Разделы скрипта: [Section] или //#Section.
+    sections: [],
+    // Код после безусловного EXIT SCRIPT — он не выполняется.
+    unreachable: [],
   };
 
   let pendingLabel = '';
@@ -205,6 +250,58 @@ export function parseScript(script) {
     let text = st.text;
     // Номер строки оператора — к нему привязываются находки и директивы qa-ignore.
     const line = st.line ?? 0;
+
+    // Раздел скрипта: [Section] или //#Section. Раздел меняет контекст:
+    // дальше идут операторы своей части загрузки.
+    const sectionMatch = text.match(/^\[\s*([^\]]+?)\s*\]$/);
+    if (sectionMatch) {
+      model.sections.push({ name: sectionMatch[1].trim(), line });
+      continue;
+    }
+
+    // Определение подпрограммы: SUB Name(a, b) … END SUB
+    const subDef = text.match(/^SUB\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/i);
+    if (subDef) {
+      const params = subDef[2].split(',').map((p) => p.trim()).filter(Boolean);
+      model.subs.push({ name: subDef[1], params, line });
+      // Тело подпрограммы разбираем отдельно, чтобы не путать с основным кодом.
+      const body = [];
+      while (queue.length) {
+        const inner = queue.shift();
+        if (/^END\s+SUB\b/i.test(inner.text.trim())) break;
+        body.push(inner);
+      }
+      // Операторы внутри подпрограммы учитываем, но помечаем её.
+      for (const inner of body) {
+        model.others.push({ raw: inner.text, line: inner.line ?? 0, inSub: subDef[1] });
+      }
+      continue;
+    }
+
+    // Вызов подпрограммы: CALL Name(a, b)
+    const subCall = text.match(/^CALL\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?/i);
+    if (subCall) {
+      // Аргументы приходят в кавычках — снимаем их, как и имена полей.
+      const args = subCall[2]
+        ? subCall[2].split(',').map((a) => a.trim().replace(/^['"`]|['"`]$/g, '')).filter(Boolean)
+        : [];
+      model.subCalls.push({ name: subCall[1], args, line });
+      continue;
+    }
+
+    // Подключение файла: include "file.qvs";
+    const includeMatch = text.match(/^include\s+["'`]?([^"'`;]+)["'`]?/i);
+    if (includeMatch) {
+      model.includes.push({ file: includeMatch[1].trim(), line });
+      continue;
+    }
+
+    // Выход из скрипта: после него код не выполняется.
+    if (/^EXIT\s+SCRIPT\b/i.test(text.trim())) {
+      model.exits = (model.exits ?? []);
+      model.exits.push({ line });
+      continue;
+    }
 
     // Метка может стоять в начале оператора: "Customers:\nLOAD ...".
     const labelMatch = text.match(/^([A-Za-z_][A-Za-z0-9_ ]*):\s*([\s\S]+)$/);

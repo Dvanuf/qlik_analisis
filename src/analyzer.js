@@ -5,6 +5,7 @@ import { buildIndex } from './graph.js';
 import { runRules, CATEGORIES, SEVERITIES } from './rules/index.js';
 import { PLATFORM_ANY, PLATFORM_AUTO } from './rules/platforms.js';
 import { parseScript } from './script/parse.js';
+import { buildOutline } from './script/outline.js';
 import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
 import { computeScore } from './score.js';
@@ -16,6 +17,8 @@ import { computeScore } from './score.js';
 export function analyze(graph, config = {}) {
   const scriptModel = parseScript(graph.script ?? '');
   const index = buildIndex(graph, scriptModel);
+  // Outline скрипта: разделы, шаги таблиц, поток построения, недостижимый код.
+  const outline = buildOutline(scriptModel);
   // Платформа: явный выбор пользователя важнее; 'auto' — определить по данным
   // сервера (экстрактор выводит её из набора типов объектов). Если данных нет —
   // платформа не определена, и правила проверяются по мере достаточности.
@@ -75,6 +78,19 @@ export function analyze(graph, config = {}) {
     // Полнота сбора метаданных: сколько объектов перечислил сервер
     // и сколько удалось получить. Позволяет заметить, что фронт-энд виден не весь.
     inventory: graph.meta?.inventory ?? null,
+    // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
+    outline: {
+      sections: outline.sections.length,
+      steps: outline.steps.length,
+      unreachable: outline.unreachable.length,
+      // Полная структура — для отчёта и HTTP-ответа.
+      full: {
+        sections: outline.sections,
+        steps: outline.steps,
+        residentFlow: outline.residentFlow,
+        unreachable: outline.unreachable,
+      },
+    },
     findings: {
       total: findings.length,
       byCategory,
@@ -103,6 +119,7 @@ export function analyze(graph, config = {}) {
     ruleStats,
     errors,
     summary,
+    outline,
     patch: buildScriptPatch(findings),
   };
 }

@@ -140,6 +140,7 @@ export const RULE_PLATFORMS = {
   S010: BOTH,
   S011: BOTH,
   S012: BOTH,
+  S013: BOTH, // недостижимый код после EXIT SCRIPT — свойство скрипта
 };
 
 /**

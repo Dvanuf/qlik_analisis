@@ -111,6 +111,23 @@ export function renderHtml(result) {
        <pre class="patch">${escapeHtml(patch.script)}</pre>`
     : '';
 
+  // Структура скрипта: разделы, шаги построения таблиц, поток, недостижимый код.
+  const outline = meta.outline?.full ?? null;
+  const outlineBlock = outline && outline.sections?.length
+    ? `<h2>Структура скрипта загрузки</h2>
+       ${outline.sections.map((s) => `<div class="skipped"><b>${escapeHtml(s.name)}</b>`
+        + ` — таблицы: ${escapeHtml(s.tables.join(', ') || 'нет')}`
+        + `${s.subs?.length ? `; подпрограммы: ${escapeHtml(s.subs.join(', '))}` : ''}</div>`).join('')}
+       ${outline.steps?.length ? `<h3>Шаги построения таблиц</h3>
+         <table><thead><tr><th>Таблица</th><th>Действие</th><th>Строка</th></tr></thead><tbody>
+         ${outline.steps.map((st) => `<tr><td>${escapeHtml(st.table)}</td><td>${escapeHtml(st.text)}</td><td>${st.line ?? ''}</td></tr>`).join('')}
+         </tbody></table>` : ''}
+       ${outline.unreachable?.length ? `<h3>Недостижимый код</h3>
+         <table><thead><tr><th>Строка</th><th>Оператор</th></tr></thead><tbody>
+         ${outline.unreachable.map((u) => `<tr><td>${u.line ?? ''}</td><td><code>${escapeHtml(String(u.raw ?? '').slice(0, 200))}</code></td></tr>`).join('')}
+         </tbody></table>` : ''}`
+    : '';
+
   return `<!doctype html>
 <html lang="ru">
 <head>
@@ -143,6 +160,8 @@ export function renderHtml(result) {
   </div>
 
   ${inventoryNote}
+
+  ${outlineBlock}
 
   ${skipped}
 

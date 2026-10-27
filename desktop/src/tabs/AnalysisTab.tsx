@@ -148,6 +148,7 @@ export default function AnalysisTab(props: Props) {
 
   const score = analysis.summary.score ?? 0;
   const scoreClass = score >= 80 ? 'info' : score >= 50 ? 'warning' : 'error';
+  const outline = analysis.outline?.full ?? null;
 
   return (
     <section className="card wide">
@@ -214,6 +215,49 @@ export default function AnalysisTab(props: Props) {
         )}
       </div>
       {(exportNote || note) && <p className="muted small">{note || exportNote}</p>}
+
+      {/* --- Структура скрипта загрузки --- */}
+      {outline && outline.sections.length > 0 && (
+        <>
+          <h2>Структура скрипта загрузки</h2>
+          <p className="muted small">
+            Разделы: {outline.sections.length} · шагов построения таблиц: {outline.steps.length}
+            {outline.unreachable.length > 0 ? ` · недостижимых операторов: ${outline.unreachable.length}` : ''}
+          </p>
+          {outline.sections.map((s) => (
+            <div key={`${s.name}-${s.line}`} className="muted small">
+              <b>{s.name}</b>
+              {s.tables.length > 0 && <> — таблицы: {s.tables.join(', ')}</>}
+              {s.subs.length > 0 && <> — подпрограммы: {s.subs.join(', ')}</>}
+              {s.variables.length > 0 && <> — переменные: {s.variables.join(', ')}</>}
+            </div>
+          ))}
+          {outline.steps.length > 0 && (
+            <table className="rules">
+              <thead>
+                <tr><th>Таблица</th><th>Действие</th><th>Строка</th></tr>
+              </thead>
+              <tbody>
+                {outline.steps.map((st, i) => (
+                  <tr key={`${st.table}-${st.line}-${i}`}>
+                    <td>{st.table}</td>
+                    <td>{st.text}</td>
+                    <td>{st.line}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {outline.unreachable.length > 0 && (
+            <div className="muted small">
+              Недостижимый код после EXIT SCRIPT:
+              {outline.unreachable.map((u) => (
+                <div key={`${u.line}-${u.raw}`}>строка {u.line}: {u.raw}</div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* --- Предлагаемые правки --- */}
       {fixes.length > 0 && (

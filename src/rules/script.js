@@ -12,7 +12,7 @@ const CATEGORY = 'Script';
 const SEVERITY = {
   S001: 'warning', S002: 'info', S003: 'warning', S004: 'info',
   S005: 'warning', S006: 'warning', S007: 'info', S008: 'info',
-  S009: 'warning', S010: 'error', S011: 'info', S012: 'info',
+  S009: 'warning', S010: 'error', S011: 'info', S012: 'info', S013: 'info',
 };
 
 /**
@@ -360,6 +360,38 @@ export const scriptRules = [
           'Qlik будет определять структуру автоматически — медленно и нестабильно.',
           'Указать формат явно в скобках после имени файла.',
           { line: l.line, table: l.table }));
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'S013',
+    category: CATEGORY,
+    severity: SEVERITY.S013,
+    title: 'Недостижимый код после EXIT SCRIPT',
+    description: 'После безусловного EXIT SCRIPT остались операторы — они никогда не выполняются.',
+    recommendation: 'Удалить недостижимый код или убрать EXIT SCRIPT, если он не нужен.',
+    run(ctx) {
+      const out = [];
+      const exits = ctx.script.exits ?? [];
+      if (!exits.length) return out;
+      // Безусловный EXIT SCRIPT — последний в скрипте: после него код не идёт.
+      const last = exits[exits.length - 1];
+      // Оператор после выхода может оказаться в любой части разбора:
+      // переменной, загрузкой или «прочим» — собираем их все.
+      const after = [
+        ...(ctx.script.variables ?? []).map((v) => ({ line: v.line, raw: v.raw })),
+        ...(ctx.script.loads ?? []).map((l) => ({ line: l.line, raw: l.raw })),
+        ...(ctx.script.others ?? []).map((o) => ({ line: o.line, raw: o.raw })),
+      ].filter((st) => (st.line ?? 0) > last.line);
+      for (const st of after) {
+        out.push(finding('S013', 'Недостижимый код после EXIT SCRIPT',
+          { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+          `После EXIT SCRIPT (строка ${last.line}) остался оператор — он не выполняется`,
+          String(st.raw ?? '').slice(0, 160),
+          'Удалить недостижимый код или убрать EXIT SCRIPT.',
+          { line: st.line }));
       }
       return out;
     },

@@ -82,6 +82,8 @@ export async function analyzeApp(qlikCfg, appId, options = {}) {
     findings: result.findings,
     patch: result.patch,
     ruleStats: result.ruleStats,
+    // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
+    outline: result.outline,
     html: renderHtml({
       summary: result.summary,
       findings: result.findings,

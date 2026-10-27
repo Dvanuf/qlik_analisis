@@ -2,7 +2,7 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'connect' | 'analysis' | 'summary' | 'rules';
+export type Tab = 'connect' | 'analysis' | 'summary' | 'rules' | 'library';
 /**
  * Платформа приложения.
  * 'auto' — определить по данным сервера (по умолчанию): один и тот же
@@ -28,6 +28,20 @@ export type RuleInfo = {
 
 export type DoctorStep = {
   name: string; status: 'OK' | 'WARN' | 'FAIL'; detail: string; hint?: string; index?: number;
+};
+
+/**
+ * Запись каталога готовых функций скрипта.
+ */
+export type LibraryFunction = {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  signature: string;
+  params: { name: string; purpose: string }[];
+  code: string;
+  note?: string;
 };
 
 export type Finding = {
@@ -65,6 +79,18 @@ export type AnalysisResult = {
   suppressed?: Finding[];
   patch: { script: string; autoNumbers?: { field: string; key: string }[] };
   script?: string;
+  /** Структура скрипта загрузки. */
+  outline?: {
+    sections: number;
+    steps: number;
+    unreachable: number;
+    full?: {
+      sections: { name: string; line: number; tables: string[]; subs: string[]; variables: string[] }[];
+      steps: { table: string; text: string; line: number }[];
+      residentFlow: { table: string; sources: string[]; line: number }[];
+      unreachable: { raw: string; line: number }[];
+    };
+  };
   skipped?: { capability: string; reason: string }[];
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
