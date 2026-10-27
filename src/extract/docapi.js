@@ -9,8 +9,13 @@ import { parseLoadScript } from './loadscript.js';
 import { PLATFORM_VIEW } from '../rules/platforms.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
 import { fetchAssociations } from './associations.js';
-import { fetchObjects, fetchLayout, fetchSheetChildren, OBJECT_TYPES } from './objects.js';
+import { fetchObjects, fetchLayout, fetchSheetChildren, hasCalcCondition, OBJECT_TYPES } from './objects.js';
 import { detectPlatform } from '../rules/platforms.js';
+import {
+  fetchInventory, fetchDataConnections, readObjectTitle, readObjectDefinition,
+  CONTENT_TYPES, SERVICE_TYPES,
+} from './metadata.js';
+import { extractObjectExpressions, CONTAINER_TYPES } from './expressions.js';
 
 /**
  * Приводит значение qGroupFieldDefs к виду выражения.
@@ -22,64 +27,12 @@ import { detectPlatform } from '../rules/platforms.js';
  * @param {string} value — значение из qGroupFieldDefs
  * @returns {string} выражение
  */
-function asFieldExpression(value) {
-  const raw = String(value ?? '').trim();
-  if (!raw) return '';
-  // Знак равенства означает выражение измерения: `=Month` или `=Sum([Amount])`.
-  if (raw.startsWith('=')) {
-    const text = raw.slice(1).trim();
-    if (!text) return '';
-    // Простое имя поля оформляем ссылкой — разбор выражений её узнаёт.
-    if (/^[\wа-яА-Я]+$/.test(text)) return `[${text}]`;
-    // Настоящее выражение (функции, операторы) оставляем как есть.
-    return text;
-  }
-  // Имя поля: с пробелами оно ссылкой не считается — нужны скобки.
-  if (/^\[.*\]$/.test(raw)) return raw;
-  return `[${raw}]`;
-}
-
-/**
- * Рекурсивно вытаскивает выражения из layout объекта.
- *
- * Кроме привычных qDef/qFormula, сервер Sense 12 отдаёт поля измерений
- * в qDimensionInfo.qGroupFieldDefs — это названия полей, по ним видно,
- * какие поля объект использует.
- */
-function collectExpressions(node, out = [], seen = new Set()) {
-  if (!node || typeof node !== 'object') return out;
-  if (seen.has(node)) return out;
-  seen.add(node);
-  if (Array.isArray(node)) {
-    node.forEach((n) => collectExpressions(n, out, seen));
-    return out;
-  }
-  for (const [key, value] of Object.entries(node)) {
-    if (key === 'qDef' && typeof value === 'string') out.push({ kind: 'measure', expr: value });
-    else if ((key === 'qFormula' || key === 'qExpr' || key === 'qExpression') && typeof value === 'string') {
-      out.push({ kind: 'dimension', expr: value });
-    } else if (key === 'qFieldDefs' && Array.isArray(value)) {
-      value.forEach((f) => {
-        if (typeof f === 'string') out.push({ kind: 'dimension', expr: asFieldExpression(f) });
-      });
-    } else if (key === 'qGroupFieldDefs' && Array.isArray(value)) {
-      // Поля, на которых построено измерение объекта.
-      value.forEach((f) => {
-        if (typeof f === 'string') out.push({ kind: 'dimension', expr: asFieldExpression(f) });
-      });
-    } else if (key === 'qExpressions' && Array.isArray(value)) {
-      value.forEach((f) => { if (typeof f === 'string') out.push({ kind: 'measure', expr: f }); });
-    } else if (typeof value === 'object') collectExpressions(value, out, seen);
-  }
-  return out;
-}
-
-function readMeta(layout) {
+function readMeta(layout, fallbackId = '') {
   const meta = layout?.qMeta ?? {};
   const layoutPart = layout?.qLayout ?? {};
   return {
     // Название объекта сервер отдаёт по-разному: qName, qTitle или title.
-    name: String(meta.qName ?? meta.qTitle ?? meta.title ?? layoutPart.qTitle ?? ''),
+    name: String(meta.qName ?? meta.qTitle ?? meta.title ?? layoutPart.qTitle ?? fallbackId ?? ''),
     description: String(meta.qDescription ?? meta.description ?? layoutPart.qDescription ?? ''),
   };
 }
@@ -134,6 +87,8 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
     tables: [],
     bookmarks: [],
     extensions: [],
+    masterObjects: [],
+    connections: [],
   };
 
   // --- Модель данных ---
@@ -188,10 +143,16 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
     skipped.push({ capability: 'objects', reason: `тип ${f.type}: ${f.reason}` });
   }
 
+  // Полный перечень объектов: он включает типы, которых нет в списке типов
+  // движка (master-объекты, закладки, служебные). По нему же сверяем,
+  // всё ли собрано — иначе об отсутствии объектов можно и не узнать.
+  const inventory = await fetchInventory(app);
+  if (inventory.available) capabilities.push('inventory');
+
   // Объекты, лежащие на листах: их нет в списке типов движка, но без них
   // часть фронт-энда (KPI, фильтры, кнопки) остаётся невидимой.
   const sheetLike = listedObjects.filter((o) => o.type === 'sheet' || o.type === 'story');
-  const children = await fetchSheetChildren(app, sheetLike);
+  const { objects: children, sheetOf } = await fetchSheetChildren(app, sheetLike);
   const items = [...listedObjects];
   const knownIds = new Set(listedObjects.map((o) => o.id));
   for (const child of children) {
@@ -199,20 +160,56 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
     knownIds.add(child.id);
     items.push(child);
   }
+
+  // Объекты из полного перечня, которых нет ни в списке по типам, ни на листах.
+  const masters = [];
+  for (const entry of inventory.items) {
+    if (knownIds.has(entry.id)) continue;
+    if (SERVICE_TYPES.has(entry.type)) continue;
+    if (entry.type === 'masterobject') {
+      // Master-объект: собираем его отдельно — это не содержимое листа,
+      // а переиспользуемое определение, и правила проверяют его отдельно.
+      const layout = await fetchLayout(app, entry.id);
+      if (!layout) continue;
+      masters.push({
+        id: entry.id,
+        name: readObjectTitle(layout, entry.id),
+        description: String(layout?.qMeta?.description ?? layout?.qMeta?.qDescription ?? ''),
+        definition: readObjectDefinition(layout),
+      });
+      knownIds.add(entry.id);
+      continue;
+    }
+    if (CONTENT_TYPES.has(entry.type)) {
+      items.push({ id: entry.id, type: entry.type, name: '', description: '' });
+      knownIds.add(entry.id);
+    }
+  }
   if (items.length) capabilities.push('objects');
+  if (masters.length) capabilities.push('masterObjects');
+
+  // Полнота сбора: сколько объектов перечислил сервер и сколько мы собрали.
+  const expected = inventory.items.filter((e) => !SERVICE_TYPES.has(e.type));
+  graph.meta.inventory = {
+    available: inventory.available,
+    expected: expected.length,
+    collected: items.length + masters.length,
+    missing: expected.filter((e) => !knownIds.has(e.id)).map((e) => e.type),
+  };
 
   for (const info of items) {
     const { id, type } = info;
     const layout = await fetchLayout(app, id);
     if (!layout) continue;
-    const meta = readMeta(layout);
+    const meta = readMeta(layout, id);
     if (type === 'sheet' || type === 'story') {
       graph.sheets.push({ id, name: meta.name || id, type, description: meta.description });
       continue;
     }
     const unique = [];
     const seen = new Set();
-    for (const e of collectExpressions(layout)) {
+    const extracted = extractObjectExpressions(layout);
+    for (const e of extracted.expressions) {
       const key = `${e.kind}:${e.expr}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -222,7 +219,36 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
       id, name: meta.name || info.name || id, type,
       description: meta.description || info.description,
       expressions: unique, layoutMs: null,
+      // Признак тяжёлого объекта: без условия вычисления он пересчитывается
+      // при каждом выборе.
+      calcCondition: hasCalcCondition(layout),
+      // Известно ли, какие поля объект использует: у контейнеров (фильтры,
+      // KPI) поля лежат в детях, и об их отсутствии судить нельзя.
+      fieldsKnown: !CONTAINER_TYPES.has(type),
+      hasDimensions: extracted.hasDimensions,
+      hasMeasures: extracted.hasMeasures,
+      // Лист, на котором объект лежит: нужен, чтобы посчитать нагрузку листа.
+      sheetId: sheetOf?.get(id) ?? null,
     });
+  }
+
+  // --- Master-объекты ---
+  // Переиспользуемые определения: в содержимое листа они не входят, но
+  // именно они чаще всего остаются неиспользуемыми.
+  graph.masterObjects = masters;
+
+  // --- Подключения к данным ---
+  // getConnections на многих серверах отдаёт подключения уровня сервера,
+  // а не приложения (у разных приложений список совпадает). Такие
+  // подключения помечаем отдельно: судить по ним об использовании нельзя.
+  const connections = await fetchDataConnections(app);
+  if (connections.available) {
+    capabilities.push('connections');
+    graph.connections = connections.items;
+    graph.meta.connectionsScope = 'unknown';
+  } else {
+    graph.connections = [];
+    skipped.push({ capability: 'connections', reason: 'Сервер не отдал подключения к данным.' });
   }
 
   // --- Связи между таблицами (для правила про внешний join) ---

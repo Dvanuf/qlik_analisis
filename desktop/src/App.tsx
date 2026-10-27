@@ -653,6 +653,7 @@ export default function App() {
           apps={apps} appId={appId} onAppId={setAppId}
           selectedIds={selectedIds} onSelectedIds={setSelectedIds}
           doctorSteps={doctorSteps}
+          ruleInfo={ruleInfo}
           hubStatus={hubStatus}
           busy={busy}
           signingIn={signingIn}

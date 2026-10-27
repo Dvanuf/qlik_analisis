@@ -65,11 +65,16 @@ export function analyze(graph, config = {}) {
       fields: (graph.fields ?? []).length,
       tables: (graph.tables ?? []).length,
       bookmarks: (graph.bookmarks ?? []).length,
+      masterObjects: (graph.masterObjects ?? []).length,
+      connections: (graph.connections ?? []).length,
       expressions: (graph.objects ?? []).reduce((n, o) => n + (o.expressions?.length ?? 0), 0),
       scriptLoads: scriptModel.loads.length,
       scriptVariables: scriptModel.variables.length,
       scriptComments: scriptModel.comments.length,
     },
+    // Полнота сбора метаданных: сколько объектов перечислил сервер
+    // и сколько удалось получить. Позволяет заметить, что фронт-энд виден не весь.
+    inventory: graph.meta?.inventory ?? null,
     findings: {
       total: findings.length,
       byCategory,

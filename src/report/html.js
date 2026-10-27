@@ -97,6 +97,14 @@ export function renderHtml(result) {
       .map((s) => `${escapeHtml(s.capability)} — ${escapeHtml(s.reason)}`).join('; ')}</div>`
     : '';
 
+  // Полнота сбора метаданных: если сервер перечислил больше объектов, чем мы
+  // получили, об этом надо сказать прямо — иначе выводы выглядят полными.
+  const inventory = meta.inventory ?? null;
+  const inventoryNote = inventory?.available && inventory.missing?.length
+    ? `<div class="skipped"><b>Метаданные собраны не полностью:</b> сервер перечислил ${inventory.expected} объектов, `
+      + `получено ${inventory.collected}. Не получены: ${escapeHtml([...new Set(inventory.missing)].join(', '))}.</div>`
+    : '';
+
   const patchBlock = patch.script
     ? `<h2>Предлагаемые правки скрипта загрузки</h2>
        <p class="muted">Вставьте в конец скрипта (после всех JOIN/CONCATENATE) и выполните перезагрузку:</p>
@@ -130,7 +138,11 @@ export function renderHtml(result) {
     <div class="stat"><b>${meta.counts.fields}</b>полей</div>
     <div class="stat"><b>${meta.counts.tables}</b>таблиц</div>
     <div class="stat"><b>${meta.counts.variables}</b>переменных</div>
+    ${meta.counts.masterObjects ? `<div class="stat"><b>${meta.counts.masterObjects}</b>master-объектов</div>` : ''}
+    ${meta.counts.connections ? `<div class="stat"><b>${meta.counts.connections}</b>подключений</div>` : ''}
   </div>
+
+  ${inventoryNote}
 
   ${skipped}
 

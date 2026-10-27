@@ -16,6 +16,11 @@ import { checkScriptStructure, analyzeScriptIntegrity } from '../src/script/inte
 import { extractReferences } from '../src/normalize.js';
 import { detectPlatform } from '../src/rules/platforms.js';
 import { analyze } from '../src/analyzer.js';
+import {
+  fetchInventory, fetchDataConnections, readObjectTitle, readObjectDefinition,
+} from '../src/extract/metadata.js';
+import { hasCalcCondition } from '../src/extract/objects.js';
+import { extractObjectExpressions } from '../src/extract/expressions.js';
 
 /**
  * Сессия хаба.
@@ -262,10 +267,11 @@ test('fetchSheetChildren: объекты с листа собираются, д�
       }),
     }),
   };
-  const children = await fetchSheetChildren(app, [{ id: 'sheet1', type: 'sheet' }]);
+  const { objects: children, sheetOf } = await fetchSheetChildren(app, [{ id: 'sheet1', type: 'sheet' }]);
   assert.equal(children.length, 1);
   assert.equal(children[0].id, 'kpi1');
   assert.equal(children[0].type, 'UniKPI');
+  assert.equal(sheetOf.get('kpi1'), 'sheet1', 'зафиксировано, какому листу принадлежит объект');
 });
 
 /**
@@ -377,4 +383,174 @@ test('R001: при известном использовании полей на
   const r001 = result.findings.filter((f) => f.ruleId === 'R001');
   assert.equal(r001.length, 1);
   assert.match(r001[0].message, /Amount/);
+});
+
+/**
+ * Метаданные приложения: полный перечень, свойства, подключения.
+ */
+
+test('fetchInventory: перечень объектов читается, служебные типы помечаются отдельно', async () => {
+  const app = {
+    getAllInfos: async () => [
+      { qId: 'a1', qType: 'sheet' },
+      { qId: 'a2', qType: 'masterobject' },
+      { qId: 'a3', qType: 'LoadModel' },
+    ],
+  };
+  const { items, available } = await fetchInventory(app);
+  assert.equal(available, true);
+  assert.equal(items.length, 3);
+  assert.deepEqual(items.map((i) => i.type), ['sheet', 'masterobject', 'LoadModel']);
+});
+
+test('fetchInventory: недоступность перечня не роняет сборку', async () => {
+  const { items, available } = await fetchInventory({});
+  assert.equal(available, false);
+  assert.deepEqual(items, []);
+});
+
+test('fetchDataConnections: подключения читаются с типом и строкой подключения', async () => {
+  const app = {
+    getConnections: async () => [
+      { qId: 'c1', qName: 'Sales', qType: 'folder', qConnectionString: '\\\\host\\Sales\\' },
+    ],
+  };
+  const { items, available } = await fetchDataConnections(app);
+  assert.equal(available, true);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].name, 'Sales');
+  assert.equal(items[0].type, 'folder');
+});
+
+test('readObjectTitle: название берётся из разных мест, без названия — идентификатор', () => {
+  assert.equal(readObjectTitle({ qMeta: { title: 'Лист' } }), 'Лист');
+  assert.equal(readObjectTitle({ title: 'Пользователь' }), 'Пользователь');
+  assert.equal(readObjectTitle({ qMeta: { qName: 'Из qName' } }), 'Из qName');
+  assert.equal(readObjectTitle({}, 'ид-1'), 'ид-1');
+});
+
+test('readObjectDefinition: определение собирается из полей измерения', () => {
+  const def = readObjectDefinition({
+    qHyperCube: { qDimensionInfo: [{ qGroupFieldDefs: ['=if(len([User Name])>1,[User Name])'] }] },
+  });
+  assert.match(def, /User Name/);
+});
+
+test('hasCalcCondition: пустое условие условием не считается', () => {
+  assert.equal(hasCalcCondition({ qListObject: { qCalcCondition: { qCond: { qv: '' } } } }), false);
+  assert.equal(hasCalcCondition({ qListObject: { qCalcCondition: { qCond: { qv: 'Count([X])>10' } } } }), true);
+  assert.equal(hasCalcCondition({}), false);
+});
+
+/**
+ * Новые правила по метаданным.
+ */
+
+test('R015: неиспользуемый master-объект', () => {
+  const graph = graphWithObjects([
+    { id: 'o1', type: 'table', expressions: [{ kind: 'dimension', expr: '[ID]' }] },
+  ], {
+    masterObjects: [{ id: 'm1', name: 'Топ пользователей', definition: '[User Name]' }],
+  });
+  const result = analyze(graph, { platform: 'qlik-sense' });
+  const r015 = result.findings.filter((f) => f.ruleId === 'R015');
+  assert.equal(r015.length, 1);
+  assert.match(r015[0].message, /Топ пользователей/);
+});
+
+test('R015: master-объект, чьи поля используются, находки не даёт', () => {
+  const graph = graphWithObjects([
+    { id: 'o1', type: 'table', expressions: [{ kind: 'dimension', expr: '[User Name]' }] },
+  ], {
+    masterObjects: [{ id: 'm1', name: 'Топ пользователей', definition: '[User Name]' }],
+  });
+  const result = analyze(graph, { platform: 'qlik-sense' });
+  assert.equal(result.findings.filter((f) => f.ruleId === 'R015').length, 0);
+});
+
+test('R016: тяжёлый объект без условия вычисления помечается', () => {
+  const graph = graphWithObjects([
+    // Агрегация — объект пересчитывается дорого.
+    { id: 'o1', name: 'Первый', type: 'table', expressions: [{ kind: 'measure', expr: 'Sum([Amount])' }], calcCondition: false },
+    // Условие вычисления задано — объект пересчитывается не всегда.
+    { id: 'o2', name: 'Второй', type: 'table', expressions: [{ kind: 'measure', expr: 'Sum([Amount])' }], calcCondition: true },
+    // Простое измерение по полю — дёшево, ругаться не на что.
+    { id: 'o3', name: 'Третий', type: 'table', expressions: [{ kind: 'dimension', expr: '[ID]' }], calcCondition: false },
+  ]);
+  const result = analyze(graph, { platform: 'qlik-sense' });
+  const r016 = result.findings.filter((f) => f.ruleId === 'R016');
+  assert.equal(r016.length, 1);
+  assert.match(r016[0].message, /Первый/);
+});
+
+test('R017: перегруженный лист помечается', () => {
+  const objects = Array.from({ length: 16 }, (_, i) => ({
+    id: `o${i}`, type: 'table', expressions: [{ kind: 'dimension', expr: '[ID]' }], sheetId: 's1',
+  }));
+  const graph = graphWithObjects(objects, { sheets: [{ id: 's1', name: 'Большой лист', type: 'sheet' }] });
+  const result = analyze(graph, { platform: 'qlik-sense' });
+  const r017 = result.findings.filter((f) => f.ruleId === 'R017');
+  assert.equal(r017.length, 1);
+  assert.match(r017[0].message, /16 объектов/);
+});
+
+test('R017: порог числа объектов настраивается', () => {
+  const objects = Array.from({ length: 16 }, (_, i) => ({
+    id: `o${i}`, type: 'table', expressions: [{ kind: 'dimension', expr: '[ID]' }], sheetId: 's1',
+  }));
+  const graph = graphWithObjects(objects, { sheets: [{ id: 's1', name: 'Большой лист', type: 'sheet' }] });
+  const result = analyze(graph, { platform: 'qlik-sense', thresholds: { R017: { maxObjects: 20 } } });
+  assert.equal(result.findings.filter((f) => f.ruleId === 'R017').length, 0);
+});
+
+test('R018: объект без измерений помечается', () => {
+  const graph = graphWithObjects([
+    { id: 'o1', name: 'Пустой', type: 'table', expressions: [] },
+    { id: 'o2', name: 'С мерой', type: 'table', expressions: [{ kind: 'measure', expr: 'Sum([Amount])' }] },
+  ]);
+  const result = analyze(graph, { platform: 'qlik-sense' });
+  const r018 = result.findings.filter((f) => f.ruleId === 'R018');
+  assert.equal(r018.length, 1);
+  assert.match(r018[0].message, /Пустой/);
+});
+
+test('R018: у контейнера (фильтр, KPI) поля лежат в детях — находки нет', () => {
+  const graph = graphWithObjects([
+    // Поля фильтра и KPI известны из их детей, а не из самого объекта.
+    { id: 'f1', name: 'Фильтр', type: 'filterpane', expressions: [], fieldsKnown: false },
+    { id: 'k1', name: 'KPI', type: 'UniKPI', expressions: [], fieldsKnown: false },
+  ]);
+  const result = analyze(graph, { platform: 'qlik-sense' });
+  assert.equal(result.findings.filter((f) => f.ruleId === 'R018').length, 0);
+});
+
+/**
+ * Разбор выражений: где сервер хранит измерения и меры.
+ */
+
+test('разбор выражений: измерения listbox читаются из qDimensionInfo', () => {
+  const ex = extractObjectExpressions({
+    qListObject: { qDimensionInfo: { qGroupFieldDefs: ['User Name'] } },
+  });
+  assert.equal(ex.hasDimensions, true);
+  assert.equal(ex.expressions[0].expr, '[User Name]');
+});
+
+test('разбор выражений: меры читаются из qMeasureInfo', () => {
+  const ex = extractObjectExpressions({
+    qHyperCube: {
+      qDimensionInfo: [],
+      qMeasureInfo: [{ qFallbackTitle: 'count(distinct assignee)' }],
+    },
+  });
+  assert.equal(ex.hasMeasures, true);
+  assert.equal(ex.hasDimensions, false);
+  assert.match(ex.expressions[0].expr, /count\(distinct assignee\)/);
+});
+
+test('разбор выражений: поле с пробелами оформляется ссылкой', () => {
+  const ex = extractObjectExpressions({
+    qHyperCube: { qDimensionInfo: [{ qGroupFieldDefs: ['User ID'] }] },
+  });
+  assert.equal(ex.expressions[0].expr, '[User ID]');
 });

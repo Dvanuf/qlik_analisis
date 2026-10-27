@@ -106,6 +106,10 @@ export const RULE_PLATFORMS = {
   R010: BOTH, // модель данных
   R012: BOTH, // модель данных
   R013: BOTH, // свойства приложения (превью)
+  R015: [PLATFORM_SENSE], // master-объекты есть только в Qlik Sense
+  R016: [PLATFORM_SENSE], // условие вычисления есть только в Qlik Sense
+  R017: [PLATFORM_SENSE], // состав листа известен только в Qlik Sense
+  R018: [PLATFORM_SENSE], // измерения объекта известны только в Qlik Sense
 
   // --- Practices: качество проектирования ---
   P001: [PLATFORM_SENSE], // выражения объектов

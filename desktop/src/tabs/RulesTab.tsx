@@ -21,6 +21,9 @@ const THRESHOLD_FIELDS: Record<string, { key: string; label: string; hint: strin
     { key: 'minRows', label: 'Минимум строк', hint: 'Поле считается плотным начиная с этого числа строк' },
     { key: 'minDistinctRatio', label: 'Доля уникальных значений', hint: 'Отношение уникальных значений к числу строк' },
   ],
+  R017: [
+    { key: 'maxObjects', label: 'Сколько объектов на листе', hint: 'Больше этого — находка о перегруженном листе' },
+  ],
 };
 
 type Props = {

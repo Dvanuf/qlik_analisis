@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeEngineUrl } from '../../../src/extract/url.js';
-import type { AppItem, BatchProgress, DoctorStep, Platform } from '../types.js';
+import type { AppItem, BatchProgress, DoctorStep, Platform, RuleInfo } from '../types.js';
 
 const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
   { id: 'auto', label: 'Определить автоматически', hint: 'По типам объектов приложения — так надёжнее' },
@@ -36,6 +36,8 @@ type Props = {
   apps: AppItem[]; appId: string; onAppId: (v: string) => void;
   selectedIds: string[]; onSelectedIds: (v: string[]) => void;
   doctorSteps: DoctorStep[];
+  /** Сведения о каталоге правил — чтобы показывать реальное число правил. */
+  ruleInfo: RuleInfo | null;
   hubStatus: string;
   busy: string;
   batchRunning: boolean;
@@ -69,7 +71,7 @@ export default function ConnectTab(props: Props) {
     url, onUrl, insecure, onInsecure, platform, onPlatform,
     user, onUser, password, onPassword, cookie, onCookie, xrfKey, onXrfKey, csrfToken, onCsrfToken,
     apps, appId, onAppId, selectedIds, onSelectedIds,
-    doctorSteps, hubStatus, busy, batchRunning, batchProgress,
+    doctorSteps, hubStatus, busy, batchRunning, batchProgress, ruleInfo,
     signingIn, sessionAt, sessionError,
     onSignIn, onLoadApps, onAnalyze, onAnalyzeAll, onAnalyzeFile, onDoctor, onCancelBatch,
     onRefreshSession,
@@ -193,7 +195,7 @@ export default function ConnectTab(props: Props) {
           </li>
         </ol>
         <p className="muted small">
-          Проверяем 45 правил в 4 категориях (Quality · Resources · Practices · Script).
+          Проверяем {ruleInfo?.total ?? 49} правил в 4 категориях (Quality · Resources · Practices · Script).
           Отчёты: «Документы/QlikAnalyzer». Лог входа: <code>hub-login.log</code> рядом с данными приложения.
         </p>
       </details>

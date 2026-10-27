@@ -163,6 +163,39 @@ export async function fetchLayout(app, id) {
 }
 
 /**
+ * Есть ли у объекта условие вычисления (calc condition).
+ *
+ * Без него объект пересчитывается при каждом выборе — это признак тяжёлого
+ * объекта. Условие лежит в разных ветках layout в зависимости от типа.
+ *
+ * @param {object} layout — layout объекта
+ * @returns {boolean}
+ */
+export function hasCalcCondition(layout) {
+  if (!layout || typeof layout !== 'object') return false;
+  let found = false;
+  const seen = new Set();
+  const walk = (node) => {
+    if (found || !node || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'qCalcCondition' && value) {
+        // Пустое условие («qCond»: «») условием не считается.
+        const cond = value?.qCond?.qv ?? value?.qv;
+        if (cond !== undefined && String(cond).trim() === '') continue;
+        found = true;
+        return;
+      }
+      walk(value);
+    }
+  };
+  walk(layout);
+  return found;
+}
+
+/**
  * Собирает объекты, лежащие на листах (qChildList).
  *
  * Список типов у движка конечен и отстаёт от версии Sense: новые объекты
@@ -171,17 +204,22 @@ export async function fetchLayout(app, id) {
  *
  * @param {object} app — объект App QIX или документ Doc API
  * @param {object[]} sheetObjects — листы и истории (уже нормализованные)
- * @returns {Promise<object[]>} объекты с листов (нормализованные)
+ * @returns {Promise<{objects: object[], sheetOf: Map<string, string>}>}
+ *   sheetOf — какой лист какому объекту принадлежит.
  */
 export async function fetchSheetChildren(app, sheetObjects) {
   const found = [];
+  const sheetOf = new Map();
   for (const sheet of sheetObjects ?? []) {
     const layout = await fetchLayout(app, sheet.id);
     const children = layout?.qChildList?.qItems ?? [];
     for (const child of children) {
       const obj = normalizeObjectItem(child);
-      if (obj) found.push(obj);
+      if (!obj) continue;
+      obj.sheetId = sheet.id;
+      sheetOf.set(obj.id, sheet.id);
+      found.push(obj);
     }
   }
-  return dedupeNormalized(found);
+  return { objects: dedupeNormalized(found), sheetOf };
 }

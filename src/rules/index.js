@@ -6,11 +6,12 @@ import { resourceRules } from './resources.js';
 import { practiceRules } from './practices.js';
 import { scriptRules } from './script.js';
 import { advancedRules } from './advanced.js';
+import { metadataRules } from './metadata.js';
 import { enrichRule, isRuleApplicable, platformLabel, PLATFORM_ANY } from './platforms.js';
 import { normalizeRuleSettings, severityFor } from './settings.js';
 
 export const ALL_RULES = [
-  ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...advancedRules,
+  ...qualityRules, ...resourceRules, ...practiceRules, ...scriptRules, ...advancedRules, ...metadataRules,
 ].map(enrichRule);
 
 export const RULES_BY_ID = new Map(ALL_RULES.map((r) => [r.id, r]));
