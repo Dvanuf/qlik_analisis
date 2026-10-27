@@ -577,13 +577,20 @@ ipcMain.handle('core:save-credentials', (_e, creds: {
   return true;
 });
 
-ipcMain.handle('core:load-credentials', () => {
+ipcMain.handle('core:load-credentials', async () => {
   const file = resolve(app.getPath('userData'), CREDS_FILE);
   if (!existsSync(file)) return null;
   try {
     // Файл мог быть записан старой сборкой или прерванной записью — тогда в нём
     // не JSON, а мусор. Такой файл молча ломал бы восстановление сессии.
-    return parseCredentials(safeStorage.decryptString(readFileSync(file)));
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(readFileSync(file));
+    const creds = parseCredentials(result);
+    // Ключ хранения мог быть ротирован: перешифровываем файл новым ключом,
+    // иначе следующая запись не расшифруется.
+    if (creds && shouldReEncrypt) {
+      writeFileSync(file, await safeStorage.encryptStringAsync(result));
+    }
+    return creds;
   } catch {
     return null;
   }

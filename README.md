@@ -116,6 +116,10 @@ node bin/analyze.js analyze --qvs    "sales.qvs"   # контейнер прил
 
 Для QlikView: выгрузка скрипта из `.qvw` через COM — `tools/qv-export-script.ps1`.
 
+Живая проверка на своём сервере: `tools/live-check.mjs` — читает сессию хаба,
+подключается к движку и прогоняет настоящий анализ с отчётом по полноте
+метаданных, структуре скрипта и находкам.
+
 Для QlikView офлайн: выгрузите скрипт из QlikView Desktop
 (Edit Script → File → Export → Script → `app.qvs`) и проанализируйте его как обычный скрипт.
 Скриптовые правила (S001–S012) работают одинаково для Qlik Sense и QlikView: синтаксис скрипта
@@ -447,6 +451,7 @@ server/                   Веб-сервер для нескольких пол
   src/http.js             HTTP-сервер и REST-маршруты
   public/                 веб-интерфейс (без сборки — чистый JS)
 tools/qv-export-script.ps1  выгрузка скрипта из .qvw через COM (QlikView)
+tools/live-check.mjs       живая проверка на сервере: сессия хаба + прогон анализа
 test/                     220 тестов (node:test) + фикстуры
 ```
 
