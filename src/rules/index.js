@@ -8,6 +8,7 @@ import { scriptRules } from './script.js';
 import { advancedRules } from './advanced.js';
 import { metadataRules } from './metadata.js';
 import { enrichRule, isRuleApplicable, platformLabel, PLATFORM_ANY } from './platforms.js';
+import { scopeForRule } from './scopes.js';
 import { normalizeRuleSettings, severityFor } from './settings.js';
 
 export const ALL_RULES = [
@@ -91,7 +92,14 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
       for (const f of list) {
         const ruleId = f.ruleId ?? rule.id;
         // Важность можно переопределить в настройках правил.
-        findings.push({ ...f, ruleId, severity: severityFor(ruleId, f.severity, settings) });
+        // Область (скрипт / дашборд / меры) — по правилу: она определяет,
+        // где пользователю искать причину находки.
+        findings.push({
+          ...f,
+          ruleId,
+          severity: severityFor(ruleId, f.severity, settings),
+          scope: f.scope ?? scopeForRule(ruleId, rule.category),
+        });
         const stat = statById.get(rule.id);
         if (stat) stat.count += 1;
       }

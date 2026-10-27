@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
+import { stageLabel } from '../../src/extract/progress.js';
+import { SCOPE_LABELS } from '../../src/rules/scopes.js';
 import ConnectTab from './tabs/ConnectTab.js';
 import AnalysisTab from './tabs/AnalysisTab.js';
 import RulesTab from './tabs/RulesTab.js';
 import LibraryTab from './tabs/LibraryTab.js';
 import SummaryTab from './tabs/SummaryTab.js';
+import ModelTab from './tabs/ModelTab.js';
 import type {
-  AnalysisResult, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
+  AnalysisResult, AnalyzeProgress, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
   Comparison, DoctorStep, HistoryRun, LibraryFunction, Platform, RuleInfo, RulesConfig,
   Severity, Tab,
 } from './types.js';
@@ -46,6 +49,8 @@ declare global {
       } | null>;
       clearCredentials(): Promise<boolean>;
       onDoctorStep(cb: (step: DoctorStep) => void): () => void;
+      /** Этапы анализа приложения. */
+      onAnalyzeProgress(cb: (p: AnalyzeProgress) => void): () => void;
       analyzeAll(opts: {
         url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean; platform?: string;
@@ -142,6 +147,8 @@ export default function App() {
   // Ошибка авторизации (403) — предлагаем обновить сессию.
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [batch, setBatch] = useState<{ results: BatchItem[]; totals: BatchTotals } | null>(null);
+  // Ход анализа одного приложения: какие этапы уже пройдены.
+  const [analyzeStage, setAnalyzeStage] = useState<AnalyzeProgress | null>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [exportNote, setExportNote] = useState('');
@@ -257,9 +264,12 @@ export default function App() {
       });
     });
     const offBatch = window.qa.onBatchProgress((p) => setBatchProgress(p));
+    // Ход анализа одного приложения: показываем текущий этап.
+    const offAnalyze = window.qa.onAnalyzeProgress((p) => setAnalyzeStage(p));
     return () => {
       offDoctor();
       offBatch();
+      offAnalyze();
     };
   }, []);
 
@@ -331,6 +341,7 @@ export default function App() {
   async function analyzeSelected() {
     if (!appId) return;
     setBusy('Анализ приложения…');
+    setAnalyzeStage(null);
     try {
       const res = await window.qa.analyzeApp({ ...conn, appId, platform });
       setAnalysis(res);
@@ -340,6 +351,30 @@ export default function App() {
       setTab('connect');
     }
     setBusy('');
+    setAnalyzeStage(null);
+  }
+
+  /**
+   * Детальный анализ одного приложения из сводного отчёта.
+   *
+   * Пакетный прогон даёт сводку по всем приложениям; для одного приложения
+   * нужен полный разбор — находки, скрипт и модель данных.
+   */
+  async function analyzeAppById(targetAppId: string) {
+    if (!targetAppId) return;
+    setBusy('Анализ приложения…');
+    setAnalyzeStage(null);
+    setAppId(targetAppId);
+    try {
+      const res = await window.qa.analyzeApp({ ...conn, appId: targetAppId, platform });
+      setAnalysis(res);
+      setTab('analysis');
+    } catch (err) {
+      setExportNote(`Не удалось проанализировать приложение: ${String(err)}`);
+      setTab('summary');
+    }
+    setBusy('');
+    setAnalyzeStage(null);
   }
 
   /** Пакетный анализ: всех приложений сервера или только выбранных. */
@@ -468,7 +503,8 @@ export default function App() {
             : f.severity === 'warning' ? 'Предупреждение' : 'Замечание',
           object: f.target?.name ?? '',
           table: f.table ?? (f.target?.kind === 'table' ? f.target.name : ''),
-          line: f.line ?? '',
+          scope: SCOPE_LABELS[f.scope ?? 'dashboard'] ?? '',
+          line: f.lines?.length ? f.lines.join(', ') : (f.line ?? ''),
           message: f.message ?? '',
         });
       }
@@ -664,7 +700,7 @@ export default function App() {
           </div>
         </div>
         <nav className="tabs">
-          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['summary', 'Сводный отчёт'], ['rules', 'Правила'], ['library', 'Каталог функций']] as [Tab, string][]).map(([id, label]) => (
+          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['summary', 'Сводный отчёт'], ['model', 'Модель данных'], ['rules', 'Правила'], ['library', 'Каталог функций']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
               {label}
               {id === 'analysis' && analysis ? ` (${analysis.summary.findings.total})` : ''}
@@ -677,6 +713,14 @@ export default function App() {
       </header>
 
       {busy && <div className="busy">{busy}</div>}
+
+      {/* Ход анализа: видно, на каком этапе идёт процесс. */}
+      {analyzeStage && (
+        <div className="progress-line">
+          <span className="progress-stage">{analyzeStage.detail ?? stageLabel(analyzeStage.stage)}</span>
+          <span className="muted small">{stageLabel(analyzeStage.stage)}</span>
+        </div>
+      )}
 
       {tab === 'connect' && (
         <ConnectTab
@@ -724,6 +768,14 @@ export default function App() {
         />
       )}
 
+      {tab === 'model' && (
+        <ModelTab
+          analysis={analysis}
+          exportNote={exportNote}
+          onExport={() => void exportDataModel()}
+        />
+      )}
+
       {tab === 'summary' && (
         <SummaryTab
           batch={batch}
@@ -738,6 +790,7 @@ export default function App() {
           onSaveHistory={() => void saveHistory()}
           onCompare={(id) => void compareHistory(id)}
           onLoadHistory={() => void loadHistory()}
+          onAnalyzeApp={(id) => void analyzeAppById(id)}
         />
       )}
 

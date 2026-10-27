@@ -6,16 +6,29 @@
  * нужной строки, блок «Предлагаемые правки» (было/стало) и подавление
  * находок.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildFixes } from '../../../src/report/fixes.js';
 import { searchExpressions } from '../../../src/script/search.js';
-import type { AnalysisResult, Finding, RulesConfig, Severity } from '../types.js';
+import type {
+  AnalysisResult, Finding, FindingScope, RulesConfig, Severity,
+} from '../types.js';
 
 const SEVERITIES: { id: Severity; label: string }[] = [
   { id: 'error', label: 'Ошибка' },
   { id: 'warning', label: 'Предупреждение' },
   { id: 'info', label: 'Замечание' },
 ];
+
+/** Области находок: скрипт / дашборд / меры. */
+const SCOPES: { id: FindingScope; label: string }[] = [
+  { id: 'script', label: 'Скрипт загрузки' },
+  { id: 'dashboard', label: 'Дашборд' },
+  { id: 'measures', label: 'Меры и измерения' },
+];
+
+const SCOPE_LABELS: Record<string, string> = Object.fromEntries(
+  SCOPES.map((s) => [s.id, s.label]),
+);
 
 type SortKey = 'severity' | 'ruleId' | 'category' | 'object' | 'table' | 'line';
 
@@ -32,6 +45,13 @@ type Props = {
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
+/** Первая строка скрипта, связанная с находкой (для сортировки). */
+function firstLine(finding: Finding): number {
+  const lines = finding.lines?.length ? finding.lines : [];
+  if (lines.length) return lines[0];
+  return finding.line ?? 0;
+}
+
 export default function AnalysisTab(props: Props) {
   const {
     analysis, categories, exportNote, onExport, onExportScript, onExportDataModel,
@@ -40,6 +60,7 @@ export default function AnalysisTab(props: Props) {
 
   const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
   const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
+  const [scopeFilter, setScopeFilter] = useState<Set<FindingScope>>(new Set());
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('severity');
   const [sortAsc, setSortAsc] = useState(true);
@@ -60,11 +81,14 @@ export default function AnalysisTab(props: Props) {
   const counts = useMemo(() => {
     const bySeverity: Record<string, number> = { error: 0, warning: 0, info: 0 };
     const byCategory: Record<string, number> = {};
+    const byScope: Record<string, number> = {};
     for (const f of findings) {
       bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
       byCategory[f.category] = (byCategory[f.category] ?? 0) + 1;
+      const scope = f.scope ?? 'dashboard';
+      byScope[scope] = (byScope[scope] ?? 0) + 1;
     }
-    return { bySeverity, byCategory };
+    return { bySeverity, byCategory, byScope };
   }, [findings]);
 
   const filtered = useMemo(() => {
@@ -72,6 +96,7 @@ export default function AnalysisTab(props: Props) {
     const list = findings.filter((f) => {
       if (sevFilter.size && !sevFilter.has(f.severity as Severity)) return false;
       if (catFilter.size && !catFilter.has(f.category)) return false;
+      if (scopeFilter.size && !scopeFilter.has((f.scope ?? 'dashboard') as FindingScope)) return false;
       if (q) {
         const hay = `${f.ruleId} ${f.title} ${f.message} ${f.detail ?? ''} ${f.target?.name ?? ''} ${f.table ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -86,11 +111,11 @@ export default function AnalysisTab(props: Props) {
         case 'category': return a.category.localeCompare(b.category) * dir;
         case 'object': return String(a.target?.name ?? '').localeCompare(String(b.target?.name ?? '')) * dir;
         case 'table': return String(a.table ?? '').localeCompare(String(b.table ?? '')) * dir;
-        case 'line': return ((a.line ?? 0) - (b.line ?? 0)) * dir;
+        case 'line': return (firstLine(a) - firstLine(b)) * dir;
         default: return 0;
       }
     });
-  }, [findings, sevFilter, catFilter, search, sortKey, sortAsc]);
+  }, [findings, sevFilter, catFilter, scopeFilter, search, sortKey, sortAsc]);
 
   const fixes = useMemo(
     () => buildFixes(findings, analysis?.script ?? ''),
@@ -101,6 +126,30 @@ export default function AnalysisTab(props: Props) {
     () => String(analysis?.script ?? '').split(/\r?\n/),
     [analysis?.script],
   );
+
+  /**
+   * Строки скрипта, к которым относится выбранная находка.
+   *
+   * Их может быть несколько: поле грузится в нескольких таблицах, мера
+   * ссылается на поля из разных загрузок. Показываем их все — с перечислением
+   * через запятую и подсветкой каждой.
+   */
+  const hitLines = useMemo(() => {
+    if (!selected) return new Set<number>();
+    const lines = selected.lines?.length ? selected.lines : [];
+    if (lines.length) return new Set(lines);
+    if (selected.line != null) return new Set([selected.line]);
+    return new Set<number>();
+  }, [selected]);
+
+  /** Прокрутка скрипта к первой найденной строке. */
+  const scriptViewRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!selected || hitLines.size === 0) return;
+    const first = Math.min(...hitLines);
+    const node = scriptViewRef.current?.querySelector(`[data-line="${first}"]`);
+    node?.scrollIntoView({ block: 'center' });
+  }, [selected, hitLines]);
 
   /** Результаты поиска по выражению — в объектах и в скрипте. */
   const exprHits = useMemo(
@@ -393,6 +442,44 @@ export default function AnalysisTab(props: Props) {
         </>
       )}
 
+      {/* --- Скрипт загрузки (выше находок: сюда ведёт клик по находке) --- */}
+      {scriptLines.length > 0 && (
+      <>
+      <h3>
+        Скрипт загрузки
+        {selected && hitLines.size > 0 && (
+          <> — строки {[...hitLines].sort((a, b) => a - b).join(', ')}</>
+        )}
+        {selected && <button className="link" onClick={() => setSelected(null)}> закрыть</button>}
+      </h3>
+      {!selected && (
+        <p className="muted small">
+          Нажмите на находку в таблице ниже — здесь подсветятся связанные с ней строки скрипта.
+        </p>
+      )}
+      {selected && hitLines.size === 0 && (
+        <p className="muted small">
+          Для этой находки нельзя указать строку: она относится к приложению в целом.
+        </p>
+      )}
+      {selected && hitLines.size > 0 && selected.detail && (
+        <p className="muted small">{selected.detail}</p>
+      )}
+      <div className="script-view" ref={scriptViewRef}>
+        {scriptLines.map((line, i) => (
+          <div
+            key={i}
+            data-line={i + 1}
+            className={`line${hitLines.has(i + 1) ? ' hit' : ''}`}
+          >
+            <span className="no">{i + 1}</span>
+            <span>{line}</span>
+          </div>
+        ))}
+      </div>
+      </>
+      )}
+
       {/* --- Находки --- */}
       <h3>Находки</h3>
       <div className="toolbar">
@@ -427,6 +514,23 @@ export default function AnalysisTab(props: Props) {
             {c} <span className="n">{counts.byCategory[c] ?? 0}</span>
           </button>
         ))}
+        <span className="sep" />
+        <button
+          className={scopeFilter.size === 0 ? 'active' : ''}
+          onClick={() => setScopeFilter(new Set())}
+        >
+          Все области
+        </button>
+        {SCOPES.map((sc) => (
+          <button
+            key={sc.id}
+            className={`chip${scopeFilter.has(sc.id) ? ' active' : ''}`}
+            onClick={() => setScopeFilter(toggle(scopeFilter, sc.id))}
+            title={`Находки в области «${sc.label}»`}
+          >
+            {sc.label} <span className="n">{counts.byScope[sc.id] ?? 0}</span>
+          </button>
+        ))}
         <input
           className="search"
           value={search}
@@ -454,6 +558,7 @@ export default function AnalysisTab(props: Props) {
             <th className="sortable" onClick={() => sortBy('object')}>Объект{arrow('object')}</th>
             <th className="sortable" onClick={() => sortBy('table')}>Таблица{arrow('table')}</th>
             <th className="sortable" onClick={() => sortBy('line')}>Строка{arrow('line')}</th>
+            <th>Область</th>
             <th>Рекомендация</th>
           </tr>
         </thead>
@@ -492,13 +597,20 @@ export default function AnalysisTab(props: Props) {
                 </td>
                 <td>{f.target?.name ?? '—'}</td>
                 <td>{f.table ?? (f.target?.kind === 'table' ? f.target.name : '—')}</td>
-                <td>{f.line ?? '—'}</td>
+                <td>
+                  {f.lines?.length
+                    ? f.lines.join(', ')
+                    : (f.line ?? '—')}
+                  {f.lines?.length && f.linesTotal && f.linesTotal > f.lines.length
+                    && <span className="muted small"> (из {f.linesTotal})</span>}
+                </td>
+                <td>{SCOPE_LABELS[f.scope ?? 'dashboard'] ?? '—'}</td>
                 <td className="muted">{f.recommendation}</td>
               </tr>
             );
           })}
           {filtered.length === 0 && (
-            <tr><td colSpan={8} className="muted">Ничего не найдено под текущими фильтрами.</td></tr>
+            <tr><td colSpan={9} className="muted">Ничего не найдено под текущими фильтрами.</td></tr>
           )}
         </tbody>
       </table>
@@ -529,34 +641,6 @@ export default function AnalysisTab(props: Props) {
               ))}
             </tbody>
           </table>
-        </>
-      )}
-
-      {/* --- Просмотр скрипта --- */}
-      {selected && (
-        <>
-          <h3>
-            Скрипт загрузки
-            {selected.line ? ` — ошибка в строке ${selected.line}` : ''}
-            <button className="link" onClick={() => setSelected(null)}> закрыть</button>
-          </h3>
-          {!selected.line && (
-            <p className="muted small">
-              Для этой находки нельзя указать строку: она относится к приложению в целом.
-            </p>
-          )}
-          {selected.detail && <p className="muted small">{selected.detail}</p>}
-          <div className="script-view">
-            {scriptLines.map((line, i) => (
-              <div
-                key={i}
-                className={`line${selected.line === i + 1 ? ' hit' : ''}`}
-              >
-                <span className="no">{i + 1}</span>
-                <span>{line}</span>
-              </div>
-            ))}
-          </div>
         </>
       )}
 

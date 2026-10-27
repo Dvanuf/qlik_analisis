@@ -148,7 +148,11 @@ async function runSmokeCheck(): Promise<void> {
 
         // Вкладка «Анализ»: поиск по выражению и сворачиваемые правки.
         // Сначала запускаем анализ файла-скрипта — иначе вкладка пустая.
-        const sampleScript = resolve(app.getAppPath(), '../out/smoke-script.qvs');
+        // В упакованном приложении Resources/app.asar доступен только для
+        // чтения — тестовый скрипт пишем в каталог пользователя.
+        const sampleScript = app.isPackaged
+          ? resolve(app.getPath('temp'), 'qa-smoke-script.qvs')
+          : resolve(app.getAppPath(), '../out/smoke-script.qvs');
         try {
           writeFileSync(sampleScript, [
             '// Раздел загрузки',
@@ -191,12 +195,40 @@ async function runSmokeCheck(): Promise<void> {
           (function () {
             var heads = Array.prototype.slice.call(document.querySelectorAll('h3'))
               .map(function (h) { return h.textContent.trim(); });
+            // Порядок блоков: «Скрипт загрузки» должен идти выше «Находок».
+            var scriptIdx = heads.findIndex(function (h) { return h.indexOf('Скрипт загрузки') === 0; });
+            var findingsIdx = heads.findIndex(function (h) { return h.indexOf('Находки') === 0; });
             return JSON.stringify({
               heads: heads,
               hasExprSearch: heads.some(function (h) { return h.indexOf('Поиск по выражению') === 0; }),
               hasFixes: heads.some(function (h) { return h.indexOf('Предлагаемые правки') === 0; }),
+              hasScript: scriptIdx >= 0,
+              scriptAboveFindings: scriptIdx >= 0 && findingsIdx >= 0 && scriptIdx < findingsIdx,
+              scriptLines: document.querySelectorAll('.script-view .line').length,
+              scopeChips: Array.prototype.slice.call(document.querySelectorAll('.toolbar .chip'))
+                .filter(function (c) { return c.textContent.indexOf('Скрипт загрузки') === 0; }).length,
               foldButton: document.querySelectorAll('button.link[aria-expanded]').length,
               foldLabel: (document.querySelector('button.link[aria-expanded]') || {}).textContent || ''
+            });
+          })()
+        `);
+
+        // Вкладка «Модель данных»: разделы модели и поиск по ним.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+              .filter(function (b) { return b.textContent.indexOf('Модель данных') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 600));
+        const model = await win.webContents.executeJavaScript(`
+          (function () {
+            return JSON.stringify({
+              chips: document.querySelectorAll('.toolbar .chip').length,
+              rows: document.querySelectorAll('table.rules tbody tr').length,
+              hasSearch: document.querySelectorAll('.toolbar input.search').length
             });
           })()
         `);
@@ -232,6 +264,7 @@ async function runSmokeCheck(): Promise<void> {
           library: JSON.parse(String(library)),
           connect: JSON.parse(String(connect)),
           analysis: JSON.parse(String(analysis)),
+          model: JSON.parse(String(model)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {
@@ -904,7 +937,13 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
   user?: string; password?: string; insecure?: boolean; platform?: string;
 }) => {
+  // Этапы анализа: пользователь видит, на чём идёт процесс.
+  const sendProgress = (stage: string, detail?: string) => {
+    mainWindow?.webContents.send('analyze:progress', { stage, detail, appId: opts.appId });
+  };
+  sendProgress('connect', 'Подключение к движку');
   const graph = await extractFromEngine({
+    onProgress: (p: { stage: string; detail?: string }) => sendProgress(p.stage, p.detail),
     // Адрес строго под выбранное приложение: в URL из поля может стоять
     // идентификатор другого приложения — открылось бы не то.
     url: appUrl(opts.url, opts.appId),
@@ -916,7 +955,9 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     password: opts.password,
     insecure: opts.insecure,
   });
+  sendProgress('rules', 'Проверка правил');
   const result = analyze(graph as never, { platform: opts.platform, rules: currentRules() });
+  sendProgress('report', 'Формирование отчёта');
   return {
     appName: result.summary.appName,
     appId: result.summary.appId,

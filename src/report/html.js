@@ -5,6 +5,13 @@ import { CATEGORIES, SEVERITIES } from '../rules/index.js';
 
 const SEVERITY_LABEL = { error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание' };
 
+/** Человекочитаемые названия областей находок. */
+const SCOPE_LABEL = {
+  script: 'Скрипт загрузки',
+  dashboard: 'Дашборд',
+  measures: 'Меры и измерения',
+};
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -79,8 +86,11 @@ export function renderHtml(result) {
         <td><b>${escapeHtml(f.title)}</b><div class="muted">${escapeHtml(f.message ?? '')}</div>
             ${f.detail ? `<div class="muted small">${escapeHtml(f.detail)}</div>` : ''}</td>
         <td>${escapeHtml(f.target?.kind ?? '')}<div class="muted small">${escapeHtml(f.target?.name ?? '')}</div></td>
-        <td>${f.line ? `строка ${f.line}` : (f.table ? escapeHtml(f.table) : '—')}
+        <td>${f.lines?.length
+    ? `строки ${f.lines.join(', ')}`
+    : (f.line ? `строка ${f.line}` : (f.table ? escapeHtml(f.table) : '—'))}
             ${f.column ? `<div class="muted small">колонка ${f.column}</div>` : ''}</td>
+        <td>${escapeHtml(SCOPE_LABEL[f.scope ?? 'dashboard'] ?? '')}</td>
         <td>${escapeHtml(f.recommendation ?? '')}</td>
       </tr>`).join('');
 
@@ -199,7 +209,7 @@ export function renderHtml(result) {
     <span class="muted" id="counter"></span>
   </div>
   <table id="findings">
-    <thead><tr><th>Уровень</th><th>Правило</th><th>Категория</th><th>Находка</th><th>Объект</th><th>Строка</th><th>Рекомендация</th></tr></thead>
+    <thead><tr><th>Уровень</th><th>Правило</th><th>Категория</th><th>Находка</th><th>Объект</th><th>Строка</th><th>Область</th><th>Рекомендация</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="7" class="muted">Находок нет — приложение чистое по заданным правилам.</td></tr>'}</tbody>
   </table>
 

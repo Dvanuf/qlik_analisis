@@ -7,6 +7,7 @@
  *  - таблица поля, ключевые поля, признак синтетического ключа.
  */
 import { extractReferences, canonicalFieldName } from './normalize.js';
+import { analyzeScriptUsage, emptyScriptUsage } from './script/usage.js';
 
 /**
  * @param {object} graph
@@ -100,7 +101,7 @@ export function buildIndex(graph, scriptModel = null) {
     if (f.key) entry.isKey = true;
   }
 
-  // 4.1. Поля, объявленные в скрипте, но не используемые во фронт-енде
+  // 4.1. Поля, объявленные в скрипте, но не используемые во фронт-энде
   for (const [key, original] of declaredFields) {
     const entry = touchField(original);
     entry.usedInScript = true;
@@ -124,6 +125,13 @@ export function buildIndex(graph, scriptModel = null) {
     objectsPerSheet.set(key, (objectsPerSheet.get(key) ?? 0) + 1);
   }
 
+  // 7. Использование в скрипте загрузки: какие таблицы и поля упоминаются
+  //    в скрипте, кроме собственного объявления. Без этого «неиспользуемая
+  //    таблица» звучит для таблиц, которые являются источниками других.
+  const scriptUsage = scriptModel
+    ? analyzeScriptUsage(scriptModel, graph)
+    : emptyScriptUsage();
+
   return {
     fieldUsage,
     variableUsage,
@@ -145,10 +153,18 @@ export function buildIndex(graph, scriptModel = null) {
      * пропускаются с объяснением, а не выдают массу ложных находок.
      */
     frontEndUsageKnown: frontEndUsageKnown(graph, fieldUsage),
-    /** Все поля, реально используемые во фронт-енде */
+    /** Все поля, реально используемые во фронт-энде */
     usedFields: new Set([...fieldUsage.values()].filter((f) => f.usedInFrontEnd).map((f) => f.id)),
     /** Поля, встречающиеся только в скрипте */
     scriptOnlyFields: new Set([...fieldUsage.values()].filter((f) => f.usedInScript && !f.usedInFrontEnd).map((f) => f.id)),
+    /**
+     * Использование в скрипте загрузки.
+     *
+     * `tables` — таблицы, которые упоминаются в скрипте (источники других
+     * таблиц, цели CONCATENATE, STORE). Их нельзя предлагать удалить.
+     * `fields` — поля, реально используемые в выражениях скрипта.
+     */
+    scriptUsage,
   };
 }
 

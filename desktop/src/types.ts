@@ -2,7 +2,7 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'connect' | 'analysis' | 'summary' | 'rules' | 'library';
+export type Tab = 'connect' | 'analysis' | 'summary' | 'model' | 'rules' | 'library';
 /**
  * Платформа приложения.
  * 'auto' — определить по данным сервера (по умолчанию): один и тот же
@@ -11,6 +11,14 @@ export type Tab = 'connect' | 'analysis' | 'summary' | 'rules' | 'library';
  */
 export type Platform = 'qlik-sense' | 'qlikview' | 'auto';
 export type Severity = 'error' | 'warning' | 'info';
+
+/**
+ * Область находки: где проблема находится в приложении.
+ * - script — загрузочный скрипт и модель данных;
+ * - dashboard — листы и объекты интерфейса;
+ * - measures — меры, измерения и их выражения.
+ */
+export type FindingScope = 'script' | 'dashboard' | 'measures';
 
 export type AppInfo = {
   appVersion: string; electron: string; chrome: string; node: string; v8: string;
@@ -56,6 +64,14 @@ export type Finding = {
   table?: string;
   /** Номер строки в скрипте. */
   line?: number;
+  /** Все строки скрипта, к которым относится находка. */
+  lines?: number[];
+  /** Всего строк в скрипте, связанных с находкой (может быть больше, чем показано). */
+  linesTotal?: number;
+  /** Область находки: скрипт / дашборд / меры. */
+  scope?: FindingScope;
+  /** Объекты в сгруппированной находке. */
+  objects?: string[];
   /** Подавлена находка (скрыта по умолчанию). */
   suppressed?: boolean;
   suppressReason?: string;
@@ -68,6 +84,7 @@ export type AnalysisResult = {
   summary: {
     findings: {
       total: number; byCategory: Record<string, number>; bySeverity: Record<string, number>;
+      byScope?: Record<string, number>;
       merged?: number; suppressed?: number;
     };
     counts: Record<string, number>;
@@ -113,6 +130,13 @@ export type AppItem = {
   /** Признак публикации — заполняется, если сервер его отдаёт. */
   published?: boolean | null;
   lastReload?: string | null;
+};
+
+/** Этап анализа приложения — для индикатора прогресса. */
+export type AnalyzeProgress = {
+  stage: string;
+  detail?: string;
+  appId?: string;
 };
 
 export type BatchProgress = {

@@ -124,6 +124,7 @@ export function buildEngineUrl(url, { csrfToken, appId } = {}) {
  *   user?: string, password?: string, qlikUser?: string, insecure?: boolean,
  *   cookie?: string, xrfKey?: string, csrfToken?: string, appId?: string,
  *   openTimeoutMs?: number,
+ *   onProgress?: ((p: {stage: string, detail?: string}) => void) | null,
  * }} config
  * @returns {Promise<object>} граф приложения
  */
@@ -131,7 +132,13 @@ export async function extractFromEngine(config) {
   const {
     url, schemaPath, apiKey, measurePerf = false,
     user, password, qlikUser, insecure = false, cookie, xrfKey, csrfToken, appId,
+    onProgress = null,
   } = config;
+
+  // Отчёт о ходе работы: интерфейс показывает, на каком этапе анализ.
+  const report = (stage, detail = '') => {
+    try { onProgress?.({ stage, detail }); } catch { /* прогресс не критичен */ }
+  };
 
   const schema = loadSchema(schemaPath);
   const engineUrl = buildEngineUrl(url, { csrfToken, appId });
@@ -228,10 +235,12 @@ export async function extractFromEngine(config) {
   };
 
   try {
+    report('layout', 'Свойства приложения');
     const layout = await attempt('appLayout', () => app.getAppLayout(), null);
     graph.appName = layout?.qTitle ?? '';
     graph.appId = layout?.qAppId ?? '';
 
+    report('script', 'Скрипт загрузки');
     const script = await attempt('script', () => app.getScript(), '');
     graph.script = typeof script === 'string' ? script : '';
     // Признаки обрезанного скрипта: правило S010 понижает важность, если текст пришёл не полностью.
@@ -243,10 +252,12 @@ export async function extractFromEngine(config) {
     // без этого в отчёте было видно лишь «ошибка где-то в скрипте».
     // Поле заполняется только при успешной проверке: пустой массив означает
     // «ошибок нет», а отсутствие поля — «проверка не выполнена».
+    report('scriptErrors', 'Проверка скрипта сервером');
     const scriptErrors = await attempt('scriptErrors', () => fetchScriptErrors(app), null);
     if (scriptErrors) graph.meta.scriptErrors = scriptErrors;
 
     // --- Модель данных (таблицы, поля, ключи) ---
+    report('dataModel', 'Таблицы и поля');
     const dataModel = await attempt('dataModel', async () => {
       const res = await app.getTablesAndKeys(
         { qRows: 1000, qCols: 10 }, { qRows: 10, qCols: 10 }, 15, false, false,
@@ -292,6 +303,7 @@ export async function extractFromEngine(config) {
     // --- Объекты приложения ---
     // Типы запрашиваем блоками: сервер отвергает вызов целиком, если в списке
     // есть незнакомый ему тип, — тогда потерялись бы сразу все объекты.
+    report('objects', 'Объекты и листы');
     const objectList = await attempt('objects', async () => {
       const { items, skipped: failed } = await fetchObjects(app, OBJECT_TYPES);
       for (const f of failed) {
@@ -336,6 +348,7 @@ export async function extractFromEngine(config) {
     }
 
     // --- Переменные: имена из скрипта, значения уточняем у движка ---
+    report('variables', 'Переменные');
     const varNames = new Set();
     const varRe = /\b(?:LET|SET)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/g;
     let m;
@@ -352,6 +365,7 @@ export async function extractFromEngine(config) {
     }
 
     // --- Связи между таблицами (правило про внешний join) ---
+    report('associations', 'Связи между таблицами');
     // Текст ответа сервера сохраняем: по нему видно, поддерживает ли сервер
     // метод и почему нет — иначе причина неприменимости R011 остаётся загадкой.
     const { associations, reason } = await fetchAssociations(app, graph.tables);
@@ -363,6 +377,7 @@ export async function extractFromEngine(config) {
     }
 
     // --- Закладки ---
+    report('bookmarks', 'Закладки');
     const bm = await attempt('bookmarks', async () => {
       const res = await app.getBookmarks({});
       return res?.qItems ?? [];

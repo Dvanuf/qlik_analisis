@@ -220,7 +220,7 @@ export const scriptRules = [
     severity: SEVERITY.S007,
     title: 'В скрипте нет DROP FIELD',
     description: 'Служебные поля остаются в модели данных и занимают память приложения.',
-    recommendation: 'Добавить DROP FIELD в конец скрипта для полей, не используемых во фронт-енде.',
+    recommendation: 'Добавить DROP FIELD в конец скрипта для полей, не используемых во фронт-энде.',
     run(ctx) {
       if (ctx.script.hasDropField) return [];
       const loaded = ctx.script.loads.length;
@@ -243,7 +243,7 @@ export const scriptRules = [
     run(ctx) {
       const out = [];
       const script = String(ctx.graph.script ?? '');
-      // Переменная может использоваться только во фронт-енде — без сведений
+      // Переменная может использоваться только во фронт-энде — без сведений
       // от движка это недоказуемо, поэтому без них проверка не выполняется.
       const hasFrontEnd = ctx.index?.frontEndUsageKnown === true;
       if (!hasFrontEnd) {

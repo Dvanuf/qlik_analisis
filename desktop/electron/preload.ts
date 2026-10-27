@@ -81,6 +81,12 @@ const api = {
   }) => ipcRenderer.invoke('core:export-report', payload),
   /** Сохраняет сводный отчёт по пакетному прогону. */
   exportSummary: (payload: { totals: unknown; results: unknown; platform?: string }) => ipcRenderer.invoke('core:export-summary', payload),
+  /** Этапы анализа приложения: подписка возвращает функцию отписки. */
+  onAnalyzeProgress: (cb: (p: { stage: string; detail?: string; appId?: string }) => void) => {
+    const listener = (_e: unknown, p: { stage: string; detail?: string; appId?: string }) => cb(p);
+    ipcRenderer.on('analyze:progress', listener);
+    return () => ipcRenderer.removeListener('analyze:progress', listener);
+  },
   /** Пошаговый вывод диагностики: подписка возвращает функцию отписки. */
   onDoctorStep: (cb: (step: { name: string; status: string; detail: string; hint?: string }) => void) => {
     const listener = (_e: unknown, step: { name: string; status: string; detail: string; hint?: string }) => cb(step);

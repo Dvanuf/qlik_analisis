@@ -17,12 +17,20 @@ export const FINDINGS_COLUMNS = [
   { key: 'severity', title: 'Важность' },
   { key: 'object', title: 'Объект' },
   { key: 'table', title: 'Таблица' },
+  { key: 'scope', title: 'Область' },
   { key: 'line', title: 'Строка' },
   { key: 'message', title: 'Текст' },
 ];
 
 /** Человекочитаемые названия важности. */
 const SEVERITY_LABELS = { error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание' };
+
+/** Человекочитаемые названия областей находок. */
+const SCOPE_LABELS = {
+  script: 'Скрипт загрузки',
+  dashboard: 'Дашборд',
+  measures: 'Меры и измерения',
+};
 
 /**
  * Превращает находки в строки плоской таблицы.
@@ -41,7 +49,8 @@ export function toFlatRows(findings, meta = {}) {
     severity: SEVERITY_LABELS[f.severity] ?? f.severity ?? '',
     object: f.target?.name ?? '',
     table: f.table ?? (f.target?.kind === 'table' ? f.target.name : ''),
-    line: f.line ?? '',
+    scope: SCOPE_LABELS[f.scope ?? 'dashboard'] ?? '',
+    line: f.lines?.length ? f.lines.join(', ') : (f.line ?? ''),
     message: f.message ?? '',
   }));
 }

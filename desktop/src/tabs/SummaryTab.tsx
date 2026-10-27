@@ -22,12 +22,15 @@ type Props = {
   onSaveHistory: () => void;
   onCompare: (baselineId: number) => void;
   onLoadHistory: () => void;
+  /** Детальный анализ одного приложения из сводки. */
+  onAnalyzeApp: (appId: string) => void;
 };
 
 export default function SummaryTab(props: Props) {
   const {
     batch, exportNote, onExport, onExportCsv, onExportXlsx,
     history, comparison, onlyNew, onOnlyNew, onSaveHistory, onCompare, onLoadHistory,
+    onAnalyzeApp,
   } = props;
 
   const [search, setSearch] = useState('');
@@ -201,7 +204,7 @@ export default function SummaryTab(props: Props) {
         <thead>
           <tr>
             <th>Приложение</th><th>Скор</th><th>Ошибок</th><th>Предупр.</th><th>Замечаний</th>
-            <th>Всего</th><th>Владелец</th><th>Поток</th><th>Тэги</th><th>Вид</th><th>Дата изменения</th><th>Статус</th>
+            <th>Всего</th><th>Владелец</th><th>Поток</th><th>Тэги</th><th>Вид</th><th>Дата изменения</th><th>Статус</th><th />
           </tr>
         </thead>
         <tbody>
@@ -219,6 +222,13 @@ export default function SummaryTab(props: Props) {
               <td>{r.published === true ? 'опубликовано' : (r.published === false ? 'личное' : '—')}</td>
               <td>{r.changedAt ? new Date(r.changedAt).toLocaleString('ru-RU') : '—'}</td>
               <td>{r.error ? <span className="err">{r.error}</span> : 'ок'}</td>
+              <td>
+                {!r.error && (
+                  <button className="link" onClick={() => onAnalyzeApp(r.appId)}>
+                    анализ
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

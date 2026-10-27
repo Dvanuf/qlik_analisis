@@ -5,6 +5,11 @@
  */
 import { canonicalFieldName } from '../normalize.js';
 
+/** Ключ для сравнения имён без квадратных скобок и в нижнем регистре. */
+function canon(name) {
+  return canonicalFieldName(name);
+}
+
 const CATEGORY = 'Resources';
 
 export const resourceRules = [
@@ -28,6 +33,9 @@ export const resourceRules = [
         if (entry.usedInFrontEnd) continue;
         if (entry.isKey) continue; // ключевые поля служат связями
         if (!entry.table) continue; // происхождение поля неизвестно — не судим
+        // Поле, которое участвует в выражениях скрипта, удалять нельзя:
+        // «неиспользуемым» оно не является (см. R002).
+        if (ctx.index.scriptUsage?.fields.has(canon(entry.name))) continue;
         const meta = ctx.index.fieldMeta.get(entry.id);
         findings.push({
           ruleId: 'R001',
@@ -35,7 +43,7 @@ export const resourceRules = [
           severity: 'warning',
           title: 'Неиспользуемое поле',
           target: { kind: 'field', name: entry.name, id: entry.name },
-          message: `Поле «${entry.name}» (таблица ${entry.table}) не используется во фронт-енде`,
+          message: `Поле «${entry.name}» (таблица ${entry.table}) не используется ни во фронт-энде, ни в скрипте`,
           detail: meta?.rows != null
             ? `Строк: ${meta.rows}, уникальных значений: ${meta.distinct ?? 'н/д'}`
             : 'Объём данных неизвестен — требуется подключение к движку.',
@@ -57,7 +65,7 @@ export const resourceRules = [
     recommendation: 'Проверить, можно ли убрать поле из загрузки целиком, а не только удалить его в конце скрипта.',
     run(ctx) {
       const findings = [];
-      // «Используется только в скрипте» — утверждение о фронт-енде:
+      // «Используется только в скрипте» — утверждение о фронт-энде:
       // без сведений об использовании полей его нельзя доказать.
       if (!ctx.index?.frontEndUsageKnown) {
         return {
@@ -68,6 +76,9 @@ export const resourceRules = [
       for (const key of ctx.index.scriptOnlyFields) {
         const entry = ctx.index.fieldUsage.get(key);
         if (!entry) continue;
+        // Поле, которое реально участвует в выражениях скрипта, —
+        // не «только в скрипте», а именно участник преобразований.
+        if (!ctx.index.scriptUsage?.fields.has(canon(entry.name))) continue;
         findings.push({
           ruleId: 'R002',
           category: CATEGORY,
@@ -88,7 +99,7 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'warning',
     title: 'Неиспользуемая таблица',
-    description: 'Ни одно поле таблицы не используется во фронт-енде — таблицу можно удалить.',
+    description: 'Ни одно поле таблицы не используется во фронт-энде и в скрипте — таблицу можно удалить.',
     recommendation: 'Добавить DROP TABLE в конец скрипта загрузки.',
     run(ctx) {
       const findings = [];
@@ -103,13 +114,19 @@ export const resourceRules = [
         if (!fields.length) continue;
         const used = fields.filter((f) => ctx.index.usedFields.has(canonicalFieldName(f)));
         if (used.length > 0) continue;
+        // Таблица, которую скрипт использует (источник другой таблицы,
+        // цель CONCATENATE, STORE), удалять нельзя — загрузка сломается.
+        if (ctx.index.scriptUsage?.tables.has(canon(t.name))) continue;
+        // Поля таблицы могут использоваться в выражениях скрипта: тогда она
+        // тоже участвует в загрузке, даже если во фронт-энде не видна.
+        if (fields.some((f) => ctx.index.scriptUsage?.fields.has(canon(f)))) continue;
         findings.push({
           ruleId: 'R003',
           category: CATEGORY,
           severity: 'warning',
           title: 'Неиспользуемая таблица',
           target: { kind: 'table', name: t.name, id: t.name },
-          message: `Таблица «${t.name}» (${fields.length} полей) не используется во фронт-енде`,
+          message: `Таблица «${t.name}» (${fields.length} полей) не используется ни во фронт-энде, ни в скрипте`,
           detail: t.rows != null ? `Строк: ${t.rows}` : 'Объём данных неизвестен.',
           impact: { rows: t.rows ?? null },
           recommendation: 'Добавить DROP TABLE в конец скрипта загрузки.',

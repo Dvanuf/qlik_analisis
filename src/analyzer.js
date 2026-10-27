@@ -10,6 +10,9 @@ import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
 import { computeScore } from './score.js';
 import { buildDataModelSheets } from './report/data-model.js';
+import { buildScriptIndex, findingLines } from './findings/locations.js';
+import { groupFindings } from './findings/group.js';
+import { SCOPES, SCOPE_LABELS } from './rules/scopes.js';
 
 /**
  * @param {object} graph — результат экстрактора
@@ -33,8 +36,12 @@ export function analyze(graph, config = {}) {
   const deduped = config.dedupe === false ? rawFindings : dedupeFindings(rawFindings);
   const dedupe = dedupeStats(rawFindings, deduped);
 
+  // Однотипные находки (например, «Несогласованное именование» по каждому
+  // объекту) сворачиваются в одну строку со списком объектов.
+  const grouped = groupFindings(deduped);
+
   // Подавление: комментарии `// qa-ignore` в скрипте и глобальные исключения.
-  const { findings, suppressed } = applySuppression(deduped, {
+  const { findings, suppressed } = applySuppression(grouped, {
     script: graph.script,
     exclusions: config.suppressExclusions ?? config.rules?.suppress ?? [],
     appName: graph.appName,
@@ -43,10 +50,25 @@ export function analyze(graph, config = {}) {
 
   const byCategory = Object.fromEntries(CATEGORIES.map((c) => [c, 0]));
   const bySeverity = Object.fromEntries(SEVERITIES.map((s) => [s, 0]));
+  const byScope = Object.fromEntries(SCOPES.map((sc) => [sc, 0]));
   for (const f of findings) {
     byCategory[f.category] = (byCategory[f.category] ?? 0) + 1;
     bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+    byScope[f.scope ?? 'dashboard'] = (byScope[f.scope ?? 'dashboard'] ?? 0) + 1;
   }
+
+  // Строки скрипта для каждой находки: по ним интерфейс показывает место
+  // проблемы и подсвечивает все найденные строки сразу.
+  const scriptIndex = buildScriptIndex(
+    scriptModel,
+    String(graph.script ?? '').split(/\r?\n/),
+  );
+  const withLines = (list) => list.map((f) => {
+    const { lines, total } = findingLines(f, scriptIndex, graph);
+    return lines.length ? { ...f, lines, linesTotal: total } : f;
+  });
+  const locatedFindings = withLines(findings);
+  const locatedSuppressed = withLines(suppressed);
 
   // Оценка «веса» неиспользуемых полей: сумма строк по удаляемым полям.
   const removable = findings.filter((f) => f.fix?.kind === 'dropField' && f.impact?.rows != null);
@@ -93,9 +115,10 @@ export function analyze(graph, config = {}) {
       },
     },
     findings: {
-      total: findings.length,
+      total: locatedFindings.length,
       byCategory,
       bySeverity,
+      byScope,
       // Сколько одинаковых находок свёрнуто и сколько подавлено.
       merged: dedupe.merged,
       suppressed: suppressed.length,
@@ -117,8 +140,8 @@ export function analyze(graph, config = {}) {
   return {
     graph,
     index,
-    findings,
-    suppressed,
+    findings: locatedFindings,
+    suppressed: locatedSuppressed,
     ruleStats,
     errors,
     summary,
