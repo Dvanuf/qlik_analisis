@@ -69,7 +69,7 @@ export function topRules(results, limit = 10) {
  * @param {object[]} results
  * @returns {Array<{appId: string, title: string, score: number|null,
  *   errors: number, warnings: number, infos: number, total: number,
- *   owner: string|null, stream: string|null, tags: string[],
+ *   owner: string|null, stream: string|null, tags: string[], published: boolean|null,
  *   changedAt: string|null, error: string|null}>}
  */
 export function summaryRows(results) {
@@ -86,6 +86,7 @@ export function summaryRows(results) {
       owner: r.owner ?? null,
       stream: r.stream ?? null,
       tags: r.tags ?? [],
+      published: r.published ?? null,
       changedAt: r.lastReload ?? null,
       error: r.error ?? null,
     };

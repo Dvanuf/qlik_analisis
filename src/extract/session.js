@@ -2,8 +2,8 @@
  * Открытие сессии к движку Qlik (QIX Engine API) через Enigma.js.
  * Общий код для CLI, пакетного режима и десктоп-приложения.
  */
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
+import { httpGetJson } from './http.js';
+import { fetchHubApps } from './hub-api.js';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { buildEngineUrl, ENIGMA_SCHEMA } from './engine.js';
@@ -11,7 +11,7 @@ import { hubRootUrl, hubAppUrl, engineDataUrl, appIdFromUrl } from './url.js';
 import { maskUrl } from '../logging/mask.js';
 
 /**
- * Пути REST API хаба, где может лежать список приложений.
+ * Запасные пути REST API хаба (основной — /api/hub/v1/apps, см. hub-api.js).
  * У развёртываний база бывает и в корне, и под /hub/.
  */
 const HUB_APP_PATHS = [
@@ -73,61 +73,24 @@ export async function openEngineSession(options) {
 }
 
 /**
- * HTTP-запрос без внешних зависимостей (с учётом самоподписанного сертификата).
- * Редиректы (301/302/303/307/308) следуются автоматически — хаб часто
- * отвечает перенаправлением, а заголовки авторизации при этом сохраняются.
- */
-function httpGetJson(url, { headers = {}, insecure = false, redirects = 5 } = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const req = (u.protocol === 'http:' ? httpRequest : httpsRequest)(u, {
-      method: 'GET',
-      headers: { Accept: 'application/json', ...headers },
-      ...(insecure ? { rejectUnauthorized: false } : {}),
-    }, (res) => {
-      const status = res.statusCode ?? 0;
-      const location = res.headers.location;
-      if ([301, 302, 303, 307, 308].includes(status) && location && redirects > 0) {
-        res.resume();
-        const next = new URL(location, u).toString();
-        httpGetJson(next, { headers, insecure, redirects: redirects - 1 }).then(resolve, reject);
-        return;
-      }
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        const body = Buffer.concat(chunks).toString('utf8');
-        if (status >= 400) {
-          reject(new Error(`HTTP ${status}: ${body.slice(0, 200)}`));
-          return;
-        }
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          reject(new Error(`Ответ не является JSON: ${body.slice(0, 200)}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.end();
-  });
-}
-
-/**
- * Поток, владелец и тэги приложения.
+ * Поток, владелец, тэги и признак публикации приложения.
  *
  * Не все платформы их отдают: у QlikView Doc API в GetDocList таких полей нет,
  * тогда в интерфейсе показывается «не указан», а фильтры группируют такие
  * приложения вместе.
  *
+ * В Qlik Sense движок кладёт поток и признак публикации не на верхний уровень
+ * элемента, а в qMeta (`qMeta.stream` = { id, name }) — раньше разбирали только
+ * верхний уровень, поэтому поток не находился никогда.
+ *
  * @param {object} d — элемент ответа сервера
  */
 export function appMeta(d) {
-  const pick = (...keys) => {
+  const pick = (source, ...keys) => {
     for (const k of keys) {
-      const v = d?.[k];
+      const v = source?.[k];
       if (typeof v === 'string' && v.trim()) return v.trim();
-      // Некоторые развёртывания отдают объект: { qName: '...' } или { name: '...' }.
+      // Некоторые развёртывания отдают объект: { qName: '…' } или { name: '…' }.
       if (v && typeof v === 'object') {
         const inner = v.qName ?? v.name ?? v.value ?? v.id;
         if (typeof inner === 'string' && inner.trim()) return inner.trim();
@@ -135,10 +98,17 @@ export function appMeta(d) {
     }
     return null;
   };
+  // qMeta — вложенный объект движка: поток и признак публикации.
+  const qm = (d && typeof d.qMeta === 'object' && d.qMeta) || {};
+  const published = typeof d?.published === 'boolean'
+    ? d.published
+    : (typeof qm.published === 'boolean' ? qm.published : null);
   return {
-    stream: pick('qStream', 'stream', 'qAppStream', 'qGroup', 'group'),
-    owner: pick('qOwner', 'owner', 'qAppOwner', 'qUser', 'user', 'qModifiedBy'),
+    stream: pick(d, 'qStream', 'stream', 'qAppStream', 'qGroup', 'group')
+      ?? pick(qm, 'stream', 'qStream'),
+    owner: pick(d, 'qOwner', 'owner', 'qAppOwner', 'qUser', 'user', 'qModifiedBy'),
     tags: pickTags(d),
+    published,
   };
 }
 
@@ -175,7 +145,12 @@ export function pickTags(d) {
 }
 
 /**
- * Список приложений через REST API хаба (Qlik Sense): GET /api/v1/apps.
+ * Список приложений через REST API хаба (Qlik Sense).
+ *
+ * Сначала — основной адрес REST API хаба `/api/hub/v1/apps` (формат JSON:API):
+ * только он отдаёт имя владельца и свойства приложения (тэги). Старое
+ * расположение `/api/v1/apps` осталось запасным путём — на части развёртываний
+ * оно отдаёт 501.
  *
  * Требует сессионную cookie `X-Qlik-Session` и ключ `X-Qlik-XrfKey` —
  * их приложение получает при входе в хаб.
@@ -185,6 +160,25 @@ export function pickTags(d) {
  */
 export async function listAppsViaHub({ url, cookie, xrfKey, insecure, log = null }) {
   if (!cookie) return null;
+
+  // 1. REST API хаба в формате JSON:API — источник имени владельца и тэгов.
+  const hub = await fetchHubApps({ url, cookie, xrfKey, insecure });
+  if (hub.ok) {
+    log?.(`хаб ${hub.note}`);
+    return [...hub.byId.values()].map((a) => ({
+      id: a.id,
+      title: a.title,
+      size: a.size,
+      lastReload: a.lastReload,
+      stream: a.stream,
+      owner: a.owner,
+      tags: a.tags,
+      published: a.published,
+    }));
+  }
+  log?.(`хаб JSON:API недоступен: ${hub.note}`);
+
+  // 2. Старое расположение REST API: база бывает и в корне, и под /hub/.
   let u;
   try {
     u = new URL(hubRootUrl(url));
@@ -195,7 +189,6 @@ export async function listAppsViaHub({ url, cookie, xrfKey, insecure, log = null
   }
   const headers = { Cookie: cookie };
   if (xrfKey) headers['X-Qlik-XrfKey'] = xrfKey;
-  // Пути REST API хаба: у развёртываний база бывает и /, и /hub/.
   for (const path of HUB_APP_PATHS) {
     try {
       u.pathname = path;
@@ -262,11 +255,30 @@ export async function enrichAppsWithHubMeta(apps, options = {}) {
       stream: meta.stream ?? app.stream ?? null,
       owner: meta.owner ?? app.owner ?? null,
       tags: (meta.tags?.length ? meta.tags : (app.tags ?? [])),
+      published: meta.published ?? app.published ?? null,
       lastReload: app.lastReload ?? meta.lastReload ?? null,
     };
   });
   options.log?.(`хаб: метаданные ${enriched} из ${list.length} приложений`);
   return out;
+}
+
+/**
+ * Покрытие метаданных по списку приложений — строка для диагностики.
+ *
+ * Показывает, сколько приложений получили поток, владельца и тэги:
+ * по пустому фильтру в интерфейсе не видно, данных нет или не пришли.
+ *
+ * @param {object[]} apps
+ * @returns {string}
+ */
+export function metaCoverage(apps) {
+  const list = apps ?? [];
+  const total = list.length;
+  const count = (fn) => list.filter((a) => fn(a)).length;
+  return `метаданные: поток ${count((a) => a.stream)}/${total}, `
+    + `владелец ${count((a) => a.owner)}/${total}, `
+    + `тэги ${count((a) => (a.tags ?? []).length)}/${total}`;
 }
 
 /**
@@ -280,8 +292,10 @@ export async function enrichAppsWithHubMeta(apps, options = {}) {
  * а признак другой платформы, поэтому методы подбираются по очереди.
  *
  * @param {{
- *   url: string, cookie?: string, xrfKey?: string, csrfToken?: string,
+ *   url?: string, cookie?: string, xrfKey?: string, csrfToken?: string,
  *   user?: string, password?: string, insecure?: boolean,
+ *   log?: ((m: string) => void)|null, notes?: string[],
+ *   getDocList?: () => Promise<object[]>,
  * }} options
  * @returns {Promise<object[]>}
  */
@@ -308,9 +322,13 @@ export async function listApps(options = {}) {
   // Что именно пробовали — попадёт в текст ошибки, чтобы не гадать.
   // Адреса маскируются: в URL может быть CSRF-токен.
   const notes = [];
+  // Приёмник диагностики: вызывающий (десктоп) собирает объяснения, почему
+  // метаданных нет, и показывает их пользователю.
+  const sink = Array.isArray(options.notes) ? options.notes : null;
   const note = (m) => {
     const safe = maskUrl(String(m));
     notes.push(safe);
+    sink?.push(safe);
     log?.(safe);
   };
 
@@ -342,7 +360,9 @@ export async function listApps(options = {}) {
         ...appMeta(d),
       }));
       // Список из движка не содержит потока, владельца и тэгов — берём их у хаба.
-      return enrichAppsWithHubMeta(apps, hubOptions);
+      const enriched = await enrichAppsWithHubMeta(apps, hubOptions);
+      note(metaCoverage(enriched));
+      return enriched;
     } catch (err) {
       lastError = err;
       note(`движок ${candidate}: ${err?.message ?? err}`);
@@ -353,7 +373,10 @@ export async function listApps(options = {}) {
 
   // 2. REST API хаба — запасной путь (на части развёртываний REST отдаёт 501).
   const viaHub = await listAppsViaHub({ url, cookie, xrfKey, insecure, log: note });
-  if (viaHub) return viaHub;
+  if (viaHub) {
+    note(metaCoverage(viaHub));
+    return viaHub;
+  }
 
   throw new Error(
     `Не удалось получить список приложений: ${lastError?.message ?? 'неизвестная ошибка'}. `

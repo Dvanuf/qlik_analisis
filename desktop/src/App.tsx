@@ -30,7 +30,7 @@ declare global {
       listApps(opts: {
         url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean;
-      }): Promise<AppItem[] | { error: string }>;
+      }): Promise<AppItem[] | { apps: AppItem[]; notes: string[] } | { error: string }>;
       analyzeApp(opts: {
         url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean; platform?: string;
@@ -123,6 +123,8 @@ export default function App() {
   const [insecure, setInsecure] = useState(() => localStorage.getItem('qa.insecure') !== '0');
 
   const [apps, setApps] = useState<AppItem[]>([]);
+  /** Диагностика метаданных: что ответил хаб и с каким покрытием. */
+  const [metaNote, setMetaNote] = useState<string | null>(null);
   const [appId, setAppId] = useState('');
   // Приложения, отмеченные для пакетного анализа.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -302,9 +304,16 @@ export default function App() {
       const res = await window.qa.listApps(conn);
       if (Array.isArray(res)) {
         setApps(res);
+        setMetaNote(null);
         if (!appId && res[0]) setAppId(res[0].id);
+      } else if ('apps' in res) {
+        setApps(res.apps);
+        // Диагностика: показываем, откуда взялись метаданные и какое покрытие.
+        setMetaNote(res.notes.length ? res.notes.join(' · ') : null);
+        if (!appId && res.apps[0]) setAppId(res.apps[0].id);
       } else {
         setApps([]);
+        setMetaNote(null);
         setDoctorSteps([{ name: 'Список приложений', status: 'FAIL', detail: res.error }]);
         if (isAuthError(res.error)) {
           setSessionError('Хаб отклонил запрос списка приложений (403) — сессия истекла или не получена.');
@@ -684,6 +693,7 @@ export default function App() {
           doctorSteps={doctorSteps}
           ruleInfo={ruleInfo}
           hubStatus={hubStatus}
+          metaNote={metaNote}
           busy={busy}
           signingIn={signingIn}
           sessionAt={sessionAt}

@@ -888,7 +888,12 @@ ipcMain.handle('core:list-apps', async (_e, opts: {
     // GetDocList для QlikView (на «чужой» метод сервер отвечает «Method not found»).
     // Сессию открывает сам listApps: лишняя сессия здесь только мешала бы
     // (движок не отдаёт два открытых документа подряд).
-    return await listApps(opts);
+    // notes — диагностика источников метаданных: какие адреса отвечали и
+    // с каким покрытием (поток/владелец/тэги). Без неё пустой фильтр
+    // выглядит как «сервер не отдал», хотя причина может быть в другом.
+    const notes: string[] = [];
+    const apps = await listApps({ ...opts, notes });
+    return { apps, notes };
   } catch (err) {
     return { error: maskSecrets(String((err as Error)?.message ?? err)) };
   }

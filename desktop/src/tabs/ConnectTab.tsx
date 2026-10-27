@@ -39,6 +39,8 @@ type Props = {
   /** Сведения о каталоге правил — чтобы показывать реальное число правил. */
   ruleInfo: RuleInfo | null;
   hubStatus: string;
+  /** Диагностика метаданных: какие источники отвечали и с каким покрытием. */
+  metaNote: string | null;
   busy: string;
   batchRunning: boolean;
   batchProgress: BatchProgress | null;
@@ -71,7 +73,7 @@ export default function ConnectTab(props: Props) {
     url, onUrl, insecure, onInsecure, platform, onPlatform,
     user, onUser, password, onPassword, cookie, onCookie, xrfKey, onXrfKey, csrfToken, onCsrfToken,
     apps, appId, onAppId, selectedIds, onSelectedIds,
-    doctorSteps, hubStatus, busy, batchRunning, batchProgress, ruleInfo,
+    doctorSteps, hubStatus, metaNote, busy, batchRunning, batchProgress, ruleInfo,
     signingIn, sessionAt, sessionError,
     onSignIn, onLoadApps, onAnalyze, onAnalyzeAll, onAnalyzeFile, onDoctor, onCancelBatch,
     onRefreshSession,
@@ -82,6 +84,7 @@ export default function ConnectTab(props: Props) {
   const [streamFilter, setStreamFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
+  const [scopeFilter, setScopeFilter] = useState('all');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [howtoOpen, setHowtoOpen] = useState(() => localStorage.getItem('qa.howto.open') !== '0');
   const comboRef = useRef<HTMLDivElement | null>(null);
@@ -142,9 +145,15 @@ export default function ConnectTab(props: Props) {
       if (streamFilter !== 'all' && (a.stream || 'не указан') !== streamFilter) return false;
       if (ownerFilter !== 'all' && (a.owner || 'не указан') !== ownerFilter) return false;
       if (tagFilter !== 'all' && !(a.tags ?? []).includes(tagFilter)) return false;
+      // Вид приложения: опубликовано в потоке или личное.
+      if (scopeFilter !== 'all') {
+        const isPublished = a.published === true;
+        if (scopeFilter === 'published' && !isPublished) return false;
+        if (scopeFilter === 'personal' && isPublished) return false;
+      }
       return true;
     });
-  }, [apps, query, streamFilter, ownerFilter, tagFilter]);
+  }, [apps, query, streamFilter, ownerFilter, tagFilter, scopeFilter]);
 
   const currentApp = apps.find((a) => a.id === appId) ?? null;
 
@@ -380,10 +389,22 @@ export default function ConnectTab(props: Props) {
                 {tags.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </label>
+            <label>
+              Вид:{' '}
+              <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)}>
+                <option value="all">все</option>
+                <option value='published'>опубликованные</option>
+                <option value='personal'>личные</option>
+              </select>
+            </label>
             <span className="muted small">
               Показано {filtered.length} из {apps.length}
             </span>
           </div>
+
+          {metaNote && (
+            <p className='muted small'>{metaNote}</p>
+          )}
 
           {!metaAvailable && (
             <p className="muted small">

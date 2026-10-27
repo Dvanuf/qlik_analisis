@@ -110,6 +110,8 @@ export type AppItem = {
   stream?: string | null; owner?: string | null;
   /** Тэги приложения — заполняются, если сервер их отдаёт. */
   tags?: string[];
+  /** Признак публикации — заполняется, если сервер его отдаёт. */
+  published?: boolean | null;
   lastReload?: string | null;
 };
 
@@ -127,6 +129,8 @@ export type BatchItem = {
   owner?: string | null;
   /** Тэги приложения (если сервер их отдаёт). */
   tags?: string[];
+  /** Признак публикации (если сервер его отдаёт). */
+  published?: boolean | null;
   /** Дата прогона и дата изменения приложения. */
   at?: string;
   lastReload?: string | null;

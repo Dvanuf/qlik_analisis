@@ -35,6 +35,7 @@ export default function SummaryTab(props: Props) {
   const [streamFilter, setStreamFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
   const [sevFilter, setSevFilter] = useState('all');
+  const [scopeFilter, setScopeFilter] = useState('all');
 
   const results = batch?.results ?? [];
   const heatmap = useMemo(() => buildHeatmap(results), [results]);
@@ -54,6 +55,11 @@ export default function SummaryTab(props: Props) {
       if (ownerFilter !== 'all' && (r.owner ?? 'не указан') !== ownerFilter) return false;
       if (streamFilter !== 'all' && (r.stream ?? 'не указан') !== streamFilter) return false;
       if (tagFilter !== 'all' && !(r.tags ?? []).includes(tagFilter)) return false;
+      if (scopeFilter !== 'all') {
+        const isPublished = r.published === true;
+        if (scopeFilter === 'published' && !isPublished) return false;
+        if (scopeFilter === 'personal' && isPublished) return false;
+      }
       if (sevFilter === 'error' && r.errors === 0) return false;
       if (sevFilter === 'warning' && r.warnings === 0) return false;
       if (sevFilter === 'info' && r.infos === 0) return false;
@@ -63,7 +69,7 @@ export default function SummaryTab(props: Props) {
       }
       return true;
     });
-  }, [rows, ownerFilter, streamFilter, tagFilter, sevFilter, search]);
+  }, [rows, ownerFilter, streamFilter, tagFilter, sevFilter, scopeFilter, search]);
 
   /** Уровень заливки ячейки тепловой карты: 0 — пусто, 4 — максимум. */
   const heatLevel = (value: number) => {
@@ -177,6 +183,11 @@ export default function SummaryTab(props: Props) {
           <option value="all">тэги: все</option>
           {tags.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)} aria-label="Фильтр по виду приложения">
+          <option value='all'>вид: все</option>
+          <option value='published'>опубликованные</option>
+          <option value='personal'>личные</option>
+        </select>
         <input
           className="search"
           value={search}
@@ -190,7 +201,7 @@ export default function SummaryTab(props: Props) {
         <thead>
           <tr>
             <th>Приложение</th><th>Скор</th><th>Ошибок</th><th>Предупр.</th><th>Замечаний</th>
-            <th>Всего</th><th>Владелец</th><th>Поток</th><th>Тэги</th><th>Дата изменения</th><th>Статус</th>
+            <th>Всего</th><th>Владелец</th><th>Поток</th><th>Тэги</th><th>Вид</th><th>Дата изменения</th><th>Статус</th>
           </tr>
         </thead>
         <tbody>
@@ -205,6 +216,7 @@ export default function SummaryTab(props: Props) {
               <td>{r.owner ?? 'не указан'}</td>
               <td>{r.stream ?? 'не указан'}</td>
               <td>{(r.tags ?? []).length ? (r.tags ?? []).join(', ') : '—'}</td>
+              <td>{r.published === true ? 'опубликовано' : (r.published === false ? 'личное' : '—')}</td>
               <td>{r.changedAt ? new Date(r.changedAt).toLocaleString('ru-RU') : '—'}</td>
               <td>{r.error ? <span className="err">{r.error}</span> : 'ок'}</td>
             </tr>

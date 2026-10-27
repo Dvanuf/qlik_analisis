@@ -64,8 +64,14 @@ app.whenReady().then(async () => {
   if (!appIds.length) {
     try {
       const apps = await listApps(opts);
-      appIds = apps.slice(0, 1).map((a) => a.appId);
+      appIds = apps.slice(0, 1).map((a) => a.id);
       console.log(`Приложений на сервере: ${apps.length}`);
+      // Покрытие метаданных: по пустому фильтру не видно, что сервер не отдал.
+      const withStream = apps.filter((a) => a.stream).length;
+      const withOwner = apps.filter((a) => a.owner).length;
+      const withTags = apps.filter((a) => (a.tags ?? []).length).length;
+      console.log(`  метаданные: поток ${withStream}/${apps.length}, `
+        + `владелец ${withOwner}/${apps.length}, тэги ${withTags}/${apps.length}`);
     } catch (err) {
       console.log(`Не удалось получить список приложений: ${err?.message ?? err}`);
     }
