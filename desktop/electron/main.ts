@@ -146,6 +146,61 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
 
+        // Вкладка «Анализ»: поиск по выражению и сворачиваемые правки.
+        // Сначала запускаем анализ файла-скрипта — иначе вкладка пустая.
+        const sampleScript = resolve(app.getAppPath(), '../out/smoke-script.qvs');
+        try {
+          writeFileSync(sampleScript, [
+            '// Раздел загрузки',
+            'Customers:',
+            'LOAD',
+            '  ID,',
+            '  Name,',
+            '  Comment',
+            'FROM \'lib://Data/Customers.qvd\';',
+            '',
+          ].join('\n'), 'utf8');
+          // Диалог выбора файла подменяем: в smoke-режиме он не нужен.
+          const realDialog = dialog.showOpenDialog;
+          dialog.showOpenDialog = (async () => ({
+            canceled: false, filePaths: [sampleScript],
+          })) as typeof dialog.showOpenDialog;
+          await win.webContents.executeJavaScript(`
+            (function () {
+              var btn = Array.prototype.slice.call(document.querySelectorAll('button'))
+                .filter(function (b) { return b.textContent.indexOf('Анализ файла') === 0; })[0];
+              if (btn) btn.click();
+              return true;
+            })()
+          `);
+          await new Promise((r) => setTimeout(r, 2000));
+          dialog.showOpenDialog = realDialog;
+        } catch (err) {
+          console.error('SMOKE: анализ файла не выполнен', err);
+        }
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+              .filter(function (b) { return b.textContent.indexOf('Анализ') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 700));
+        const analysis = await win.webContents.executeJavaScript(`
+          (function () {
+            var heads = Array.prototype.slice.call(document.querySelectorAll('h3'))
+              .map(function (h) { return h.textContent.trim(); });
+            return JSON.stringify({
+              heads: heads,
+              hasExprSearch: heads.some(function (h) { return h.indexOf('Поиск по выражению') === 0; }),
+              hasFixes: heads.some(function (h) { return h.indexOf('Предлагаемые правки') === 0; }),
+              foldButton: document.querySelectorAll('button.link[aria-expanded]').length,
+              foldLabel: (document.querySelector('button.link[aria-expanded]') || {}).textContent || ''
+            });
+          })()
+        `);
+
         const image = await win.webContents.capturePage();
         // В упакованном приложении app.asar доступен только для чтения —
         // скриншот пишем в каталог пользователя.
@@ -176,6 +231,7 @@ async function runSmokeCheck(): Promise<void> {
           catalog: JSON.parse(String(catalog)),
           library: JSON.parse(String(library)),
           connect: JSON.parse(String(connect)),
+          analysis: JSON.parse(String(analysis)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {
@@ -266,6 +322,12 @@ ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
     suppressed: result.suppressed,
     patch: result.patch,
     script: (graph as { script?: string }).script ?? '',
+    // Ошибки скрипта по данным сервера — с номером строки.
+    scriptErrors: (graph as { meta?: { scriptErrors?: unknown } })?.meta?.scriptErrors ?? [],
+    // Модель данных и перечень выражений — для выгрузки в Excel и поиска.
+    dataModel: result.dataModel,
+    expressionIndex: result.expressionIndex,
+    outline: result.outline,
     skipped: result.summary.skipped,
   };
 });
@@ -504,6 +566,20 @@ ipcMain.handle('core:export-findings-xlsx', async (_e, payload: { rows: Record<s
   const file = resolve(dir, `${payload.fileName ?? 'Находки'} ${stamp}.xlsx`);
   const rows = (payload.rows ?? []).map((r) => FINDINGS_COLUMNS.map((c) => r[c.key] ?? ''));
   writeFileSync(file, buildXlsx(FINDINGS_COLUMNS.map((c) => c.title), rows), 'utf8');
+  return { path: file };
+});
+
+/** Выгрузка модели данных приложения в Excel (листы на таблицы, поля, объекты). */
+ipcMain.handle('core:export-data-model', async (_e, payload: {
+  sheets: { name: string; headers: string[]; rows: (string | number)[][] }[];
+  fileName?: string;
+}) => {
+  const { buildXlsxBook } = await import('../../src/report/xlsx.js');
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const file = resolve(dir, `${payload.fileName ?? 'Модель данных'} ${stamp}.xlsx`);
+  writeFileSync(file, buildXlsxBook(payload.sheets ?? []), 'utf8');
   return { path: file };
 });
 
@@ -845,6 +921,12 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     patch: result.patch,
     ruleStats: result.ruleStats,
     script: (graph as { script?: string }).script ?? '',
+    // Ошибки скрипта по данным сервера — с номером строки.
+    scriptErrors: (graph as { meta?: { scriptErrors?: unknown } })?.meta?.scriptErrors ?? [],
+    // Модель данных и метаданные — для выгрузки в Excel.
+    dataModel: result.dataModel,
+    // Перечень выражений — для поиска по выражению.
+    expressionIndex: result.expressionIndex,
     // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
     outline: result.outline,
   };

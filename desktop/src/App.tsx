@@ -79,6 +79,10 @@ declare global {
       exportFindingsXlsx(payload: {
         rows: Record<string, string | number>[]; fileName?: string;
       }): Promise<{ path: string }>;
+      exportDataModel(payload: {
+        sheets: { name: string; headers: string[]; rows: (string | number)[][] }[];
+        fileName?: string;
+      }): Promise<{ path: string }>;
     };
   }
 }
@@ -394,6 +398,20 @@ export default function App() {
     }
   }
 
+  /** Экспорт модели данных приложения в Excel (листы на таблицы, поля, объекты). */
+  async function exportDataModel() {
+    if (!analysis?.dataModel?.length) return;
+    try {
+      const res = await window.qa.exportDataModel({
+        sheets: analysis.dataModel,
+        fileName: `${analysis.appName ?? 'Модель данных'}`.slice(0, 60),
+      });
+      setExportNote(`Модель данных сохранена: ${res.path}`);
+    } catch (err) {
+      setExportNote(`Не удалось сохранить модель данных: ${String(err)}`);
+    }
+  }
+
   /** Экспорт настроек правил в файл. */
   async function exportRulesConfig() {
     try {
@@ -426,6 +444,7 @@ export default function App() {
         app: r.title,
         stream: r.stream ?? '',
         owner: r.owner ?? '',
+        tags: (r.tags ?? []).join(', '),
       };
       for (const f of r.findings ?? []) {
         rows.push({
@@ -433,6 +452,7 @@ export default function App() {
           app: meta.app,
           stream: meta.stream,
           owner: meta.owner,
+          tags: meta.tags,
           ruleId: f.ruleId ?? '',
           category: f.category ?? '',
           severity: f.severity === 'error' ? 'Ошибка'
@@ -688,6 +708,7 @@ export default function App() {
           exportNote={exportNote}
           onExport={() => void exportCurrent()}
           onExportScript={() => void exportScript()}
+          onExportDataModel={() => void exportDataModel()}
           rulesConfig={rulesConfig}
           onSaveRulesConfig={(c) => void saveRulesConfig(c)}
         />

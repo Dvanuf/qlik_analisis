@@ -17,6 +17,7 @@ import { analyzeScriptIntegrity } from '../script/integrity.js';
 import { maskUrl } from '../logging/mask.js';
 import { fetchObjects, OBJECT_TYPES } from './objects.js';
 import { fetchAssociations } from './associations.js';
+import { fetchScriptErrors } from './script-errors.js';
 // Схема встраивается в бандл: в собранном приложении node_modules нет,
 // и require.resolve('enigma.js/schemas/…') не сработает.
 import embeddedSchema from 'enigma.js/schemas/12.34.11.json' with { type: 'json' };
@@ -212,6 +213,7 @@ export async function extractFromEngine(config) {
     },
     appName: '', appId: '', script: '',
     sheets: [], objects: [], variables: [], fields: [], tables: [], bookmarks: [], extensions: [],
+    stories: [], masterObjects: [], connections: [],
   };
 
   const attempt = async (name, fn, fallback) => {
@@ -235,6 +237,14 @@ export async function extractFromEngine(config) {
     // Признаки обрезанного скрипта: правило S010 понижает важность, если текст пришёл не полностью.
     graph.meta.scriptInfo = analyzeScriptIntegrity(graph.script);
     const parsedScript = parseLoadScript(graph.script);
+
+    // --- Ошибки скрипта по данным сервера ---
+    // Сервер проверяет скрипт сам и знает номер строки каждой ошибки:
+    // без этого в отчёте было видно лишь «ошибка где-то в скрипте».
+    // Поле заполняется только при успешной проверке: пустой массив означает
+    // «ошибок нет», а отсутствие поля — «проверка не выполнена».
+    const scriptErrors = await attempt('scriptErrors', () => fetchScriptErrors(app), null);
+    if (scriptErrors) graph.meta.scriptErrors = scriptErrors;
 
     // --- Модель данных (таблицы, поля, ключи) ---
     const dataModel = await attempt('dataModel', async () => {
@@ -298,6 +308,10 @@ export async function extractFromEngine(config) {
         const sheet = await attempt(`sheet:${id}`, () => app.getObject(id).then((o) => o.getLayout()), null);
         const meta = readMeta(sheet ?? {});
         graph.sheets.push({ id, name: meta.name || id, type, description: meta.description });
+        // Истории (stories) — отдельный перечень: в QSME у них своя вкладка.
+        if (type === 'story') {
+          graph.stories.push({ id, name: meta.name || id, type, description: meta.description });
+        }
         continue;
       }
       if (type === 'extension') {

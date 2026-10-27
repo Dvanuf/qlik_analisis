@@ -22,6 +22,11 @@ const api = {
   /** Выгрузка плоской таблицы находок в CSV и Excel. */
   exportFindingsCsv: (payload: { rows: Record<string, string | number>[]; fileName?: string }) => ipcRenderer.invoke('core:export-findings-csv', payload),
   exportFindingsXlsx: (payload: { rows: Record<string, string | number>[]; fileName?: string }) => ipcRenderer.invoke('core:export-findings-xlsx', payload),
+  /** Выгрузка модели данных приложения в Excel. */
+  exportDataModel: (payload: {
+    sheets: { name: string; headers: string[]; rows: (string | number)[][] }[];
+    fileName?: string;
+  }) => ipcRenderer.invoke('core:export-data-model', payload),
   rules: () => ipcRenderer.invoke('core:rules'),
   /** Каталог готовых функций скрипта: список, выгрузка в .qvs, разбор своей библиотеки. */
   library: () => ipcRenderer.invoke('core:library'),

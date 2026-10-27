@@ -266,6 +266,9 @@ p.small, .small { font-size: 12px; }
 /* --- Этап 2: предлагаемые правки --- */
 .fix { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel); }
 .fix h4 { margin: 0 0 6px; font-size: 13px; color: var(--navy); }
+/* Строка-список ошибок скрипта: кликабельна — открывает место ошибки. */
+.link-row { cursor: pointer; }
+.link-row:hover td { background: var(--accent-soft, rgba(45, 212, 191, .12)); }
 .diff { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .diff .before { background: var(--err-soft); color: var(--err); padding: 2px 6px; border-radius: 4px; display: block; }
 .diff .after { background: var(--ok-soft); color: var(--ok); padding: 2px 6px; border-radius: 4px; display: block; }

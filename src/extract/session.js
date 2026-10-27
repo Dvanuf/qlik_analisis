@@ -114,7 +114,7 @@ function httpGetJson(url, { headers = {}, insecure = false, redirects = 5 } = {}
 }
 
 /**
- * Поток и владелец приложения.
+ * Поток, владелец и тэги приложения.
  *
  * Не все платформы их отдают: у QlikView Doc API в GetDocList таких полей нет,
  * тогда в интерфейсе показывается «не указан», а фильтры группируют такие
@@ -127,13 +127,51 @@ export function appMeta(d) {
     for (const k of keys) {
       const v = d?.[k];
       if (typeof v === 'string' && v.trim()) return v.trim();
+      // Некоторые развёртывания отдают объект: { qName: '...' } или { name: '...' }.
+      if (v && typeof v === 'object') {
+        const inner = v.qName ?? v.name ?? v.value ?? v.id;
+        if (typeof inner === 'string' && inner.trim()) return inner.trim();
+      }
     }
     return null;
   };
   return {
     stream: pick('qStream', 'stream', 'qAppStream', 'qGroup', 'group'),
     owner: pick('qOwner', 'owner', 'qAppOwner', 'qUser', 'user', 'qModifiedBy'),
+    tags: pickTags(d),
   };
+}
+
+/**
+ * Тэги приложения.
+ *
+ * Формат разный: список строк (`['етка']`) или список объектов
+ * (`[{ qName: 'етка' }]`). Имена полей тоже различаются — поэтому
+ * перебираем варианты и берём первый непустой.
+ *
+ * @param {object} d — элемент ответа сервера
+ * @returns {string[]} список тэгов (пустой, если сервер их не отдал)
+ */
+export function pickTags(d) {
+  const sources = ['qTags', 'tags', 'qAppTags', 'tagNames', 'qTagList', 'labels'];
+  for (const key of sources) {
+    const raw = d?.[key];
+    if (!raw) continue;
+    const list = Array.isArray(raw) ? raw : [raw];
+    const out = [];
+    for (const item of list) {
+      let name = '';
+      if (typeof item === 'string') name = item;
+      else if (item && typeof item === 'object') {
+        const inner = item.qName ?? item.name ?? item.value ?? item.title;
+        if (typeof inner === 'string') name = inner;
+      }
+      const text = name.trim();
+      if (text && !out.includes(text)) out.push(text);
+    }
+    if (out.length) return out;
+  }
+  return [];
 }
 
 /**
@@ -183,6 +221,55 @@ export async function listAppsViaHub({ url, cookie, xrfKey, insecure, log = null
 }
 
 /**
+ * Дополняет список приложений метаданными (поток, владелец, тэги).
+ *
+ * Список приложений движка (GetDocList) содержит лишь идентификатор,
+ * название, размер и дату перезагрузки — потока, владельца и тэгов там нет.
+ * А хаб их знает: REST API отдаёт эти поля. Поэтому список из движка
+ * дополняется данными хаба — иначе фильтры по потоку, владельцу и тэгам
+ * остаются пустыми.
+ *
+ * Приложения, которых нет в ответе хаба, остаются без метаданных:
+ * так честнее, чем подставлять выдуманные значения.
+ *
+ * @param {object[]} apps — список приложений из движка
+ * @param {object} options — параметры подключения к хабу
+ * @returns {Promise<object[]>} тот же список с заполненными метаданными
+ */
+export async function enrichAppsWithHubMeta(apps, options = {}) {
+  const list = apps ?? [];
+  if (!list.length) return list;
+  const hub = await listAppsViaHub(options);
+  if (!hub || !hub.length) return list;
+
+  const byId = new Map();
+  const byTitle = new Map();
+  for (const a of hub) {
+    if (a.id) byId.set(String(a.id), a);
+    const title = String(a.title ?? '').trim().toLowerCase();
+    if (title) byTitle.set(title, a);
+  }
+
+  let enriched = 0;
+  const out = list.map((app) => {
+    const meta = byId.get(String(app.id)) ?? byTitle.get(String(app.title ?? '').trim().toLowerCase());
+    if (!meta) return { ...app, tags: app.tags ?? [] };
+    enriched += 1;
+    return {
+      ...app,
+      // Поток, владелец и тэги берём из хаба; если там пусто — оставляем
+      // то, что отдал движок.
+      stream: meta.stream ?? app.stream ?? null,
+      owner: meta.owner ?? app.owner ?? null,
+      tags: (meta.tags?.length ? meta.tags : (app.tags ?? [])),
+      lastReload: app.lastReload ?? meta.lastReload ?? null,
+    };
+  });
+  options.log?.(`хаб: метаданные ${enriched} из ${list.length} приложений`);
+  return out;
+}
+
+/**
  * Список приложений, доступных пользователю на сервере.
  *
  * Порядок попыток:
@@ -216,6 +303,8 @@ export async function listApps(options = {}) {
   const {
     url, cookie, xrfKey, csrfToken, user, password, insecure, log = null,
   } = options;
+  // Дополнение метаданными (поток, владелец, тэги) — отдельным запросом к хабу.
+  const hubOptions = { url, cookie, xrfKey, insecure, log };
   // Что именно пробовали — попадёт в текст ошибки, чтобы не гадать.
   // Адреса маскируются: в URL может быть CSRF-токен.
   const notes = [];
@@ -245,13 +334,15 @@ export async function listApps(options = {}) {
       const list = await conn.qix.getDocList?.();
       const items = (Array.isArray(list) ? list : ((list?.qItems ?? [])));
       note(`движок ${candidate}: приложений ${items.length}`);
-      return items.map((d) => ({
+      const apps = items.map((d) => ({
         id: d.qDocId ?? d.qAppId ?? '',
         title: d.qTitle ?? d.qDocName ?? '',
         size: d.qFileSize ?? null,
         lastReload: d.qLastReloadTime ?? null,
         ...appMeta(d),
       }));
+      // Список из движка не содержит потока, владельца и тэгов — берём их у хаба.
+      return enrichAppsWithHubMeta(apps, hubOptions);
     } catch (err) {
       lastError = err;
       note(`движок ${candidate}: ${err?.message ?? err}`);

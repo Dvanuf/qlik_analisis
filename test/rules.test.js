@@ -136,7 +136,7 @@ test('сводка считает находки по категориям', () 
 });
 
 test('правила можно отключать', () => {
-  const only = analyze(fixture, { disabledRules: ['R001', 'R002', 'R003', 'R004', 'R005', 'R006', 'R007', 'R008', 'R009', 'R010', 'R011', 'R012', 'R013', 'R014', 'R015', 'R016', 'R017', 'R018'] });
+  const only = analyze(fixture, { disabledRules: ['R001', 'R002', 'R003', 'R004', 'R005', 'R006', 'R007', 'R008', 'R009', 'R010', 'R011', 'R012', 'R013', 'R014', 'R015', 'R016', 'R017', 'R018', 'R019', 'R020', 'R021'] });
   assert.equal(only.findings.some((f) => f.category === 'Resources'), false);
   const stat = only.ruleStats.find((s) => s.id === 'R001');
   assert.equal(stat.skipped, true);

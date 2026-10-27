@@ -8,6 +8,7 @@
  */
 import { useMemo, useState } from 'react';
 import { buildFixes } from '../../../src/report/fixes.js';
+import { searchExpressions } from '../../../src/script/search.js';
 import type { AnalysisResult, Finding, RulesConfig, Severity } from '../types.js';
 
 const SEVERITIES: { id: Severity; label: string }[] = [
@@ -24,6 +25,7 @@ type Props = {
   exportNote: string;
   onExport: () => void;
   onExportScript: () => void;
+  onExportDataModel: () => void;
   rulesConfig: RulesConfig | null;
   onSaveRulesConfig: (config: RulesConfig) => void;
 };
@@ -32,7 +34,8 @@ const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 }
 
 export default function AnalysisTab(props: Props) {
   const {
-    analysis, categories, exportNote, onExport, onExportScript, rulesConfig, onSaveRulesConfig,
+    analysis, categories, exportNote, onExport, onExportScript, onExportDataModel,
+    rulesConfig, onSaveRulesConfig,
   } = props;
 
   const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
@@ -44,6 +47,11 @@ export default function AnalysisTab(props: Props) {
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [note, setNote] = useState('');
+  // Блок предлагаемых правок по умолчанию свёрнут: он длинный,
+  // а смотреть его нужно не всегда.
+  const [fixesOpen, setFixesOpen] = useState(false);
+  // Поиск по произвольному выражению (QSME: search any expression).
+  const [exprQuery, setExprQuery] = useState('');
 
   const findings = analysis?.findings ?? [];
   const suppressed = analysis?.suppressed ?? [];
@@ -92,6 +100,15 @@ export default function AnalysisTab(props: Props) {
   const scriptLines = useMemo(
     () => String(analysis?.script ?? '').split(/\r?\n/),
     [analysis?.script],
+  );
+
+  /** Результаты поиска по выражению — в объектах и в скрипте. */
+  const exprHits = useMemo(
+    () => searchExpressions({
+      expressions: analysis?.expressionIndex ?? [],
+      script: analysis?.script ?? '',
+    }, exprQuery),
+    [analysis?.expressionIndex, analysis?.script, exprQuery],
   );
 
   const toggle = <T,>(set: Set<T>, value: T) => {
@@ -210,11 +227,85 @@ export default function AnalysisTab(props: Props) {
 
       <div className="actions">
         <button className="primary" onClick={onExport}>Экспорт отчёта</button>
+        {analysis.dataModel && analysis.dataModel.length > 0 && (
+          <button onClick={onExportDataModel}>Модель данных (Excel)</button>
+        )}
         {analysis.patch?.script && (
           <button onClick={onExportScript}>Применить правки к копии скрипта (.qvs)</button>
         )}
       </div>
       {(exportNote || note) && <p className="muted small">{note || exportNote}</p>}
+
+      {/* --- Поиск по выражению --- */}
+      <h3>Поиск по выражению</h3>
+      <div className="toolbar">
+        <input
+          className="search"
+          value={exprQuery}
+          onChange={(e) => setExprQuery(e.target.value)}
+          placeholder="Найти выражение в объектах и в скрипте…"
+          aria-label="Поиск по выражению"
+        />
+        <span className="muted">
+          {exprQuery.trim() ? `найдено: ${exprHits.total}` : 'введите часть выражения'}
+        </span>
+      </div>
+      {exprQuery.trim() && exprHits.total > 0 && (
+        <table className="rules">
+          <thead><tr><th>Где</th><th>Объект / строка</th><th>Выражение</th></tr></thead>
+          <tbody>
+            {exprHits.objects.map((h, i) => (
+              <tr key={`o-${i}`}>
+                <td>{h.kind === 'measure' ? 'мера' : 'измерение'}</td>
+                <td>{h.name}</td>
+                <td><code>{h.expr}</code></td>
+              </tr>
+            ))}
+            {exprHits.script.slice(0, 50).map((h) => (
+              <tr key={`s-${h.line}`}>
+                <td>скрипт</td>
+                <td>строка {h.line}</td>
+                <td><code>{h.text.trim()}</code></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* --- Ошибки скрипта по данным сервера --- */}
+      {analysis.scriptErrors && analysis.scriptErrors.length > 0 && (
+        <>
+          <h3>Ошибки скрипта загрузки</h3>
+          <p className="muted small">
+            Сервер проверил скрипт и указал места ошибок. Нажмите на строку — откроется скрипт.
+          </p>
+          <table className="rules">
+            <thead><tr><th>Строка</th><th>Колонка</th><th>Сообщение</th></tr></thead>
+            <tbody>
+              {analysis.scriptErrors.map((e, i) => (
+                <tr
+                  key={`${e.line}-${i}`}
+                  className={e.line ? 'link-row' : ''}
+                  onClick={() => {
+                    if (!e.line) return;
+                    setSelected({
+                      ruleId: 'S014', category: 'Script', severity: 'error',
+                      title: 'Ошибка в скрипте загрузки',
+                      message: e.message, recommendation: 'Исправить скрипт и перезагрузить приложение.',
+                      detail: e.column ? `Колонка ${e.column}` : undefined,
+                      line: e.line,
+                    });
+                  }}
+                >
+                  <td>{e.line ?? '—'}</td>
+                  <td>{e.column ?? '—'}</td>
+                  <td>{e.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {/* --- Структура скрипта загрузки --- */}
       {outline && outline.sections.length > 0 && (
@@ -262,12 +353,29 @@ export default function AnalysisTab(props: Props) {
       {/* --- Предлагаемые правки --- */}
       {fixes.length > 0 && (
         <>
-          <h3>Предлагаемые правки скрипта</h3>
-          {fixes.map((fix, i) => (
+          <h3>
+            Предлагаемые правки скрипта
+            <button
+              className="link"
+              onClick={() => setFixesOpen((v) => !v)}
+              aria-expanded={fixesOpen}
+            >
+              {' '}· {fixesOpen ? 'свернуть' : `развернуть (${fixes.length})`}
+            </button>
+          </h3>
+          {fixesOpen && fixes.map((fix, i) => (
             <div className="fix" key={`${fix.ruleId}-${i}`}>
               <h4>
                 {fix.title} <code>{fix.ruleId}</code>
               </h4>
+              {fix.count > 1 && (
+                <p className="muted small">
+                  Затронуто объектов: {fix.count} ({fix.objects?.join(', ') ?? '—'})
+                </p>
+              )}
+              {fix.line != null && (
+                <p className="muted small">Вставка после строки {fix.line}</p>
+              )}
               <div className="diff">
                 <span className="before">− {fix.before || '(конец скрипта)'}</span>
                 <span className="after">+ {fix.after}</span>
@@ -429,9 +537,15 @@ export default function AnalysisTab(props: Props) {
         <>
           <h3>
             Скрипт загрузки
-            {selected.line ? ` — строка ${selected.line}` : ''}
+            {selected.line ? ` — ошибка в строке ${selected.line}` : ''}
             <button className="link" onClick={() => setSelected(null)}> закрыть</button>
           </h3>
+          {!selected.line && (
+            <p className="muted small">
+              Для этой находки нельзя указать строку: она относится к приложению в целом.
+            </p>
+          )}
+          {selected.detail && <p className="muted small">{selected.detail}</p>}
           <div className="script-view">
             {scriptLines.map((line, i) => (
               <div

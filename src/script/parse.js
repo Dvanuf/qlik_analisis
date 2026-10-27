@@ -330,6 +330,21 @@ export function parseScript(script) {
       continue;
     }
 
+    // CONCATENATE без имени таблицы — дописывает данные в предыдущую таблицу.
+    // Синтаксис Qlik допускает `CONCATENATE LOAD * FROM ...;` — такой оператор
+    // раньше терялся, и про «объединение без ключа» узнать было нельзя.
+    if (/^CONCATENATE\b/i.test(text)) {
+      const rest = text.replace(/^CONCATENATE\b/i, '').trim();
+      pendingConcatenate = pendingConcatenate || '(предыдущая таблица)';
+      model.concatenates.push({
+        target: '(предыдущая таблица)',
+        hasNoConcatenate: /NOCONCATENATE/i.test(text),
+        line,
+      });
+      if (rest) queue.unshift({ text: rest, line });
+      continue;
+    }
+
     if (/^DROP\s+FIELDS?\b/i.test(text) || /^DROP\s+TABLE\b/i.test(text)) {
       model.hasDropField = true;
       const m = text.match(/^DROP\s+(FIELDS?|TABLE)\s+([^;]+)/i);

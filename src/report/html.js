@@ -49,6 +49,9 @@ const CSS = `
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:12px 0 4px; }
   .stat { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; }
   .stat b { display:block; font-size:19px; color:var(--navy); }
+  details.fold { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; }
+  details.fold > summary { cursor:pointer; font-weight:600; color:var(--navy); }
+  details.fold > summary::marker { color:#94a3b8; }
 `;
 
 /**
@@ -76,6 +79,8 @@ export function renderHtml(result) {
         <td><b>${escapeHtml(f.title)}</b><div class="muted">${escapeHtml(f.message ?? '')}</div>
             ${f.detail ? `<div class="muted small">${escapeHtml(f.detail)}</div>` : ''}</td>
         <td>${escapeHtml(f.target?.kind ?? '')}<div class="muted small">${escapeHtml(f.target?.name ?? '')}</div></td>
+        <td>${f.line ? `строка ${f.line}` : (f.table ? escapeHtml(f.table) : '—')}
+            ${f.column ? `<div class="muted small">колонка ${f.column}</div>` : ''}</td>
         <td>${escapeHtml(f.recommendation ?? '')}</td>
       </tr>`).join('');
 
@@ -105,10 +110,26 @@ export function renderHtml(result) {
       + `получено ${inventory.collected}. Не получены: ${escapeHtml([...new Set(inventory.missing)].join(', '))}.</div>`
     : '';
 
+  // Ошибки скрипта, о которых сообщил сервер: с номером строки и колонки.
+  const scriptErrors = meta.scriptErrors ?? [];
+  const scriptErrorsBlock = scriptErrors.length
+    ? `<h2>Ошибки скрипта загрузки</h2>
+       <p class="muted">Сервер проверил скрипт и указал места ошибок:</p>
+       <table>
+         <thead><tr><th>Строка</th><th>Колонка</th><th>Сообщение</th></tr></thead>
+         <tbody>${scriptErrors.map((e) => `<tr>
+           <td>${e.line ? `строка ${e.line}` : '—'}</td><td>${e.column ?? '—'}</td>
+           <td>${escapeHtml(e.message ?? '')}</td></tr>`).join('')}</tbody>
+       </table>`
+    : '';
+
   const patchBlock = patch.script
     ? `<h2>Предлагаемые правки скрипта загрузки</h2>
-       <p class="muted">Вставьте в конец скрипта (после всех JOIN/CONCATENATE) и выполните перезагрузку:</p>
-       <pre class="patch">${escapeHtml(patch.script)}</pre>`
+       <details class="fold">
+         <summary>Показать правки (${patch.script.split('\\n').filter(Boolean).length})</summary>
+         <p class="muted">Вставьте в конец скрипта (после всех JOIN/CONCATENATE) и выполните перезагрузку:</p>
+         <pre class="patch">${escapeHtml(patch.script)}</pre>
+       </details>`
     : '';
 
   // Структура скрипта: разделы, шаги построения таблиц, поток, недостижимый код.
@@ -161,6 +182,8 @@ export function renderHtml(result) {
 
   ${inventoryNote}
 
+  ${scriptErrorsBlock}
+
   ${outlineBlock}
 
   ${skipped}
@@ -176,8 +199,8 @@ export function renderHtml(result) {
     <span class="muted" id="counter"></span>
   </div>
   <table id="findings">
-    <thead><tr><th>Уровень</th><th>Правило</th><th>Категория</th><th>Находка</th><th>Объект</th><th>Рекомендация</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="6" class="muted">Находок нет — приложение чистое по заданным правилам.</td></tr>'}</tbody>
+    <thead><tr><th>Уровень</th><th>Правило</th><th>Категория</th><th>Находка</th><th>Объект</th><th>Строка</th><th>Рекомендация</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="muted">Находок нет — приложение чистое по заданным правилам.</td></tr>'}</tbody>
   </table>
 
   ${patchBlock}

@@ -79,6 +79,12 @@ export type AnalysisResult = {
   suppressed?: Finding[];
   patch: { script: string; autoNumbers?: { field: string; key: string }[] };
   script?: string;
+  /** Ошибки скрипта по данным сервера — с номером строки и колонки. */
+  scriptErrors?: { message: string; line: number | null; column: number | null; type?: string }[];
+  /** Листы книги «Модель данных» — таблицы, поля, объекты, переменные. */
+  dataModel?: { name: string; headers: string[]; rows: (string | number)[][] }[];
+  /** Плоский перечень выражений приложения — для поиска по выражению. */
+  expressionIndex?: { name: string; type: string; kind: string; expr: string }[];
   /** Структура скрипта загрузки. */
   outline?: {
     sections: number;
@@ -101,7 +107,9 @@ export type AnalysisResult = {
 export type AppItem = {
   id: string; title: string; size: number | null;
   /** Поток и владелец — заполняются, если сервер их отдаёт. */
-  stream?: string; owner?: string;
+  stream?: string | null; owner?: string | null;
+  /** Тэги приложения — заполняются, если сервер их отдаёт. */
+  tags?: string[];
   lastReload?: string | null;
 };
 
@@ -117,6 +125,8 @@ export type BatchItem = {
   /** Поток и владелец приложения (если сервер их отдаёт). */
   stream?: string | null;
   owner?: string | null;
+  /** Тэги приложения (если сервер их отдаёт). */
+  tags?: string[];
   /** Дата прогона и дата изменения приложения. */
   at?: string;
   lastReload?: string | null;

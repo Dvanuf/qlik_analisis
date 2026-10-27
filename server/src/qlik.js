@@ -24,6 +24,10 @@ export async function fetchApps(qlikCfg) {
       title: a.title,
       size: a.size,
       lastReload: a.lastReload,
+      // Метаданные приложения: поток, владелец, тэги.
+      stream: a.stream ?? null,
+      owner: a.owner ?? null,
+      tags: a.tags ?? [],
     }));
   } finally {
     try { await session.close(); } catch { /* закрываем мягко */ }

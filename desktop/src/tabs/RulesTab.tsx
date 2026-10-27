@@ -24,6 +24,13 @@ const THRESHOLD_FIELDS: Record<string, { key: string; label: string; hint: strin
   R017: [
     { key: 'maxObjects', label: 'Сколько объектов на листе', hint: 'Больше этого — находка о перегруженном листе' },
   ],
+  P001: [
+    { key: 'minUses', label: 'Сколько объектов', hint: 'В скольких объектах повторяется выражение' },
+    { key: 'minLength', label: 'Минимальная длина выражения', hint: 'Короче — не сообщаем: простые ссылки на поле повторяются естественно' },
+  ],
+  R020: [
+    { key: 'maxDistinctRatio', label: 'Доля уникальных значений', hint: 'Начиная с этой доли поле считается высококардинальным' },
+  ],
 };
 
 type Props = {

@@ -13,6 +13,12 @@ const CATEGORY = 'Resources';
 export const SHEET_OBJECT_LIMIT = 15;
 
 /**
+ * Доля уникальных значений, выше которой поле (вне ключей) считается
+ * высококардинальным: 0.9 — почти все строки различны.
+ */
+export const CARDINALITY_RATIO_LIMIT = 0.9;
+
+/**
  * Поля и выражения объекта.
  *
  * @param {object} obj — объект приложения
@@ -208,6 +214,121 @@ export const metadataRules = [
           message: `У объекта «${obj.name}» нет ни измерения, ни меры`,
           detail: 'Объект не отображает данные.',
           recommendation: 'Добавить измерение или удалить объект.',
+        });
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'R019',
+    category: CATEGORY,
+    severity: 'info',
+    title: 'Неиспользуемое подключение к данным',
+    description: 'Подключение объявлено в приложении, но его строки подключения нет в скрипте загрузки.',
+    recommendation: 'Удалить подключение из приложения либо использовать его в скрипте.',
+    run(ctx) {
+      const out = [];
+      const connections = ctx.graph.connections ?? [];
+      if (!connections.length) {
+        return { findings: [], note: 'Подключения к данным недоступны.' };
+      }
+      const script = String(ctx.graph.script ?? '');
+      for (const conn of connections) {
+        const needle = String(conn.connectionString ?? '').trim();
+        if (!needle) continue;
+        // Строка подключения может встречаться в скрипте как есть
+        // или с кавычками — сравниваем по существу.
+        const bare = needle.replace(/^['"]|['"]$/g, '');
+        const inScript = script.includes(needle) || script.includes(bare);
+        if (inScript) continue;
+        out.push({
+          ruleId: 'R019',
+          category: CATEGORY,
+          severity: 'info',
+          title: 'Неиспользуемое подключение к данным',
+          target: { kind: 'connection', name: conn.name || conn.id, id: conn.id },
+          message: `Подключение «${conn.name || conn.id}» не встречается в скрипте загрузки`,
+          detail: `Тип: ${conn.type || 'не указан'}. Строка подключения: ${needle.slice(0, 160)}`,
+          recommendation: 'Удалить подключение из приложения либо использовать его в скрипте.',
+        });
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'R020',
+    category: CATEGORY,
+    severity: 'info',
+    title: 'Поле высокой кардинальности вне ключа',
+    description: 'Поле с числом уникальных значений, близким к числу строк, не является ключом — '
+      + 'оно занимает столько же памяти, сколько ключ, но не даёт пользы.',
+    recommendation: 'Убрать поле из модели либо использовать его как ключ, если оно действительно уникально.',
+    run(ctx) {
+      const out = [];
+      const fields = ctx.graph.fields ?? [];
+      if (!fields.length) {
+        return { findings: [], note: 'Модель данных недоступна.' };
+      }
+      const limit = ctx.config?.thresholds?.R020?.maxDistinctRatio ?? CARDINALITY_RATIO_LIMIT;
+      for (const f of fields) {
+        if (f.key) continue;
+        const rows = Number(f.rows);
+        const distinct = Number(f.distinct);
+        if (!Number.isFinite(rows) || !Number.isFinite(distinct)) continue;
+        if (rows < 100) continue; // на малых таблицах это норма, а не проблема
+        const ratio = distinct / rows;
+        if (ratio < limit) continue;
+        out.push({
+          ruleId: 'R020',
+          category: CATEGORY,
+          severity: 'info',
+          title: 'Поле высокой кардинальности вне ключа',
+          target: { kind: 'field', name: f.name, id: f.name },
+          message: `Поле «${f.name}»: ${distinct} уникальных значений при ${rows} строк`,
+          detail: `Доля уникальных значений: ${Math.round(ratio * 100)}% (порог ${Math.round(limit * 100)}%).`
+            + ' Поле занимает столько же памяти, сколько ключевое, но ключом не является.',
+          recommendation: 'Убрать поле из модели либо объявить его ключевым.',
+        });
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'R021',
+    category: CATEGORY,
+    severity: 'info',
+    title: 'CONCATENATE без ключа',
+    description: 'Таблицы объединены через CONCATENATE, но у результата нет ключевых полей — '
+      + 'совпадение строк разных таблиц не проверяется.',
+    recommendation: 'Добавить ключевое поле в объединённую таблицу либо разделять таблицы.',
+    run(ctx) {
+      const out = [];
+      const loads = ctx.script.loads ?? [];
+      if (!loads.length) {
+        return { findings: [], note: 'Скрипт загрузки недоступен.' };
+      }
+      const keyTables = new Set();
+      for (const t of ctx.graph.tables ?? []) {
+        if ((t.keyFields ?? []).length) keyTables.add(String(t.name).toLowerCase());
+      }
+      for (const l of loads) {
+        if (!l.concatenated) continue;
+        const target = String(l.table ?? '').toLowerCase();
+        if (!target) continue;
+        if (keyTables.has(target)) continue;
+        out.push({
+          ruleId: 'R021',
+          category: CATEGORY,
+          severity: 'info',
+          title: 'CONCATENATE без ключа',
+          target: { kind: 'table', name: l.table, id: l.table },
+          message: `Таблица «${l.table}» получена через CONCATENATE, но ключевых полей у неё нет`,
+          detail: 'Строки объединённых таблиц не сверяются по ключу — возможны дубли и «пустые» совпадения.',
+          recommendation: 'Добавить ключевое поле в объединённую таблицу.',
+          line: l.line,
         });
       }
       return out;

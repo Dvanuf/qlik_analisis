@@ -89,6 +89,7 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
     extensions: [],
     masterObjects: [],
     connections: [],
+    stories: [],
   };
 
   // --- Модель данных ---
@@ -204,6 +205,10 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
     const meta = readMeta(layout, id);
     if (type === 'sheet' || type === 'story') {
       graph.sheets.push({ id, name: meta.name || id, type, description: meta.description });
+      // Истории (stories) — отдельный перечень: в QSME у них своя вкладка.
+      if (type === 'story') {
+        graph.stories.push({ id, name: meta.name || id, type, description: meta.description });
+      }
       continue;
     }
     const unique = [];

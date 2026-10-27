@@ -9,6 +9,7 @@ import { buildOutline } from './script/outline.js';
 import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
 import { computeScore } from './score.js';
+import { buildDataModelSheets } from './report/data-model.js';
 
 /**
  * @param {object} graph — результат экстрактора
@@ -108,6 +109,8 @@ export function analyze(graph, config = {}) {
     },
     capabilities: graph.meta?.capabilities ?? [],
     skipped: graph.meta?.skipped ?? [],
+    // Ошибки скрипта по данным сервера — с номером строки и колонки.
+    scriptErrors: graph.meta?.scriptErrors ?? [],
     ruleErrors: errors,
   };
 
@@ -121,7 +124,37 @@ export function analyze(graph, config = {}) {
     summary,
     outline,
     patch: buildScriptPatch(findings),
+    // Модель данных и метаданные — листами книги Excel (QSME: Data model).
+    dataModel: buildDataModelSheets(graph),
+    // Перечень выражений — для поиска «где используется это выражение».
+    expressionIndex: buildExpressionIndex(graph),
   };
+}
+
+/**
+ * Плоский перечень выражений приложения.
+ *
+ * Нужен для поиска в интерфейсе: пользователь ищет формулу и видит,
+ * в каких объектах она встречается.
+ *
+ * @param {object} graph
+ * @returns {Array<{name: string, type: string, kind: string, expr: string}>}
+ */
+export function buildExpressionIndex(graph) {
+  const out = [];
+  for (const obj of graph?.objects ?? []) {
+    for (const e of obj.expressions ?? []) {
+      const expr = String(e.expr ?? '').trim();
+      if (!expr) continue;
+      out.push({
+        name: String(obj.name ?? obj.id ?? ''),
+        type: String(obj.type ?? ''),
+        kind: String(e.kind ?? ''),
+        expr,
+      });
+    }
+  }
+  return out;
 }
 
 /** Имя поля в скрипте: с пробелами — в квадратных скобках. */

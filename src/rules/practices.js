@@ -20,14 +20,36 @@ function variableMap(graph) {
   return map;
 }
 
+/**
+ * Стоит ли вообще сообщать о повторе этого выражения.
+ *
+ * Повтор простой ссылки на поле ([Поле]) — обычное дело, так о нём молчим.
+ * Сообщаем о выражениях с вычислениями: там копипаста действительно
+ * приводит к расхождению цифр.
+ *
+ * @param {string} canon — нормализованное выражение
+ * @param {{minLength?: number}} [thresholds] — пороги правила
+ * @returns {boolean}
+ */
+export function isWorthReporting(canon, thresholds = {}) {
+  const text = String(canon ?? '').trim();
+  if (!text) return false;
+  // Ссылка на одно поле или на поле в выражении без вычислений.
+  if (/^\[[^\]]+\]$/.test(text)) return false;
+  const minLength = thresholds?.minLength ?? 8;
+  return text.length >= minLength;
+}
+
 export const practiceRules = [
   {
     id: 'P001',
     category: CATEGORY,
-    severity: 'warning',
-    title: 'Дублирующееся выражение',
-    description: 'Одинаковое выражение (с учётом регистра, пробелов и раскрытия переменных) используется в нескольких местах.',
-    recommendation: 'Вынести выражение в переменную и переиспользовать её — меньше копипаста, меньше расхождений в цифрах.',
+    severity: 'info',
+    title: 'Повторное использование выражения',
+    description: 'Одинаковое выражение используется в нескольких объектах. Это обычная практика, '
+      + 'а не дефект: замечание помогает заметить, что логику стоит вынести в переменную, '
+      + 'если её нужно править в одном месте.',
+    recommendation: 'Если выражение нужно менять в одном месте — вынести его в переменную.',
     run(ctx) {
       const findings = [];
       const vmap = variableMap(ctx.graph);
@@ -35,21 +57,27 @@ export const practiceRules = [
       for (const item of allExpressions(ctx.graph)) {
         const canon = canonicalize(item.expr, { variableMap: vmap, expandVariables: false });
         if (!canon) continue;
+        // Простая ссылка на поле ([Поле]) повторяется совершенно естественно —
+        // сообщать о ней бессмысленно, это только создаёт шум.
+        if (!isWorthReporting(canon, ctx.config?.thresholds?.P001)) continue;
         if (!buckets.has(canon)) buckets.set(canon, []);
         buckets.get(canon).push(item);
       }
+      const minUses = ctx.config?.thresholds?.P001?.minUses ?? 2;
       for (const [canon, items] of buckets) {
-        if (items.length < 2) continue;
-        const owners = items.map((i) => i.owner.name);
+        if (items.length < minUses) continue;
+        // Повтор внутри одного объекта — это не «использование в разных местах».
+        const owners = [...new Set(items.map((i) => i.owner.name))];
+        if (owners.length < 2) continue;
         findings.push({
           ruleId: 'P001',
           category: CATEGORY,
-          severity: 'warning',
-          title: 'Дублирующееся выражение',
+          severity: 'info',
+          title: 'Повторное использование выражения',
           target: { kind: 'expression', name: owners[0], id: items[0].owner.id },
-          message: `Одно и то же выражение используется ${items.length} раз: ${owners.join(', ')}`,
+          message: `Выражение «${items[0].expr.slice(0, 80)}» используется в ${owners.length} объектах: ${owners.slice(0, 6).join(', ')}`,
           detail: `Нормализованная форма: ${canon.slice(0, 160)}`,
-          recommendation: 'Вынести в переменную и переиспользовать.',
+          recommendation: 'При необходимости вынести в переменную и переиспользовать её.',
         });
       }
       return findings;

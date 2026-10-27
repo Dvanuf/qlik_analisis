@@ -110,6 +110,9 @@ export const RULE_PLATFORMS = {
   R016: [PLATFORM_SENSE], // условие вычисления есть только в Qlik Sense
   R017: [PLATFORM_SENSE], // состав листа известен только в Qlik Sense
   R018: [PLATFORM_SENSE], // измерения объекта известны только в Qlik Sense
+  R019: BOTH, // подключения и скрипт есть на обеих платформах
+  R020: BOTH, // модель данных
+  R021: BOTH, // модель данных и скрипт
 
   // --- Practices: качество проектирования ---
   P001: [PLATFORM_SENSE], // выражения объектов
@@ -141,6 +144,7 @@ export const RULE_PLATFORMS = {
   S011: BOTH,
   S012: BOTH,
   S013: BOTH, // недостижимый код после EXIT SCRIPT — свойство скрипта
+  S014: [PLATFORM_SENSE], // ошибки скрипта отдаёт только QIX Engine API
 };
 
 /**

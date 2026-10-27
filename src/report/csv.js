@@ -11,6 +11,7 @@ export const FINDINGS_COLUMNS = [
   { key: 'app', title: 'Приложение' },
   { key: 'stream', title: 'Поток' },
   { key: 'owner', title: 'Владелец' },
+  { key: 'tags', title: 'Тэги' },
   { key: 'ruleId', title: 'Правило' },
   { key: 'category', title: 'Категория' },
   { key: 'severity', title: 'Важность' },
@@ -26,7 +27,7 @@ const SEVERITY_LABELS = { error: 'Ошибка', warning: 'Предупрежд�
 /**
  * Превращает находки в строки плоской таблицы.
  * @param {object[]} findings
- * @param {{runAt?: string, app?: string, stream?: string, owner?: string}} [meta]
+ * @param {{runAt?: string, app?: string, stream?: string, owner?: string, tags?: string[]}} [meta]
  */
 export function toFlatRows(findings, meta = {}) {
   return (findings ?? []).map((f) => ({
@@ -34,6 +35,7 @@ export function toFlatRows(findings, meta = {}) {
     app: meta.app ?? '',
     stream: meta.stream ?? '',
     owner: meta.owner ?? '',
+    tags: (meta.tags ?? []).join(', '),
     ruleId: f.ruleId ?? '',
     category: f.category ?? '',
     severity: SEVERITY_LABELS[f.severity] ?? f.severity ?? '',

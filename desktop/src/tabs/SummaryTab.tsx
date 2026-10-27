@@ -33,6 +33,7 @@ export default function SummaryTab(props: Props) {
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [streamFilter, setStreamFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
   const [sevFilter, setSevFilter] = useState('all');
 
   const results = batch?.results ?? [];
@@ -42,22 +43,27 @@ export default function SummaryTab(props: Props) {
 
   const owners = useMemo(() => [...new Set(rows.map((r) => r.owner ?? 'не указан'))].sort(), [rows]);
   const streams = useMemo(() => [...new Set(rows.map((r) => r.stream ?? 'не указан'))].sort(), [rows]);
+  const tags = useMemo(
+    () => [...new Set(rows.flatMap((r) => r.tags ?? []))].sort(),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (ownerFilter !== 'all' && (r.owner ?? 'не указан') !== ownerFilter) return false;
       if (streamFilter !== 'all' && (r.stream ?? 'не указан') !== streamFilter) return false;
+      if (tagFilter !== 'all' && !(r.tags ?? []).includes(tagFilter)) return false;
       if (sevFilter === 'error' && r.errors === 0) return false;
       if (sevFilter === 'warning' && r.warnings === 0) return false;
       if (sevFilter === 'info' && r.infos === 0) return false;
       if (q) {
-        const hay = `${r.title} ${r.appId} ${r.owner ?? ''} ${r.stream ?? ''}`.toLowerCase();
+        const hay = `${r.title} ${r.appId} ${r.owner ?? ''} ${r.stream ?? ''} ${(r.tags ?? []).join(' ')}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [rows, ownerFilter, streamFilter, sevFilter, search]);
+  }, [rows, ownerFilter, streamFilter, tagFilter, sevFilter, search]);
 
   /** Уровень заливки ячейки тепловой карты: 0 — пусто, 4 — максимум. */
   const heatLevel = (value: number) => {
@@ -167,6 +173,10 @@ export default function SummaryTab(props: Props) {
           <option value="all">поток: все</option>
           {streams.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} aria-label="Фильтр по тэгам">
+          <option value="all">тэги: все</option>
+          {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
         <input
           className="search"
           value={search}
@@ -180,7 +190,7 @@ export default function SummaryTab(props: Props) {
         <thead>
           <tr>
             <th>Приложение</th><th>Скор</th><th>Ошибок</th><th>Предупр.</th><th>Замечаний</th>
-            <th>Всего</th><th>Владелец</th><th>Поток</th><th>Дата изменения</th><th>Статус</th>
+            <th>Всего</th><th>Владелец</th><th>Поток</th><th>Тэги</th><th>Дата изменения</th><th>Статус</th>
           </tr>
         </thead>
         <tbody>
@@ -194,6 +204,7 @@ export default function SummaryTab(props: Props) {
               <td>{r.total}</td>
               <td>{r.owner ?? 'не указан'}</td>
               <td>{r.stream ?? 'не указан'}</td>
+              <td>{(r.tags ?? []).length ? (r.tags ?? []).join(', ') : '—'}</td>
               <td>{r.changedAt ? new Date(r.changedAt).toLocaleString('ru-RU') : '—'}</td>
               <td>{r.error ? <span className="err">{r.error}</span> : 'ок'}</td>
             </tr>

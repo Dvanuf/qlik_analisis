@@ -130,32 +130,50 @@ export function columnName(index) {
  * @returns {Buffer} содержимое файла .xlsx
  */
 export function buildXlsx(headers, rows, sheetName = 'Находки') {
-  const rowsXml = [];
-  const headerCells = headers.map((h, i) => (
-    `<c r="${columnName(i)}1" t="inlineStr" s="1"><is><t xml:space="preserve">${esc(h)}</t></is></c>`
-  )).join('');
-  rowsXml.push(`<row r="1">${headerCells}</row>`);
+  return buildXlsxBook([{ name: sheetName, headers, rows }]);
+}
 
-  (rows ?? []).forEach((row, r) => {
-    const cells = row.map((value, i) => {
-      const ref = `${columnName(i)}${r + 2}`;
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return `<c r="${ref}"><v>${value}</v></c>`;
-      }
-      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
-    }).join('');
-    rowsXml.push(`<row r="${r + 2}">${cells}</row>`);
-  });
+/**
+ * Формирует книгу Excel с несколькими листами.
+ *
+ * Нужна для экспорта модели данных: отдельные листы на таблицы, поля,
+ * объекты, переменные и закладки — так удобнее смотреть и фильтровать.
+ *
+ * @param {Array<{name: string, headers: string[], rows: Array<Array<string|number>>}>} sheets
+ * @returns {Buffer} содержимое файла .xlsx
+ */
+export function buildXlsxBook(sheets) {
+  const list = (sheets ?? []).filter(Boolean);
+  if (!list.length) return buildXlsx([], []);
 
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  const sheetXmls = list.map((sheet) => {
+    const rowsXml = [];
+    const headerCells = (sheet.headers ?? []).map((h, i) => (
+      `<c r="${columnName(i)}1" t="inlineStr" s="1"><is><t xml:space="preserve">${esc(h)}</t></is></c>`
+    )).join('');
+    rowsXml.push(`<row r="1">${headerCells}</row>`);
+
+    (sheet.rows ?? []).forEach((row, r) => {
+      const cells = row.map((value, i) => {
+        const ref = `${columnName(i)}${r + 2}`;
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          return `<c r="${ref}"><v>${value}</v></c>`;
+        }
+        return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
+      }).join('');
+      rowsXml.push(`<row r="${r + 2}">${cells}</row>`);
+    });
+
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowsXml.join('')}</sheetData></worksheet>`;
+  });
 
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+${list.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('\n')}
 <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>`;
 
@@ -166,12 +184,12 @@ export function buildXlsx(headers, rows, sheetName = 'Находки') {
 
   const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="${esc(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+<sheets>${list.map((s, i) => `<sheet name="${esc(s.name ?? `Лист${i + 1}`)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`;
 
   const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+${list.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('\n')}
+<Relationship Id="rId${list.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`;
 
   const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -189,6 +207,6 @@ export function buildXlsx(headers, rows, sheetName = 'Находки') {
     { name: 'xl/workbook.xml', data: workbook },
     { name: 'xl/_rels/workbook.xml.rels', data: workbookRels },
     { name: 'xl/styles.xml', data: styles },
-    { name: 'xl/worksheets/sheet1.xml', data: sheet },
+    ...list.map((_, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXmls[i] })),
   ]);
 }

@@ -13,6 +13,7 @@ const SEVERITY = {
   S001: 'warning', S002: 'info', S003: 'warning', S004: 'info',
   S005: 'warning', S006: 'warning', S007: 'info', S008: 'info',
   S009: 'warning', S010: 'error', S011: 'info', S012: 'info', S013: 'info',
+  S014: 'error',
 };
 
 /**
@@ -30,6 +31,7 @@ const finding = (ruleId, title, target, message, detail, recommendation, extra =
   detail,
   recommendation,
   ...(extra.line != null ? { line: extra.line } : {}),
+  ...(extra.column != null ? { column: extra.column } : {}),
   ...(extra.table ? { table: extra.table } : {}),
 });
 
@@ -392,6 +394,37 @@ export const scriptRules = [
           String(st.raw ?? '').slice(0, 160),
           'Удалить недостижимый код или убрать EXIT SCRIPT.',
           { line: st.line }));
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'S014',
+    category: CATEGORY,
+    severity: SEVERITY.S014,
+    title: 'Ошибка в скрипте загрузки',
+    description: 'Сервер проверил скрипт и сообщил об ошибке — с указанием строки и колонки.',
+    recommendation: 'Исправить скрипт в указанной строке и перезагрузить приложение.',
+    run(ctx) {
+      const out = [];
+      // Ошибки отдаёт движок: он знает язык Qlik лучше нашего разбора
+      // и указывает точное место — строку и колонку.
+      const errors = ctx.graph.meta?.scriptErrors;
+      if (!Array.isArray(errors)) {
+        return {
+          findings: [],
+          note: 'Проверка синтаксиса на сервере недоступна (движок не отдал ошибки скрипта).',
+        };
+      }
+      for (const e of errors) {
+        const where = e.line ? `строка ${e.line}${e.column ? `, колонка ${e.column}` : ''}` : 'место указано сервером';
+        out.push(finding('S014', 'Ошибка в скрипте загрузки',
+          { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+          `Сервер сообщил об ошибке в скрипте (${where})`,
+          e.message,
+          'Исправить скрипт в указанном месте и перезагрузить приложение.',
+          { line: e.line ?? undefined, column: e.column ?? undefined }));
       }
       return out;
     },

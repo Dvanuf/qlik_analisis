@@ -81,6 +81,7 @@ export default function ConnectTab(props: Props) {
   const [open, setOpen] = useState(false);
   const [streamFilter, setStreamFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [howtoOpen, setHowtoOpen] = useState(() => localStorage.getItem('qa.howto.open') !== '0');
   const comboRef = useRef<HTMLDivElement | null>(null);
@@ -124,15 +125,26 @@ export default function ConnectTab(props: Props) {
     return [...set].sort();
   }, [apps]);
 
+  const tags = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of apps) for (const t of a.tags ?? []) set.add(t);
+    return [...set].sort();
+  }, [apps]);
+
+  // Сервер мог не отдать метаданные — тогда фильтры бессмысленны, и об этом
+  // надо сказать прямо, а не молча оставить один пункт «все».
+  const metaAvailable = apps.some((a) => a.stream || a.owner || (a.tags ?? []).length);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return apps.filter((a) => {
       if (q && !a.title.toLowerCase().includes(q) && !a.id.toLowerCase().includes(q)) return false;
       if (streamFilter !== 'all' && (a.stream || 'не указан') !== streamFilter) return false;
       if (ownerFilter !== 'all' && (a.owner || 'не указан') !== ownerFilter) return false;
+      if (tagFilter !== 'all' && !(a.tags ?? []).includes(tagFilter)) return false;
       return true;
     });
-  }, [apps, query, streamFilter, ownerFilter]);
+  }, [apps, query, streamFilter, ownerFilter, tagFilter]);
 
   const currentApp = apps.find((a) => a.id === appId) ?? null;
 
@@ -361,10 +373,24 @@ export default function ConnectTab(props: Props) {
                 {owners.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </label>
+            <label>
+              Тэги:{' '}
+              <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+                <option value="all">все</option>
+                {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
             <span className="muted small">
               Показано {filtered.length} из {apps.length}
             </span>
           </div>
+
+          {!metaAvailable && (
+            <p className="muted small">
+              Сервер не отдал поток, владельца и тэги приложений — фильтры по ним не работают.
+              Они появятся, когда хаб отдаст метаданные (нужен вход в хаб на сервере Qlik Sense).
+            </p>
+          )}
 
           {selectedIds.length > 0 && (
             <div className="combo-selected">
