@@ -14,6 +14,7 @@ import { listApps } from '../../src/extract/session.js';
 import { appUrl } from '../../src/extract/url.js';
 import { analyze } from '../../src/analyzer.js';
 import { ALL_RULES, CATEGORIES } from '../../src/rules/index.js';
+import { DOMAIN_IDS, DOMAIN_LABELS, domainForRule } from '../../src/rules/domains.js';
 import { extractFromFile } from '../../src/connectors/file.js';
 import { renderHtml } from '../../src/report/html.js';
 import { runDoctor } from '../../src/cli/doctor.js';
@@ -83,7 +84,7 @@ async function runSmokeCheck(): Promise<void> {
         // Открываем вкладку «Правила» — там каталог с описаниями и рекомендациями.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
               .filter(function (b) { return b.textContent.indexOf('Правила') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -99,7 +100,9 @@ async function runSmokeCheck(): Promise<void> {
               rows: table.querySelectorAll('tbody tr').length,
               heads: Array.prototype.slice.call(table.querySelectorAll('thead th'))
                 .map(function (t) { return t.textContent.trim(); }),
-              externalLinks: table.querySelectorAll('a[href^="http"]').length
+              externalLinks: table.querySelectorAll('a[href^="http"]').length,
+              domainColumn: Array.prototype.slice.call(table.querySelectorAll('thead th'))
+                .some(function (t) { return t.textContent.trim() === 'Домен'; })
             });
           })()
         `);
@@ -107,7 +110,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Каталог функций»: записи с сигнатурами и кодом.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
               .filter(function (b) { return b.textContent.indexOf('Каталог функций') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -128,7 +131,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Подключение»: пошаговый сценарий и главная кнопка.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
               .filter(function (b) { return b.textContent.indexOf('Подключение') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -140,8 +143,9 @@ async function runSmokeCheck(): Promise<void> {
             return JSON.stringify({
               steps: document.querySelectorAll('.wizard .step').length,
               current: document.querySelectorAll('.wizard .step.current').length,
+              stepDescs: document.querySelectorAll('.wizard .step .tx i').length,
               mainButtons: document.querySelectorAll('.actions button.primary').length,
-              platformLabel: (document.querySelector('.platform-label') || {}).textContent || ''
+              zoomButtons: document.querySelectorAll('.zoomer button').length
             });
           })()
         `);
@@ -177,38 +181,57 @@ async function runSmokeCheck(): Promise<void> {
               return true;
             })()
           `);
-          await new Promise((r) => setTimeout(r, 2000));
+          // Анализ файла нужно дождаться: иначе вкладка «Анализ» ещё пуста.
+          await new Promise((r) => setTimeout(r, 5000));
           dialog.showOpenDialog = realDialog;
         } catch (err) {
           console.error('SMOKE: анализ файла не выполнен', err);
         }
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
               .filter(function (b) { return b.textContent.indexOf('Анализ') === 0; })[0];
             if (btn) btn.click();
             return true;
           })()
         `);
-        await new Promise((r) => setTimeout(r, 700));
+        await new Promise((r) => setTimeout(r, 900));
         const analysis = await win.webContents.executeJavaScript(`
           (function () {
             var heads = Array.prototype.slice.call(document.querySelectorAll('h3'))
               .map(function (h) { return h.textContent.trim(); });
-            // Порядок блоков: «Скрипт загрузки» должен идти выше «Находок».
-            var scriptIdx = heads.findIndex(function (h) { return h.indexOf('Скрипт загрузки') === 0; });
-            var findingsIdx = heads.findIndex(function (h) { return h.indexOf('Находки') === 0; });
             return JSON.stringify({
               heads: heads,
               hasExprSearch: heads.some(function (h) { return h.indexOf('Поиск по выражению') === 0; }),
               hasFixes: heads.some(function (h) { return h.indexOf('Предлагаемые правки') === 0; }),
-              hasScript: scriptIdx >= 0,
-              scriptAboveFindings: scriptIdx >= 0 && findingsIdx >= 0 && scriptIdx < findingsIdx,
-              scriptLines: document.querySelectorAll('.script-view .line').length,
-              scopeChips: Array.prototype.slice.call(document.querySelectorAll('.toolbar .chip'))
-                .filter(function (c) { return c.textContent.indexOf('Скрипт загрузки') === 0; }).length,
+              // Метрики, домены и чек-лист — новая структура вкладки «Анализ».
+              kpis: document.querySelectorAll('.kpis .kpi').length,
+              domains: document.querySelectorAll('.doms .dom').length,
+              checks: document.querySelectorAll('.cl .rules li').length,
+              patternRows: document.querySelectorAll('table.rq tr.pat').length,
+              ruleRows: document.querySelectorAll('table.rq tr.rule').length,
               foldButton: document.querySelectorAll('button.link[aria-expanded]').length,
               foldLabel: (document.querySelector('button.link[aria-expanded]') || {}).textContent || ''
+            });
+          })()
+        `);
+
+        // Вкладка «Скрипт загрузки»: строки с номерами и находки.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+              .filter(function (b) { return b.textContent.indexOf('Скрипт загрузки') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 600));
+        const script = await win.webContents.executeJavaScript(`
+          (function () {
+            return JSON.stringify({
+              lines: document.querySelectorAll('.codeview .l').length,
+              findings: document.querySelectorAll('.srclist li').length,
+              jumpField: document.querySelectorAll('.lnjump input').length
             });
           })()
         `);
@@ -216,7 +239,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Модель данных»: разделы модели и поиск по ним.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.tabs button'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
               .filter(function (b) { return b.textContent.indexOf('Модель данных') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -264,6 +287,7 @@ async function runSmokeCheck(): Promise<void> {
           library: JSON.parse(String(library)),
           connect: JSON.parse(String(connect)),
           analysis: JSON.parse(String(analysis)),
+          script: JSON.parse(String(script)),
           model: JSON.parse(String(model)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
@@ -301,6 +325,12 @@ ipcMain.handle('core:rules', () => ({
     name: c,
     count: ALL_RULES.filter((r) => r.category === c).length,
   })),
+  // Домены — «какая забота», а не «в каком файле лежит правило».
+  domains: (DOMAIN_IDS as string[]).map((id) => ({
+    id,
+    label: (DOMAIN_LABELS as Record<string, string>)[id] ?? id,
+    count: ALL_RULES.filter((r) => domainForRule(r.id, r.category) === id).length,
+  })),
   rules: ALL_RULES.map((r) => ({
     id: r.id,
     category: r.category,
@@ -309,6 +339,7 @@ ipcMain.handle('core:rules', () => ({
     description: r.description,
     recommendation: r.recommendation,
     platforms: r.platforms,
+    domain: domainForRule(r.id, r.category),
   })),
 }));
 
@@ -354,6 +385,12 @@ ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
     findings: result.findings,
     suppressed: result.suppressed,
     patch: result.patch,
+    // Статистика правил — по ней строится чек-лист проверок по доменам.
+    ruleStats: result.ruleStats,
+    // Паттерны: корень проблемы — одна строка, места внутри.
+    patterns: result.patterns,
+    patternRules: result.patternRules,
+    patternPlaces: result.patternPlaces,
     script: (graph as { script?: string }).script ?? '',
     // Ошибки скрипта по данным сервера — с номером строки.
     scriptErrors: (graph as { meta?: { scriptErrors?: unknown } })?.meta?.scriptErrors ?? [],
@@ -966,6 +1003,10 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     suppressed: result.suppressed,
     patch: result.patch,
     ruleStats: result.ruleStats,
+    // Паттерны: корень проблемы — одна строка, места внутри.
+    patterns: result.patterns,
+    patternRules: result.patternRules,
+    patternPlaces: result.patternPlaces,
     script: (graph as { script?: string }).script ?? '',
     // Ошибки скрипта по данным сервера — с номером строки.
     scriptErrors: (graph as { meta?: { scriptErrors?: unknown } })?.meta?.scriptErrors ?? [],

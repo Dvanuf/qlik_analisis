@@ -6,7 +6,17 @@
  * его можно экспортировать и импортировать.
  */
 import { useMemo, useState } from 'react';
-import type { RuleInfo, RulesConfig } from '../types.js';
+import type { DomainId, RuleInfo, RulesConfig } from '../types.js';
+
+/** Подписи доменов — как в остальном интерфейсе. */
+const DOMAIN_LABELS: Record<DomainId, string> = {
+  model: 'Модель данных',
+  script: 'Скрипт загрузки',
+  dash: 'Дашборд и объекты',
+  expr: 'Меры и выражения',
+  vars: 'Переменные',
+  conn: 'Подключения и окружение',
+};
 
 const SEVERITIES = [
   { id: 'error', label: 'Ошибка' },
@@ -46,6 +56,8 @@ type Props = {
 export default function RulesTab(props: Props) {
   const { ruleInfo, rulesConfig, countsByRule, note, onSave, onExport, onImport } = props;
   const [cat, setCat] = useState('all');
+  // Фильтр по домену — «какая забота», а не «в каком файле лежит правило».
+  const [domain, setDomain] = useState<'all' | DomainId>('all');
   const [search, setSearch] = useState('');
 
   const rules = useMemo(() => {
@@ -53,13 +65,14 @@ export default function RulesTab(props: Props) {
     const q = search.trim().toLowerCase();
     return all.filter((r) => {
       if (cat !== 'all' && r.category !== cat) return false;
+      if (domain !== 'all' && r.domain !== domain) return false;
       if (q) {
         const hay = `${r.id} ${r.title} ${r.description} ${r.recommendation}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [ruleInfo, cat, search]);
+  }, [ruleInfo, cat, domain, search]);
 
   const categories = ruleInfo?.categories ?? [];
 
@@ -112,6 +125,20 @@ export default function RulesTab(props: Props) {
             {c.name} <span className="n">{c.count}</span>
           </button>
         ))}
+        <span className="sep" />
+        <button className={domain === 'all' ? 'active' : ''} onClick={() => setDomain('all')}>
+          Все домены
+        </button>
+        {(ruleInfo?.domains ?? []).map((d) => (
+          <button
+            key={d.id}
+            className={domain === d.id ? 'active' : ''}
+            onClick={() => setDomain(d.id)}
+            title={`Домен «${d.label}»`}
+          >
+            {d.label} <span className="n">{d.count}</span>
+          </button>
+        ))}
         <input
           className="search"
           value={search}
@@ -136,7 +163,7 @@ export default function RulesTab(props: Props) {
       <table className="rules">
         <thead>
           <tr>
-            <th>ID</th><th>Категория</th><th>Правило</th><th>Включено</th>
+            <th>ID</th><th>Домен</th><th>Категория</th><th>Правило</th><th>Включено</th>
             <th>Важность</th><th>Пороги</th><th>Исключения</th><th>Срабатываний</th>
           </tr>
         </thead>
@@ -149,6 +176,7 @@ export default function RulesTab(props: Props) {
             return (
               <tr key={r.id} className={off ? 'off' : ''}>
                 <td><code>{r.id}</code></td>
+                <td className="hint">{r.domain ? DOMAIN_LABELS[r.domain] : '—'}</td>
                 <td>{r.category}</td>
                 <td title={r.description}>
                   <b>{r.title}</b>

@@ -12,6 +12,8 @@ import { computeScore } from './score.js';
 import { buildDataModelSheets } from './report/data-model.js';
 import { buildScriptIndex, findingLines } from './findings/locations.js';
 import { groupFindings } from './findings/group.js';
+import { groupPatternsByRule } from './findings/patterns.js';
+import { DOMAIN_ORDER, DOMAIN_LABELS, domainForRule } from './rules/domains.js';
 import { SCOPES, SCOPE_LABELS } from './rules/scopes.js';
 
 /**
@@ -70,6 +72,40 @@ export function analyze(graph, config = {}) {
   const locatedFindings = withLines(findings);
   const locatedSuppressed = withLines(suppressed);
 
+  // Сводка по доменам: сколько проверок в каждом домене, сколько нарушено
+  // и сколько мест найдено. Домен — то, что пользователь видит в интерфейсе.
+  const byDomain = {};
+  for (const domain of DOMAIN_ORDER) {
+    byDomain[domain] = {
+      id: domain,
+      label: DOMAIN_LABELS[domain],
+      total: 0,
+      failed: 0,
+      skipped: 0,
+      passed: 0,
+      findings: 0,
+      places: 0,
+    };
+  }
+  for (const stat of ruleStats) {
+    const domain = stat.domain ?? domainForRule(stat.id, stat.category);
+    const bucket = byDomain[domain];
+    if (!bucket) continue;
+    bucket.total += 1;
+    if (stat.skipped) bucket.skipped += 1;
+    else if (stat.count > 0) bucket.failed += 1;
+    else bucket.passed += 1;
+  }
+  for (const f of findings) {
+    const bucket = byDomain[f.domain];
+    if (!bucket) continue;
+    bucket.findings += 1;
+    bucket.places += f.count ?? 1;
+  }
+
+  // Паттерны: корень проблемы — одна строка, места перечислены внутри.
+  const patternGroups = groupPatternsByRule(locatedFindings);
+
   // Оценка «веса» неиспользуемых полей: сумма строк по удаляемым полям.
   const removable = findings.filter((f) => f.fix?.kind === 'dropField' && f.impact?.rows != null);
   const removableRows = removable.reduce((acc, f) => acc + (f.impact.rows ?? 0), 0);
@@ -119,6 +155,8 @@ export function analyze(graph, config = {}) {
       byCategory,
       bySeverity,
       byScope,
+      // Сводка по доменам — как в интерфейсе.
+      byDomain,
       // Сколько одинаковых находок свёрнуто и сколько подавлено.
       merged: dedupe.merged,
       suppressed: suppressed.length,
@@ -142,6 +180,11 @@ export function analyze(graph, config = {}) {
     index,
     findings: locatedFindings,
     suppressed: locatedSuppressed,
+    // Паттерны: корень проблемы — одна строка, места внутри.
+    patterns: patternGroups.patterns,
+    patternRules: patternGroups.rules,
+    patternPlaces: patternGroups.places,
+    byDomain,
     ruleStats,
     errors,
     summary,

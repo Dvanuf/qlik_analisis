@@ -1,43 +1,80 @@
-/* Оформление приложения. Тема следует системной: светлая и тёмная. */
+/* Оформление приложения в стиле Qlik Sense.
+ * Токены — из официального пакета @qlik/design-tokens 1.4.7 (тема Sprout).
+ * Размер шрифта регулируется: --ui-scale меняет масштаб интерфейса,
+ * значение выбирает пользователь и оно хранится в настройках.
+ */
 :root {
-  --navy: #1f3b5c;
-  --bg: #f5f7fa;
-  --panel: #ffffff;
-  --text: #1c2733;
-  --line: #e2e8f0;
-  --muted: #64748b;
-  --err: #c0392b;
-  --warn: #b9770e;
-  --ok: #2c7a4b;
-  --soft: #eef2f7;
-  --soft2: #f1f5f9;
-  --accent: #0f766e;
-  --accent-soft: #e8eef6;
-  --ok-soft: #e8f6ee;
-  --warn-soft: #fff8e6;
-  --err-soft: #fdecea;
-  --shadow: 0 1px 2px rgba(15, 35, 56, .06);
+  /* --- бренд и состояния --- */
+  --brand: #00873d;
+  --brand-h: #006b30;
+  --bs: rgba(0, 135, 61, .05);
+  --danger: #c20048;
+  --ds: rgba(194, 0, 72, .05);
+  --warning: #bb3800;
+  --ws: rgba(187, 56, 0, .05);
+  --success: #0d6932;
+  --ss: rgba(13, 105, 50, .05);
+  --info: #005db9;
+  --is: rgba(0, 93, 185, .05);
+
+  /* --- поверхности и текст --- */
+  --bg: #fafafa;
+  --panel: #fff;
+  --panel-2: #f2f2f2;
+  --panel-3: #e6e6e6;
+  --text: #262626;
+  --fw: rgba(64, 64, 64, .82);
+  --fo: rgba(38, 38, 38, .55);
+  --line: rgba(0, 0, 0, .15);
+  --line-soft: rgba(0, 0, 0, .08);
+
+  /* --- геометрия --- */
+  --r1: 4px;
+  --r2: 8px;
+  --r3: 16px;
+  --shadow: 0 2px 4px 0 rgba(0, 0, 0, .15), 0 0 0 1px rgba(0, 0, 0, .05);
+
+  /* --- масштаб интерфейса (регулировка размера шрифта) --- */
+  --ui-scale: 1;
+
+  /* --- обратная совместимость со старыми именами --- */
+  --navy: var(--brand);
+  --muted: var(--fw);
+  --err: var(--danger);
+  --warn: var(--warning);
+  --ok: var(--success);
+  --soft: var(--panel-2);
+  --soft2: var(--panel-2);
+  --accent: var(--brand);
+  --accent-soft: var(--bs);
+  --ok-soft: var(--ss);
+  --warn-soft: var(--ws);
+  --err-soft: var(--ds);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --navy: #9dc4e8;
-    --bg: #10161d;
-    --panel: #18212b;
-    --text: #e6edf3;
-    --line: #2b3743;
-    --muted: #9fb0c0;
-    --err: #f08a7d;
-    --warn: #e3b341;
-    --ok: #6fcf97;
-    --soft: #1e2833;
-    --soft2: #212c38;
-    --accent: #2dd4bf;
-    --accent-soft: #1d2b38;
-    --ok-soft: #16281f;
-    --warn-soft: #2a2415;
-    --err-soft: #2c1a19;
-    --shadow: none;
+    --brand: #20ba5a;
+    --brand-h: #72d08d;
+    --bs: rgba(32, 186, 90, .08);
+    --danger: #fcd9e1;
+    --ds: rgba(252, 217, 225, .08);
+    --warning: #ffcd80;
+    --ws: rgba(255, 205, 128, .08);
+    --success: #c3eacd;
+    --ss: rgba(195, 234, 205, .08);
+    --info: #b8dbf9;
+    --is: rgba(184, 219, 249, .08);
+    --bg: #262626;
+    --panel: #333;
+    --panel-2: #1a1a1a;
+    --panel-3: #0e0e0e;
+    --text: #fafafa;
+    --fw: rgba(217, 217, 217, .82);
+    --fo: rgba(240, 240, 240, .55);
+    --line: rgba(255, 255, 255, .15);
+    --line-soft: rgba(255, 255, 255, .08);
+    --shadow: 0 2px 4px 0 rgba(0, 0, 0, .3), 0 0 0 1px rgba(255, 255, 255, .05);
   }
 }
 
@@ -67,6 +104,13 @@ h3 { margin: 22px 0 6px; font-size: 14px; color: var(--navy); }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
+/* Заголовок карточки: название, отступ и подпись в одну строку. */
+.card > h3 {
+  margin: -14px -16px 12px; padding: 12px 16px; font-size: 14px; font-weight: 600;
+  border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 10px;
+}
+.card > h3 .grow { flex: 1; }
+.card > h3 .hint { margin-left: 4px; }
 .card.wide { margin-top: 14px; }
 
 .muted { color: var(--muted); font-size: 13px; }
@@ -183,7 +227,10 @@ table.batchTable tr:hover td { background: var(--soft2); }
 p.small, .small { font-size: 12px; }
 
 /* --- Этап 1: пошаговый сценарий подключения --- */
-.wizard { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.wizard {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px; margin: 4px 0 16px;
+}
 .wizard .step {
   display: flex; align-items: center; gap: 8px;
   border: 1px solid var(--line); border-radius: 999px;
@@ -199,6 +246,12 @@ p.small, .small { font-size: 12px; }
 .wizard .step.current { color: var(--navy); border-color: var(--navy); font-weight: 600; }
 .wizard .step.current .num { background: var(--navy); color: #fff; }
 .wizard .step.disabled { opacity: .55; }
+/* Пояснение под заголовком шага: заголовок — надпись, описание — пояснение. */
+.wizard .step .tx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wizard .step .tx b { font-weight: 600; font-size: 13px; }
+.wizard .step .tx i { font-style: normal; font-size: 11.5px; color: var(--fo); line-height: 1.35; }
+.wizard .step.done .tx i, .wizard .step.current .tx i { color: var(--fw); }
+.wizard .step.current { border-radius: var(--r2); }
 
 /* --- Этап 1: список приложений (combobox) --- */
 .combo { position: relative; min-width: 420px; max-width: 100%; }
@@ -307,3 +360,284 @@ p.small, .small { font-size: 12px; }
 .rule-editor .off { opacity: .55; }
 .notice { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
 .notice.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+
+
+/* ================================================================
+   Интерфейс в стиле Qlik Sense: шапка-хаб, вкладки-ленты,
+   карточки метрик, домены, чек-лист, панель запуска, панель паттерна.
+   ================================================================ */
+
+/* --- масштаб интерфейса: --ui-scale задаётся из настроек --- */
+#root { font-size: calc(14px * var(--ui-scale)); }
+
+.app { padding: 0 0 40px; }
+
+/* --- шапка в стиле Qlik Sense Hub --- */
+.hub {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 0 16px; height: 56px; position: sticky; top: 0; z-index: 30;
+}
+.hub .qlmark {
+  width: 30px; height: 30px; border-radius: var(--r2); background: var(--brand);
+  color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 17px;
+}
+.hub .qlname { font-weight: 600; font-size: 15px; }
+.hub .sep { width: 1px; height: 26px; background: var(--line); }
+.hub .grow { flex: 1; }
+.hub .apppick {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--r2);
+  background: var(--panel-2); font-size: 13px; font-weight: 600;
+}
+.hub .live { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.hub .search {
+  display: flex; align-items: center; gap: 8px; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px;
+  min-width: 260px; color: var(--fo); font-size: 13px;
+}
+.hub .icon-btn {
+  width: 34px; height: 34px; border-radius: var(--r2); border: 1px solid transparent;
+  background: none; display: grid; place-items: center; cursor: pointer; color: var(--fw);
+  padding: 0;
+}
+.hub .icon-btn:hover { background: var(--panel-2); }
+.hub .avatar {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--info);
+  color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600;
+}
+
+/* --- переключатель размера шрифта --- */
+.zoomer {
+  display: flex; align-items: center; gap: 2px; border: 1px solid var(--line);
+  border-radius: var(--r1); background: var(--panel-2); padding: 2px;
+}
+.zoomer .lbl { font-size: 11px; color: var(--fo); padding: 0 6px; }
+.zoomer button {
+  border: none; background: none; cursor: pointer; color: var(--fw);
+  font-size: 12px; padding: 3px 8px; border-radius: 3px; font-family: inherit;
+}
+.zoomer button:hover { background: var(--panel-3); color: var(--text); }
+.zoomer button.on { background: var(--brand); color: #fff; font-weight: 600; }
+
+/* --- вкладки лентами листов --- */
+.sheetbar {
+  display: flex; gap: 2px; background: var(--panel-2);
+  border-bottom: 1px solid var(--line); padding: 0 12px;
+  position: sticky; top: 56px; z-index: 25;
+}
+.sheetbar .tab {
+  background: none; border: none; padding: 11px 16px; font-size: 14px;
+  color: var(--fw); cursor: pointer; border-bottom: 3px solid transparent;
+  display: flex; align-items: center; gap: 8px; font-family: inherit;
+}
+.sheetbar .tab:hover { color: var(--text); background: var(--panel); }
+.sheetbar .tab.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+.sheetbar .tab .cnt {
+  background: var(--panel-3); color: var(--fw); border-radius: 10px;
+  padding: 1px 7px; font-size: 11px;
+}
+.sheetbar .tab.on .cnt { background: var(--bs); color: var(--brand); }
+
+/* --- рабочая область --- */
+.wrap { padding: 16px; max-width: 1720px; margin: 0 auto; }
+
+/* --- карточки метрик --- */
+.kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.kpi {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r2);
+  box-shadow: var(--shadow); padding: 14px 16px;
+}
+.kpi .lab {
+  font-size: 12px; color: var(--fw); text-transform: uppercase; letter-spacing: .04em;
+}
+.kpi .num { font-size: 30px; font-weight: 700; line-height: 1.2; margin: 4px 0 2px; }
+.kpi .sub { font-size: 12px; color: var(--fo); }
+.kpi.ok .num { color: var(--success); }
+.kpi.warn .num { color: var(--warning); }
+.kpi.err .num { color: var(--danger); }
+.kpi.info .num { color: var(--info); }
+
+/* --- домены --- */
+.doms {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.dom {
+  background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--panel-3);
+  border-radius: var(--r2); box-shadow: var(--shadow); padding: 12px 14px;
+  cursor: pointer; text-align: left; width: 100%; font-family: inherit;
+}
+.dom:hover { border-color: var(--brand); border-left-color: var(--brand); }
+.dom.on { border-color: var(--brand); border-left-color: var(--brand); background: var(--bs); }
+.dom .nm { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.dom .st { display: flex; gap: 10px; font-size: 12px; color: var(--fw); margin-bottom: 8px; }
+.dom .st b { font-size: 15px; display: block; line-height: 1.1; }
+.dom .st .f b { color: var(--danger); }
+.dom .st .o b { color: var(--success); }
+.dom .st .s b { color: var(--fo); }
+.dom .bar { height: 6px; border-radius: 3px; background: var(--panel-3); overflow: hidden; display: flex; }
+.dom .bar i { display: block; height: 100%; }
+.dom .bar i.f { background: var(--danger); }
+.dom .bar i.o { background: var(--success); }
+.dom .bar i.s { background: var(--panel-3); }
+
+/* --- чек-лист проверок --- */
+.cl { list-style: none; margin: 0; padding: 0; }
+.cl details { border-bottom: 1px solid var(--line-soft); }
+.cl summary {
+  list-style: none; cursor: pointer; padding: 9px 16px; font-size: 13px;
+  font-weight: 600; display: flex; align-items: center; gap: 8px;
+}
+.cl summary::-webkit-details-marker { display: none; }
+.cl summary:hover { background: var(--panel-2); }
+.cl .rules { list-style: none; margin: 0; padding: 0 0 6px; }
+.cl .rules li {
+  display: flex; align-items: flex-start; gap: 8px; padding: 5px 16px 5px 34px;
+  font-size: 12.5px; cursor: pointer;
+}
+.cl .rules li:hover { background: var(--panel-2); }
+.cl .rules .id {
+  color: var(--fo); font-size: 11px; min-width: 30px; padding-top: 2px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.cl .rules .t { flex: 1; }
+.cl .rules .n { color: var(--fw); font-variant-numeric: tabular-nums; }
+.dot {
+  width: 14px; height: 14px; border-radius: 50%; flex: none; margin-top: 2px;
+  display: grid; place-items: center; font-size: 9px; font-weight: 700; color: #fff;
+}
+.dot.f { background: var(--danger); }
+.dot.o { background: var(--success); }
+.dot.s { background: var(--panel-3); color: var(--fo); }
+
+/* --- панель запуска анализа --- */
+.runbar {
+  display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 12px 14px;
+  border: 1px solid var(--line); border-left: 4px solid var(--brand);
+  border-radius: var(--r2); background: var(--bs);
+}
+.runbar .rb-info { flex: 1; min-width: 0; }
+.runbar .rb-t { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.runbar .rb-s { font-size: 12.5px; color: var(--fw); margin-top: 3px; }
+.runbar .rb-act { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: none; }
+.runbar .btn.pri { padding: 8px 18px; font-weight: 600; }
+.runbar.empty { border-left-color: var(--panel-3); background: var(--panel-2); }
+
+/* --- легенда выбора в списке приложений --- */
+.legend { margin: -4px 0 10px; line-height: 1.5; }
+.legend b { color: var(--text); font-weight: 600; }
+
+/* --- панель паттерна справа --- */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 460px; max-width: 95vw;
+  background: var(--panel); border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, .18);
+  transform: translateX(102%); transition: transform .18s ease; z-index: 60;
+  display: flex; flex-direction: column;
+}
+.drawer.on { transform: none; }
+.drawer .dh { padding: 16px; border-bottom: 1px solid var(--line-soft); }
+.drawer .dh h3 { margin: 0 0 6px; font-size: 16px; }
+.drawer .db { padding: 16px; overflow: auto; flex: 1; }
+.drawer .df {
+  padding: 12px 16px; border-top: 1px solid var(--line-soft); display: flex;
+  gap: 8px; flex-wrap: wrap; background: var(--panel-2);
+}
+.scrim {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .35); opacity: 0;
+  pointer-events: none; transition: opacity .18s; z-index: 55;
+}
+.scrim.on { opacity: 1; pointer-events: auto; }
+
+/* --- оверлей прогресса анализа --- */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: none;
+  place-items: center; z-index: 70;
+}
+.overlay.on { display: grid; }
+.progbox {
+  background: var(--panel); border-radius: var(--r3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .35); width: 520px; max-width: 94vw; padding: 22px 24px;
+}
+.progbox h3 { margin: 0 0 4px; font-size: 16px; }
+.steps { list-style: none; margin: 16px 0 0; padding: 0; }
+.steps li {
+  display: flex; align-items: center; gap: 10px; padding: 7px 0;
+  font-size: 13px; color: var(--fw);
+}
+.steps li .b {
+  width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line);
+  display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: none;
+}
+.steps li.done .b { background: var(--success); border-color: var(--success); color: #fff; }
+.steps li.cur { color: var(--text); font-weight: 600; }
+.steps li.cur .b { border-color: var(--brand); color: var(--brand); }
+.steps li .tm { margin-left: auto; font-size: 11px; color: var(--fo); font-variant-numeric: tabular-nums; }
+.pbar { height: 6px; border-radius: 3px; background: var(--panel-3); overflow: hidden; margin-top: 14px; }
+.pbar i { display: block; height: 100%; background: var(--brand); transition: width .3s; }
+
+/* --- всплывающее сообщение --- */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--text); color: var(--bg); padding: 9px 18px; border-radius: 999px;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: .2s; z-index: 80;
+}
+.toast.on { opacity: 1; transform: translateX(-50%); }
+
+/* --- легенда и мелочи --- */
+.legend-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.pill { border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.pill.error { background: var(--ds); color: var(--danger); border-color: rgba(194, 0, 72, .3); }
+.pill.warning { background: var(--ws); color: var(--warning); border-color: rgba(187, 56, 0, .3); }
+.pill.info { background: var(--is); color: var(--info); border-color: rgba(0, 93, 185, .3); }
+.pill.ok { background: var(--ss); color: var(--success); border-color: rgba(13, 105, 50, .3); }
+.pill.mute { background: var(--panel-2); color: var(--fw); border-color: var(--line); }
+.pill.count { background: var(--panel-3); color: var(--fw); }
+table.rq th { background: var(--panel-2); color: var(--fw); border-bottom: 1px solid var(--line); }
+table.rq tbody tr:hover td { background: var(--panel-2); }
+table.rq tr.rule td { background: var(--panel-2); font-weight: 600; }
+table.rq tr.pat { cursor: pointer; }
+
+/* --- список находок и просмотр скрипта --- */
+.split2 { display: grid; grid-template-columns: 320px 1fr; gap: 12px; align-items: start; }
+/* Чек-лист проверок слева, находки — справа. */
+.split { display: grid; grid-template-columns: 330px 1fr; gap: 12px; align-items: start; }
+/* Подписи в карточке домена: четыре счётчика в ряд, ничего не налезает. */
+.dom .st { display: grid; grid-template-columns: repeat(3, auto) 1fr; gap: 2px 10px; }
+.dom .st span { white-space: nowrap; }
+.dom .st span:last-child { justify-self: end; text-align: right; }
+.srclist { list-style: none; margin: 0; padding: 0; }
+.srclist li {
+  padding: 9px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer;
+  display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px;
+}
+.srclist li:hover { background: var(--panel-2); }
+.srclist li.on { background: var(--bs); box-shadow: inset 3px 0 0 var(--brand); }
+.srclist .ln {
+  font-family: ui-monospace, Menlo, monospace; color: var(--fo);
+  font-size: 11px; white-space: nowrap; padding-top: 1px;
+}
+.lnjump { display: flex; gap: 6px; align-items: center; padding: 10px 16px; }
+.lnjump input {
+  width: 64px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r1);
+  background: var(--panel); color: var(--text); font-family: ui-monospace, Menlo, monospace;
+}
+.codeview {
+  background: var(--panel-2); border-top: 1px solid var(--line-soft);
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.65;
+  max-height: 620px; overflow: auto;
+}
+.codeview .l { display: flex; gap: 12px; padding: 0 16px; white-space: pre; }
+.codeview .l:hover { background: var(--panel-3); }
+.codeview .n {
+  color: var(--fo); text-align: right; min-width: 44px; user-select: none;
+  border-right: 1px solid var(--line-soft); padding-right: 12px;
+}
+.codeview .c { flex: 1; }
+.codeview .l.hit { background: var(--ws); box-shadow: inset 3px 0 0 var(--warning); }
+.codeview .l.hit .n { color: var(--warning); font-weight: 700; }
+.codeview .l.flash { background: var(--ds); box-shadow: inset 3px 0 0 var(--danger); }

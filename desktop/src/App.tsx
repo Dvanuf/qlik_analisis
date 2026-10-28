@@ -8,6 +8,7 @@ import RulesTab from './tabs/RulesTab.js';
 import LibraryTab from './tabs/LibraryTab.js';
 import SummaryTab from './tabs/SummaryTab.js';
 import ModelTab from './tabs/ModelTab.js';
+import ScriptTab from './tabs/ScriptTab.js';
 import type {
   AnalysisResult, AnalyzeProgress, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
   Comparison, DoctorStep, HistoryRun, LibraryFunction, Platform, RuleInfo, RulesConfig,
@@ -112,6 +113,12 @@ export default function App() {
     () => (localStorage.getItem('qa.platform') as Platform) ?? 'auto',
   );
   const [info, setInfo] = useState<AppInfo | null>(null);
+  // Масштаб интерфейса: пользователь выбирает размер шрифта.
+  // По умолчанию — мелкий, значение хранится в настройках приложения.
+  const [uiScale, setUiScale] = useState(() => {
+    const saved = localStorage.getItem('qa.ui-scale');
+    return saved ? Number(saved) : 0.9;
+  });
   const [ruleInfo, setRuleInfo] = useState<RuleInfo | null>(null);
   const [libraryFunctions, setLibraryFunctions] = useState<LibraryFunction[]>([]);
   const [busy, setBusy] = useState('');
@@ -631,6 +638,12 @@ export default function App() {
     });
   }, [ruleInfo, ruleCat, ruleSearch]);
 
+  // Находки со строками скрипта — счётчик на вкладке «Скрипт загрузки».
+  const scriptFindings = useMemo(
+    () => (analysis?.findings ?? []).filter((f) => (f.lines?.length ?? 0) > 0).length,
+    [analysis],
+  );
+
   const countsByRule = useMemo(() => {
     const map = new Map<string, number>();
     for (const f of analysis?.findings ?? []) map.set(f.ruleId, (map.get(f.ruleId) ?? 0) + 1);
@@ -667,51 +680,92 @@ export default function App() {
       .sort((a, b) => (b.summary?.findings.total ?? -1) - (a.summary?.findings.total ?? -1));
   }, [batch, batchCat, batchSearch]);
 
+  // Масштаб применяется к корню приложения через CSS-переменную.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ui-scale', String(uiScale));
+    localStorage.setItem('qa.ui-scale', String(uiScale));
+  }, [uiScale]);
+
   const toggle = <T,>(set: Set<T>, value: T) => {
     const next = new Set(set);
     if (next.has(value)) next.delete(value); else next.add(value);
     return next;
   };
 
+  const currentApp = apps.find((a) => a.id === appId);
+  const appTitle = analysis?.appName ?? currentApp?.title ?? 'Приложение не выбрано';
+  const appIdShort = analysis?.appId ?? appId;
+
   return (
     <div className="app">
-      <header>
-        <div className="head-row">
-          <div>
-            <h1>Qlik Analyzer</h1>
-            <span className="sub">
-              {info
-                ? `версия ${info.appVersion} · Electron ${info.electron} · Node ${info.node} · ${info.platform}/${info.arch}`
-                : 'загрузка…'}
-            </span>
-          </div>
-          <div className="platform">
-            <span className="platform-label">Платформа:</span>
-            {PLATFORMS.map((p) => (
-              <button
-                key={p.id}
-                className={platform === p.id ? 'active' : ''}
-                title={p.hint}
-                onClick={() => setPlatform(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+      <div className="hub">
+        <div className="qlmark" aria-hidden="true">Q</div>
+        <div className="qlname">Qlik Анализатор</div>
+        <div className="sep" />
+        <div className="apppick">
+          <span className="live" />
+          {appTitle}
         </div>
-        <nav className="tabs">
-          {([['connect', 'Подключение'], ['analysis', 'Анализ'], ['summary', 'Сводный отчёт'], ['model', 'Модель данных'], ['rules', 'Правила'], ['library', 'Каталог функций']] as [Tab, string][]).map(([id, label]) => (
-            <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-              {label}
-              {id === 'analysis' && analysis ? ` (${analysis.summary.findings.total})` : ''}
-              {id === 'summary' && batch ? ` (${batch.totals.apps})` : ''}
-              {id === 'rules' && ruleInfo ? ` (${ruleInfo.total})` : ''}
-              {id === 'library' && libraryFunctions.length ? ` (${libraryFunctions.length})` : ''}
-            </button>
-          ))}
-        </nav>
-      </header>
+        <span className="hint">
+          {appIdShort ? `on-prem · ${String(appIdShort).slice(0, 8)}…` : 'on-prem'}
+        </span>
+        <div className="grow" />
+        <div className="zoomer" role="group" aria-label="Размер шрифта">
+          <span className="lbl">Шрифт</span>
+          <button
+            className={uiScale === 0.8 ? 'on' : ''}
+            onClick={() => setUiScale(0.8)}
+            title="Мелкий"
+          >
+            А−
+          </button>
+          <button
+            className={uiScale === 0.9 ? 'on' : ''}
+            onClick={() => setUiScale(0.9)}
+            title="Средний"
+          >
+            А
+          </button>
+          <button
+            className={uiScale === 1 ? 'on' : ''}
+            onClick={() => setUiScale(1)}
+            title="Обычный"
+          >
+            А+
+          </button>
+        </div>
+        <div className="icon-btn" title="Обновить">⟳</div>
+        <div className="avatar" title="Пользователь">АВ</div>
+      </div>
 
+      <nav className="sheetbar">
+        {([
+          ['connect', 'Подключение'],
+          ['analysis', 'Анализ'],
+          ['script', 'Скрипт загрузки'],
+          ['model', 'Модель данных'],
+          ['summary', 'Сводный отчёт'],
+          ['rules', 'Правила'],
+          ['library', 'Каталог функций'],
+        ] as [Tab, string][]).map(([id, label]) => (
+          <button key={id} className={`tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)}>
+            {label}
+            {id === 'analysis' && analysis ? (
+              <span className="cnt">{analysis.summary.findings.total}</span>
+            ) : null}
+            {id === 'script' && scriptFindings ? (
+              <span className="cnt">{scriptFindings}</span>
+            ) : null}
+            {id === 'summary' && batch ? <span className="cnt">{batch.totals.apps}</span> : null}
+            {id === 'rules' && ruleInfo ? <span className="cnt">{ruleInfo.total}</span> : null}
+            {id === 'library' && libraryFunctions.length ? (
+              <span className="cnt">{libraryFunctions.length}</span>
+            ) : null}
+          </button>
+        ))}
+      </nav>
+
+      <div className="wrap">
       {busy && <div className="busy">{busy}</div>}
 
       {/* Ход анализа: видно, на каком этапе идёт процесс. */}
@@ -765,6 +819,8 @@ export default function App() {
           onExportDataModel={() => void exportDataModel()}
           rulesConfig={rulesConfig}
           onSaveRulesConfig={(c) => void saveRulesConfig(c)}
+          onOpenScript={() => setTab('script')}
+          onOpenModel={() => setTab('model')}
         />
       )}
 
@@ -814,6 +870,11 @@ export default function App() {
           onParseLibrary={async (script) => (await window.qa.librarySubs(script)).subs}
         />
       )}
+
+      {tab === 'script' && (
+        <ScriptTab analysis={analysis} />
+      )}
+      </div>
     </div>
   );
 }

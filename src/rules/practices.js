@@ -77,6 +77,8 @@ export const practiceRules = [
           target: { kind: 'expression', name: owners[0], id: items[0].owner.id },
           message: `Выражение «${items[0].expr.slice(0, 80)}» используется в ${owners.length} объектах: ${owners.slice(0, 6).join(', ')}`,
           detail: `Нормализованная форма: ${canon.slice(0, 160)}`,
+          // Объекты, где выражение повторяется, — это места одной причины.
+          objects: owners,
           recommendation: 'При необходимости вынести в переменную и переиспользовать её.',
         });
       }
@@ -114,6 +116,8 @@ export const practiceRules = [
           target: { kind: 'measure', name: names[0], id: items[0].owner.id },
           message: `Меры «${names.join('» и «')}» вычисляют одно и то же`,
           detail: `Нормализованная форма: ${canon.slice(0, 160)}`,
+          // Меры с одинаковой формулой — места одной причины.
+          objects: names,
           recommendation: 'Свести к одной мере и ссылаться на неё.',
         });
       }
@@ -176,6 +180,8 @@ export const practiceRules = [
           title: 'Дубликат названия объекта',
           target: { kind: 'object', name: objs[0].name, id: objs[0].id },
           message: `Имя «${objs[0].name}» используется ${objs.length} объектами: ${objs.map((o) => o.id).join(', ')}`,
+          // Объекты с одинаковым именем — места одной причины.
+          objects: objs.map((o) => o.name),
           recommendation: 'Переименовать объекты, добавив контекст (лист/смысл).',
         });
       }

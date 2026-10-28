@@ -2,7 +2,7 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'connect' | 'analysis' | 'summary' | 'model' | 'rules' | 'library';
+export type Tab = 'connect' | 'analysis' | 'script' | 'summary' | 'model' | 'rules' | 'library';
 /**
  * Платформа приложения.
  * 'auto' — определить по данным сервера (по умолчанию): один и тот же
@@ -20,6 +20,11 @@ export type Severity = 'error' | 'warning' | 'info';
  */
 export type FindingScope = 'script' | 'dashboard' | 'measures';
 
+/**
+ * Домен анализа — «какая забота», а не «в каком файле лежит правило».
+ */
+export type DomainId = 'model' | 'script' | 'dash' | 'expr' | 'vars' | 'conn';
+
 export type AppInfo = {
   appVersion: string; electron: string; chrome: string; node: string; v8: string;
   platform: string; arch: string; locale: string; cwd: string;
@@ -28,9 +33,11 @@ export type AppInfo = {
 export type RuleInfo = {
   total: number;
   categories: { name: string; count: number }[];
+  /** Домены: идентификатор, подпись, число правил. */
+  domains?: { id: DomainId; label: string; count: number }[];
   rules: {
     id: string; category: string; severity: string; title: string; description: string;
-    recommendation: string; platforms: string[];
+    recommendation: string; platforms: string[]; domain?: DomainId;
   }[];
 };
 
@@ -70,11 +77,71 @@ export type Finding = {
   linesTotal?: number;
   /** Область находки: скрипт / дашборд / меры. */
   scope?: FindingScope;
+  /** Домен находки: модель данных, скрипт, дашборд и т. д. */
+  domain?: DomainId;
   /** Объекты в сгруппированной находке. */
   objects?: string[];
   /** Подавлена находка (скрыта по умолчанию). */
   suppressed?: boolean;
   suppressReason?: string;
+};
+
+/** Сводка по одному домену. */
+export type DomainSummary = {
+  id: DomainId;
+  label: string;
+  /** Правил в домене. */
+  total: number;
+  /** Правил с нарушениями. */
+  failed: number;
+  /** Правил, пропущенных (нет данных или не применимо к платформе). */
+  skipped: number;
+  /** Правил, пройденных без замечаний. */
+  passed: number;
+  /** Находок. */
+  findings: number;
+  /** Мест — с учётом свёрнутых находок. */
+  places: number;
+};
+
+/** Место находки: объект, таблица или строка скрипта. */
+export type PatternPlace = {
+  name: string;
+  kind: string;
+  table: string;
+  line: number | null;
+  sheet: string;
+  message: string;
+};
+
+/**
+ * Паттерн — корень проблемы одной строкой; места перечислены внутри.
+ */
+export type Pattern = {
+  id: string;
+  ruleId: string;
+  domain: DomainId;
+  category: string;
+  severity: string;
+  title: string;
+  /** Выражение, если причина в нём. */
+  expression: string;
+  message: string;
+  recommendation: string;
+  places: PatternPlace[];
+  /** Сколько мест нашлось. */
+  count: number;
+};
+
+/** Паттерны одного правила. */
+export type PatternRule = {
+  ruleId: string;
+  domain: DomainId;
+  category: string;
+  severity: string;
+  title: string;
+  patterns: Pattern[];
+  places: number;
 };
 
 export type AnalysisResult = {
@@ -85,6 +152,8 @@ export type AnalysisResult = {
     findings: {
       total: number; byCategory: Record<string, number>; bySeverity: Record<string, number>;
       byScope?: Record<string, number>;
+      /** Сводка по доменам: сколько проверок, сколько нарушено, сколько мест. */
+      byDomain?: Record<DomainId, DomainSummary>;
       merged?: number; suppressed?: number;
     };
     counts: Record<string, number>;
@@ -94,6 +163,12 @@ export type AnalysisResult = {
   };
   findings: Finding[];
   suppressed?: Finding[];
+  /** Паттерны: корень проблемы — одна строка. */
+  patterns?: Pattern[];
+  /** Паттерны, сгруппированные по правилам. */
+  patternRules?: PatternRule[];
+  /** Всего мест в паттернах. */
+  patternPlaces?: number;
   patch: { script: string; autoNumbers?: { field: string; key: string }[] };
   script?: string;
   /** Ошибки скрипта по данным сервера — с номером строки и колонки. */
@@ -117,7 +192,7 @@ export type AnalysisResult = {
   skipped?: { capability: string; reason: string }[];
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
-    count: number; skipped: boolean; note: string | null;
+    count: number; skipped: boolean; note: string | null; domain?: DomainId;
   }[];
 };
 

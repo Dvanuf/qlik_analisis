@@ -1,16 +1,19 @@
 /**
- * Вкладка «Анализ» (этап 2 плана развития).
+ * Вкладка «Анализ».
  *
- * Карточки метрик с итоговым скором, фильтры-чипы со счётчиками, таблица
- * находок с колонками «Таблица» и «Строка», просмотр скрипта с подсветкой
- * нужной строки, блок «Предлагаемые правки» (было/стало) и подавление
- * находок.
+ * Устроена по доменам — «какая забота», а не «в каком файле лежит правило».
+ * Сверху — метрики (скор, пройдено, нарушено, пропущено), затем карточки
+ * шести доменов. Ниже слева — чек-лист всех проверок, справа — находки,
+ * собранные в паттерны: одна строка на корень проблемы, места внутри.
+ *
+ * Клик по паттерну открывает панель справа с выражением и списком мест.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildFixes } from '../../../src/report/fixes.js';
 import { searchExpressions } from '../../../src/script/search.js';
 import type {
-  AnalysisResult, Finding, FindingScope, RulesConfig, Severity,
+  AnalysisResult, DomainId, Finding, FindingScope, Pattern, PatternRule,
+  RulesConfig, Severity,
 } from '../types.js';
 
 const SEVERITIES: { id: Severity; label: string }[] = [
@@ -18,6 +21,25 @@ const SEVERITIES: { id: Severity; label: string }[] = [
   { id: 'warning', label: 'Предупреждение' },
   { id: 'info', label: 'Замечание' },
 ];
+
+/** Домены в порядке интерфейса. */
+const DOMAIN_ORDER: DomainId[] = ['model', 'script', 'dash', 'expr', 'vars', 'conn'];
+
+/** Подписи доменов. */
+const DOMAIN_LABELS: Record<DomainId, string> = {
+  model: 'Модель данных',
+  script: 'Скрипт загрузки',
+  dash: 'Дашборд и объекты',
+  expr: 'Меры и выражения',
+  vars: 'Переменные',
+  conn: 'Подключения и окружение',
+};
+
+/** Состояние проверки в чек-листе. */
+function checkState(count: number, skipped: boolean): 'f' | 'o' | 's' {
+  if (skipped) return 's';
+  return count > 0 ? 'f' : 'o';
+}
 
 /** Области находок: скрипт / дашборд / меры. */
 const SCOPES: { id: FindingScope; label: string }[] = [
@@ -41,6 +63,10 @@ type Props = {
   onExportDataModel: () => void;
   rulesConfig: RulesConfig | null;
   onSaveRulesConfig: (config: RulesConfig) => void;
+  /** Переход к вкладке «Скрипт загрузки» — из карточки паттерна. */
+  onOpenScript?: () => void;
+  /** Переход к вкладке «Модель данных». */
+  onOpenModel?: () => void;
 };
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
@@ -52,12 +78,98 @@ function firstLine(finding: Finding): number {
   return finding.line ?? 0;
 }
 
+/**
+ * Склонение числительного: plural(5, 'место', 'места', 'мест') → 'мест'.
+ */
+function plural(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last > 1 && last < 5) return few;
+  if (last === 1) return one;
+  return many;
+}
+
+/** Показывать ли паттерн по строке поиска. */
+function matchesSearch(pattern: Pattern, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = `${pattern.ruleId} ${pattern.title} ${pattern.expression} ${pattern.message} ${pattern.recommendation}`
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+/** Класс пилюли по важности. */
+function severityClass(severity: string): string {
+  if (severity === 'error') return 'error';
+  if (severity === 'warning') return 'warning';
+  return 'info';
+}
+
+/** Подпись важности. */
+function severityLabel(severity: string): string {
+  return SEVERITIES.find((s) => s.id === severity)?.label ?? severity;
+}
+
+/**
+ * Строки одного правила: заголовок правила и его паттерны.
+ */
+function PatternRows(props: {
+  rule: PatternRule;
+  patterns: Pattern[];
+  onOpen: (pattern: Pattern) => void;
+}) {
+  const { rule, patterns, onOpen } = props;
+  return (
+    <>
+      <tr className="rule">
+        <td colSpan={6}>
+          <b>{rule.ruleId}</b> · {rule.title}
+          <span className={`pill ${severityClass(rule.severity)}`} style={{ marginLeft: 8 }}>
+            {severityLabel(rule.severity)}
+          </span>
+          <span className="hint" style={{ marginLeft: 8 }}>{DOMAIN_LABELS[rule.domain]}</span>
+          <span className="num" style={{ float: 'right' }}>
+            {rule.places} {plural(rule.places, 'место', 'места', 'мест')}
+            {' · '}
+            {rule.patterns.length} {plural(rule.patterns.length, 'паттерн', 'паттерна', 'паттернов')}
+          </span>
+        </td>
+      </tr>
+      {patterns.map((p) => (
+        <tr className="pat" key={p.id} onClick={() => onOpen(p)}>
+          <td>
+            <span className="link">▸ {p.expression || p.message}</span>
+          </td>
+          <td className="hint">{DOMAIN_LABELS[p.domain]}</td>
+          <td>
+            <span className={`pill ${severityClass(p.severity)}`}>
+              {severityLabel(p.severity)}
+            </span>
+          </td>
+          <td><span className="pill error">✗ нарушено</span></td>
+          <td className="num">{p.count}</td>
+          <td className="hint">
+            {p.places[0]
+              ? `${p.places[0].name}${p.places[0].table ? ` (${p.places[0].table})` : ''}`
+              : '—'}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 export default function AnalysisTab(props: Props) {
   const {
     analysis, categories, exportNote, onExport, onExportScript, onExportDataModel,
-    rulesConfig, onSaveRulesConfig,
+    rulesConfig, onSaveRulesConfig, onOpenScript, onOpenModel,
   } = props;
 
+  // Активный домен: null — показываем все.
+  const [activeDomain, setActiveDomain] = useState<DomainId | null>(null);
+  // Открытый паттерн — карточка корня проблемы справа.
+  const [openPattern, setOpenPattern] = useState<Pattern | null>(null);
   const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
   const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
   const [scopeFilter, setScopeFilter] = useState<Set<FindingScope>>(new Set());
@@ -122,34 +234,81 @@ export default function AnalysisTab(props: Props) {
     [findings, analysis?.script],
   );
 
-  const scriptLines = useMemo(
-    () => String(analysis?.script ?? '').split(/\r?\n/),
-    [analysis?.script],
-  );
+  /**
+   * Сводка по доменам: сколько проверок, сколько нарушено, сколько мест.
+   *
+   * Считается из ruleStats, чтобы домены были видны и там, где сводка ядра
+   * ещё не заполнена (например, в старом отчёте).
+   */
+  const domainStats = useMemo(() => {
+    const stats = analysis?.ruleStats ?? [];
+    const out = {} as Record<DomainId, {
+      id: DomainId; label: string; total: number; failed: number;
+      skipped: number; passed: number; findings: number; places: number;
+    }>;
+    for (const id of DOMAIN_ORDER) {
+      out[id] = {
+        id, label: DOMAIN_LABELS[id], total: 0, failed: 0,
+        skipped: 0, passed: 0, findings: 0, places: 0,
+      };
+    }
+    for (const stat of stats) {
+      const id = (stat.domain ?? 'dash') as DomainId;
+      const bucket = out[id];
+      if (!bucket) continue;
+      bucket.total += 1;
+      if (stat.skipped) bucket.skipped += 1;
+      else if (stat.count > 0) bucket.failed += 1;
+      else bucket.passed += 1;
+      bucket.findings += stat.count;
+    }
+    // Места считаем по находкам: одна находка может стоить в нескольких местах.
+    for (const f of findings) {
+      const bucket = out[(f.domain ?? 'dash') as DomainId];
+      if (!bucket) continue;
+      bucket.places += f.count ?? 1;
+    }
+    // Если ядро уже посчитало сводку — берём её: она точнее по местам.
+    const fromCore = analysis?.summary.findings.byDomain;
+    if (fromCore) {
+      for (const id of DOMAIN_ORDER) {
+        const src = fromCore[id];
+        if (src) out[id] = { ...out[id], ...src, id, label: DOMAIN_LABELS[id] };
+      }
+    }
+    return out;
+  }, [analysis?.ruleStats, analysis?.summary.findings.byDomain, findings]);
 
   /**
-   * Строки скрипта, к которым относится выбранная находка.
+   * Паттерны, сгруппированные по правилам: одна строка на корень проблемы.
    *
-   * Их может быть несколько: поле грузится в нескольких таблицах, мера
-   * ссылается на поля из разных загрузок. Показываем их все — с перечислением
-   * через запятую и подсветкой каждой.
+   * Ядро отдаёт готовую группировку; если её нет (старый результат),
+   * показываем находки как есть — по одной на строку.
    */
-  const hitLines = useMemo(() => {
-    if (!selected) return new Set<number>();
-    const lines = selected.lines?.length ? selected.lines : [];
-    if (lines.length) return new Set(lines);
-    if (selected.line != null) return new Set([selected.line]);
-    return new Set<number>();
-  }, [selected]);
+  const patternRules = useMemo(() => {
+    const all = analysis?.patternRules ?? [];
+    if (!all.length) return [];
+    return activeDomain ? all.filter((r) => r.domain === activeDomain) : all;
+  }, [analysis?.patternRules, activeDomain]);
 
-  /** Прокрутка скрипта к первой найденной строке. */
-  const scriptViewRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!selected || hitLines.size === 0) return;
-    const first = Math.min(...hitLines);
-    const node = scriptViewRef.current?.querySelector(`[data-line="${first}"]`);
-    node?.scrollIntoView({ block: 'center' });
-  }, [selected, hitLines]);
+  const patternTotals = useMemo(() => {
+    const rules = patternRules.length;
+    const patterns = patternRules.reduce((a, r) => a + r.patterns.length, 0);
+    const places = patternRules.reduce((a, r) => a + r.places, 0);
+    return { rules, patterns, places };
+  }, [patternRules]);
+
+  /** Проверки по доменам — для чек-листа. */
+  const checklist = useMemo(() => {
+    const stats = analysis?.ruleStats ?? [];
+    const byDomain = new Map<DomainId, typeof stats>();
+    for (const id of DOMAIN_ORDER) byDomain.set(id, []);
+    for (const stat of stats) {
+      const id = (stat.domain ?? 'dash') as DomainId;
+      byDomain.get(id)?.push(stat);
+    }
+    return byDomain;
+  }, [analysis?.ruleStats]);
 
   /** Результаты поиска по выражению — в объектах и в скрипте. */
   const exprHits = useMemo(
@@ -216,6 +375,12 @@ export default function AnalysisTab(props: Props) {
   const scoreClass = score >= 80 ? 'info' : score >= 50 ? 'warning' : 'error';
   const outline = analysis.outline?.full ?? null;
 
+  // Числа для метрик: сколько проверок прошло, нарушено и пропущено.
+  const totalChecks = (analysis.ruleStats ?? []).length;
+  const failedChecks = (analysis.ruleStats ?? []).filter((s) => !s.skipped && s.count > 0).length;
+  const skippedChecks = (analysis.ruleStats ?? []).filter((s) => s.skipped).length;
+  const passed = Math.max(0, totalChecks - failedChecks - skippedChecks);
+
   return (
     <section className="card wide">
       <h2>
@@ -224,54 +389,61 @@ export default function AnalysisTab(props: Props) {
         {analysis.file ? ` — ${analysis.file}` : ''}
       </h2>
 
-      {/* --- Карточки метрик --- */}
-      <div className="metric-group">
-        <h4>Важность</h4>
-        <div className="metric-grid">
-          {SEVERITIES.map((s) => {
-            const n = counts.bySeverity[s.id] ?? 0;
-            const active = sevFilter.has(s.id);
-            return (
-              <button
-                key={s.id}
-                className={`metric ${s.id}${n === 0 ? ' zero' : ''}${active ? ' active' : ''}`}
-                onClick={() => setSevFilter(toggle(sevFilter, s.id))}
-                title={active ? 'Снять фильтр' : 'Отфильтровать по важности'}
-              >
-                <div className="n">{n}</div>
-                <div className="l">{s.label}</div>
-              </button>
-            );
-          })}
-          <div
-            className={`metric score ${scoreClass}`}
-            title={analysis.summary.scoreDetails?.formula ?? 'Скор 0–100'}
-          >
-            <div className="n">{score}</div>
-            <div className="l">скор приложения</div>
-          </div>
+      {/* --- Метрики --- */}
+      <div className="kpis">
+        <div className={`kpi ${scoreClass}`}>
+          <div className="lab">Скор приложения</div>
+          <div className="num">{score}</div>
+          <div className="sub">{analysis.summary.scoreDetails?.formula ?? 'взвешенный, 0–100'}</div>
+        </div>
+        <div className="kpi ok">
+          <div className="lab">Проверок пройдено</div>
+          <div className="num">{passed} / {totalChecks}</div>
+          <div className="sub">из {totalChecks} выполненных</div>
+        </div>
+        <div className="kpi err">
+          <div className="lab">Нарушено</div>
+          <div className="num">{failedChecks}</div>
+          <div className="sub">правил требуют внимания</div>
+        </div>
+        <div className="kpi warn">
+          <div className="lab">Пропущено</div>
+          <div className="num">{skippedChecks}</div>
+          <div className="sub">с указанием причины</div>
         </div>
       </div>
 
-      <div className="metric-group">
-        <h4>Категории</h4>
-        <div className="metric-grid">
-          {categories.map((c) => {
-            const n = counts.byCategory[c] ?? 0;
-            const active = catFilter.has(c);
-            return (
-              <button
-                key={c}
-                className={`metric${n === 0 ? ' zero' : ''}${active ? ' active' : ''}`}
-                onClick={() => setCatFilter(toggle(catFilter, c))}
-                title={active ? 'Снять фильтр' : 'Отфильтровать по категории'}
-              >
-                <div className="n">{n}</div>
-                <div className="l">{c}</div>
-              </button>
-            );
-          })}
-        </div>
+      {/* --- Домены: что за работа --- */}
+      <h3 className="hint" style={{ margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        Домены — что за работа
+      </h3>
+      <div className="doms">
+        {DOMAIN_ORDER.map((id) => {
+          const d = domainStats[id];
+          const tot = d.total || 1;
+          const on = activeDomain === id ? ' on' : '';
+          return (
+            <button
+              key={id}
+              className={`dom${on}`}
+              onClick={() => setActiveDomain(activeDomain === id ? null : id)}
+              title={activeDomain === id ? 'Показать все домены' : `Показать только «${d.label}»`}
+            >
+              <div className="nm">{d.label}</div>
+              <div className="st">
+                <span className="f"><b>{d.failed}</b>нарушено</span>
+                <span className="o"><b>{d.passed}</b>пройдено</span>
+                <span className="s"><b>{d.skipped}</b>пропущено</span>
+                <span style={{ marginLeft: 'auto' }}><b>{d.places}</b>находок</span>
+              </div>
+              <div className="bar">
+                <i className="f" style={{ width: `${(d.failed / tot) * 100}%` }} />
+                <i className="o" style={{ width: `${(d.passed / tot) * 100}%` }} />
+                <i className="s" style={{ width: `${(d.skipped / tot) * 100}%` }} />
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <div className="actions">
@@ -284,6 +456,199 @@ export default function AnalysisTab(props: Props) {
         )}
       </div>
       {(exportNote || note) && <p className="muted small">{note || exportNote}</p>}
+
+      {/* --- Чек-лист проверок и находки по паттернам --- */}
+      <div className="split">
+        <div className="card">
+          <h3>
+            Проверки
+            <span className="grow" />
+            <span className="hint">
+              {activeDomain
+                ? `фильтр: ${DOMAIN_LABELS[activeDomain]}`
+                : `${DOMAIN_ORDER.length} доменов · ${totalChecks} ${plural(totalChecks, 'проверка', 'проверки', 'проверок')}`}
+            </span>
+          </h3>
+          <ul className="cl">
+            {DOMAIN_ORDER.filter((id) => !activeDomain || id === activeDomain).map((id) => {
+              const list = checklist.get(id) ?? [];
+              const d = domainStats[id];
+              // Домен с нарушениями раскрыт сразу — иначе чек-лист выглядит пустым.
+              const open = d.failed > 0;
+              return (
+                <details key={id} open={open}>
+                  <summary>
+                    {DOMAIN_LABELS[id]}
+                    <span className="grow" />
+                    <span className="hint">
+                      {d.failed} ✗ · {d.passed} ✓ · {d.skipped} ⊘
+                    </span>
+                  </summary>
+                  <ul className="rules">
+                    {list.map((r) => {
+                      const st = checkState(r.count, r.skipped);
+                      return (
+                        <li key={r.id} title={r.note ?? r.title}>
+                          <span className={`dot ${st}`}>{st === 'f' ? '✗' : st === 's' ? '⊘' : '✓'}</span>
+                          <span className="id">{r.id}</span>
+                          <span className="t">
+                            {r.title}
+                            {r.note ? <em className="hint"> — {r.note}</em> : null}
+                          </span>
+                          {r.count ? <span className="n">{r.count}</span> : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="card">
+          <h3>
+            Находки
+            <span className="grow" />
+            <span className="hint">
+              {' '}
+              {patternTotals.rules} {plural(patternTotals.rules, 'правило', 'правила', 'правил')}
+              {' · '}
+              {patternTotals.patterns} {plural(patternTotals.patterns, 'паттерн', 'паттерна', 'паттернов')}
+              {' · '}
+              {patternTotals.places} {plural(patternTotals.places, 'место', 'места', 'мест')}
+            </span>
+          </h3>
+          <div className="toolbar">
+            <input
+              className="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по находкам…"
+            />
+            {SEVERITIES.map((s) => (
+              <button
+                key={s.id}
+                className={`chip${sevFilter.has(s.id) ? ' active' : ''}`}
+                onClick={() => setSevFilter(toggle(sevFilter, s.id))}
+                title={`Важность «${s.label}»`}
+              >
+                {s.label} <span className="n">{counts.bySeverity[s.id] ?? 0}</span>
+              </button>
+            ))}
+            {activeDomain ? (
+              <button className="chip active" onClick={() => setActiveDomain(null)}>
+                {DOMAIN_LABELS[activeDomain]} ✕
+              </button>
+            ) : null}
+          </div>
+          <div style={{ maxHeight: 640, overflow: 'auto' }}>
+            <table className="rq">
+              <thead>
+                <tr>
+                  <th style={{ width: '38%' }}>Проверка / паттерн</th>
+                  <th style={{ width: '13%' }}>Домен</th>
+                  <th style={{ width: '11%' }}>Важность</th>
+                  <th style={{ width: '12%' }}>Состояние</th>
+                  <th style={{ width: '7%' }}>Мест</th>
+                  <th>Где</th>
+                </tr>
+              </thead>
+              <tbody>
+                {patternRules.map((r) => {
+                  const visible = r.patterns.filter((p) => matchesSearch(p, search));
+                  if (!visible.length) return null;
+                  return (
+                    <PatternRows
+                      key={r.ruleId}
+                      rule={r}
+                      patterns={visible}
+                      onOpen={setOpenPattern}
+                    />
+                  );
+                })}
+                {patternRules.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="muted" style={{ padding: 24, textAlign: 'center' }}>
+                      {activeDomain
+                        ? 'В этом домене нарушений нет'
+                        : 'Нарушений нет — все проверки пройдены'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <table className="findings">
+        <thead>
+          <tr>
+            <th className="sortable" onClick={() => sortBy('severity')}>Уровень{arrow('severity')}</th>
+            <th className="sortable" onClick={() => sortBy('ruleId')}>Правило{arrow('ruleId')}</th>
+            <th className="sortable" onClick={() => sortBy('category')}>Категория{arrow('category')}</th>
+            <th>Находка</th>
+            <th className="sortable" onClick={() => sortBy('object')}>Объект{arrow('object')}</th>
+            <th className="sortable" onClick={() => sortBy('table')}>Таблица{arrow('table')}</th>
+            <th className="sortable" onClick={() => sortBy('line')}>Строка{arrow('line')}</th>
+            <th>Область</th>
+            <th>Рекомендация</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((f, i) => {
+            const key = `${f.ruleId}-${i}`;
+            const isOpen = expanded.has(key);
+            const long = (f.message.length + (f.detail?.length ?? 0)) > 120;
+            return (
+              <tr
+                key={key}
+                className="clickable"
+                onClick={() => { setSelected(f); if (long) setExpanded(toggle(expanded, key)); }}
+              >
+                <td><span className={`pill ${f.severity}`}>{SEVERITIES.find((s) => s.id === f.severity)?.label ?? f.severity}</span></td>
+                <td><code>{f.ruleId}</code></td>
+                <td>{f.category}</td>
+                <td>
+                  <b>{f.title}</b>
+                  {f.count && f.count > 1 && <span className="pill count">×{f.count}</span>}
+                  <div className="muted">
+                    {isOpen || !long ? f.message : `${f.message.slice(0, 90)}…`}
+                  </div>
+                  {isOpen && f.detail && <div className="muted small">{f.detail}</div>}
+                  {isOpen && f.tables && f.tables.length > 1 && (
+                    <div className="muted small">Таблицы: {f.tables.join(', ')}</div>
+                  )}
+                  {isOpen && (
+                    <button
+                      className="link"
+                      onClick={(e) => { e.stopPropagation(); suppressFinding(f); }}
+                    >
+                      подавить это правило
+                    </button>
+                  )}
+                </td>
+                <td>{f.target?.name ?? '—'}</td>
+                <td>{f.table ?? (f.target?.kind === 'table' ? f.target.name : '—')}</td>
+                <td>
+                  {f.lines?.length
+                    ? f.lines.join(', ')
+                    : (f.line ?? '—')}
+                  {f.lines?.length && f.linesTotal && f.linesTotal > f.lines.length
+                    && <span className="muted small"> (из {f.linesTotal})</span>}
+                </td>
+                <td>{SCOPE_LABELS[f.scope ?? 'dashboard'] ?? '—'}</td>
+                <td className="muted">{f.recommendation}</td>
+              </tr>
+            );
+          })}
+          {filtered.length === 0 && (
+            <tr><td colSpan={9} className="muted">Ничего не найдено под текущими фильтрами.</td></tr>
+          )}
+        </tbody>
+      </table>
+
 
       {/* --- Поиск по выражению --- */}
       <h3>Поиск по выражению</h3>
@@ -442,179 +807,6 @@ export default function AnalysisTab(props: Props) {
         </>
       )}
 
-      {/* --- Скрипт загрузки (выше находок: сюда ведёт клик по находке) --- */}
-      {scriptLines.length > 0 && (
-      <>
-      <h3>
-        Скрипт загрузки
-        {selected && hitLines.size > 0 && (
-          <> — строки {[...hitLines].sort((a, b) => a - b).join(', ')}</>
-        )}
-        {selected && <button className="link" onClick={() => setSelected(null)}> закрыть</button>}
-      </h3>
-      {!selected && (
-        <p className="muted small">
-          Нажмите на находку в таблице ниже — здесь подсветятся связанные с ней строки скрипта.
-        </p>
-      )}
-      {selected && hitLines.size === 0 && (
-        <p className="muted small">
-          Для этой находки нельзя указать строку: она относится к приложению в целом.
-        </p>
-      )}
-      {selected && hitLines.size > 0 && selected.detail && (
-        <p className="muted small">{selected.detail}</p>
-      )}
-      <div className="script-view" ref={scriptViewRef}>
-        {scriptLines.map((line, i) => (
-          <div
-            key={i}
-            data-line={i + 1}
-            className={`line${hitLines.has(i + 1) ? ' hit' : ''}`}
-          >
-            <span className="no">{i + 1}</span>
-            <span>{line}</span>
-          </div>
-        ))}
-      </div>
-      </>
-      )}
-
-      {/* --- Находки --- */}
-      <h3>Находки</h3>
-      <div className="toolbar">
-        <button
-          className={sevFilter.size === 0 ? 'active' : ''}
-          onClick={() => setSevFilter(new Set())}
-        >
-          Все важности <span className="n">{findings.length}</span>
-        </button>
-        {SEVERITIES.map((s) => (
-          <button
-            key={s.id}
-            className={`chip${sevFilter.has(s.id) ? ' active' : ''}`}
-            onClick={() => setSevFilter(toggle(sevFilter, s.id))}
-          >
-            {s.label} <span className="n">{counts.bySeverity[s.id] ?? 0}</span>
-          </button>
-        ))}
-        <span className="sep" />
-        <button
-          className={catFilter.size === 0 ? 'active' : ''}
-          onClick={() => setCatFilter(new Set())}
-        >
-          Все категории
-        </button>
-        {categories.map((c) => (
-          <button
-            key={c}
-            className={`chip${catFilter.has(c) ? ' active' : ''}`}
-            onClick={() => setCatFilter(toggle(catFilter, c))}
-          >
-            {c} <span className="n">{counts.byCategory[c] ?? 0}</span>
-          </button>
-        ))}
-        <span className="sep" />
-        <button
-          className={scopeFilter.size === 0 ? 'active' : ''}
-          onClick={() => setScopeFilter(new Set())}
-        >
-          Все области
-        </button>
-        {SCOPES.map((sc) => (
-          <button
-            key={sc.id}
-            className={`chip${scopeFilter.has(sc.id) ? ' active' : ''}`}
-            onClick={() => setScopeFilter(toggle(scopeFilter, sc.id))}
-            title={`Находки в области «${sc.label}»`}
-          >
-            {sc.label} <span className="n">{counts.byScope[sc.id] ?? 0}</span>
-          </button>
-        ))}
-        <input
-          className="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск по находкам…"
-        />
-        <label className="muted small">
-          <input
-            type="checkbox"
-            checked={showSuppressed}
-            onChange={(e) => setShowSuppressed(e.target.checked)}
-          />
-          {' '}показать подавленные ({suppressed.length})
-        </label>
-        <span className="muted">показано {filtered.length} из {findings.length}</span>
-      </div>
-
-      <table className="findings">
-        <thead>
-          <tr>
-            <th className="sortable" onClick={() => sortBy('severity')}>Уровень{arrow('severity')}</th>
-            <th className="sortable" onClick={() => sortBy('ruleId')}>Правило{arrow('ruleId')}</th>
-            <th className="sortable" onClick={() => sortBy('category')}>Категория{arrow('category')}</th>
-            <th>Находка</th>
-            <th className="sortable" onClick={() => sortBy('object')}>Объект{arrow('object')}</th>
-            <th className="sortable" onClick={() => sortBy('table')}>Таблица{arrow('table')}</th>
-            <th className="sortable" onClick={() => sortBy('line')}>Строка{arrow('line')}</th>
-            <th>Область</th>
-            <th>Рекомендация</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((f, i) => {
-            const key = `${f.ruleId}-${i}`;
-            const isOpen = expanded.has(key);
-            const long = (f.message.length + (f.detail?.length ?? 0)) > 120;
-            return (
-              <tr
-                key={key}
-                className="clickable"
-                onClick={() => { setSelected(f); if (long) setExpanded(toggle(expanded, key)); }}
-              >
-                <td><span className={`pill ${f.severity}`}>{SEVERITIES.find((s) => s.id === f.severity)?.label ?? f.severity}</span></td>
-                <td><code>{f.ruleId}</code></td>
-                <td>{f.category}</td>
-                <td>
-                  <b>{f.title}</b>
-                  {f.count && f.count > 1 && <span className="pill count">×{f.count}</span>}
-                  <div className="muted">
-                    {isOpen || !long ? f.message : `${f.message.slice(0, 90)}…`}
-                  </div>
-                  {isOpen && f.detail && <div className="muted small">{f.detail}</div>}
-                  {isOpen && f.tables && f.tables.length > 1 && (
-                    <div className="muted small">Таблицы: {f.tables.join(', ')}</div>
-                  )}
-                  {isOpen && (
-                    <button
-                      className="link"
-                      onClick={(e) => { e.stopPropagation(); suppressFinding(f); }}
-                    >
-                      подавить это правило
-                    </button>
-                  )}
-                </td>
-                <td>{f.target?.name ?? '—'}</td>
-                <td>{f.table ?? (f.target?.kind === 'table' ? f.target.name : '—')}</td>
-                <td>
-                  {f.lines?.length
-                    ? f.lines.join(', ')
-                    : (f.line ?? '—')}
-                  {f.lines?.length && f.linesTotal && f.linesTotal > f.lines.length
-                    && <span className="muted small"> (из {f.linesTotal})</span>}
-                </td>
-                <td>{SCOPE_LABELS[f.scope ?? 'dashboard'] ?? '—'}</td>
-                <td className="muted">{f.recommendation}</td>
-              </tr>
-            );
-          })}
-          {filtered.length === 0 && (
-            <tr><td colSpan={9} className="muted">Ничего не найдено под текущими фильтрами.</td></tr>
-          )}
-        </tbody>
-      </table>
-
       {/* --- Подавленные находки --- */}
       {showSuppressed && suppressed.length > 0 && (
         <>
@@ -647,6 +839,66 @@ export default function AnalysisTab(props: Props) {
       {analysis.skipped?.map((s) => (
         <p key={s.capability} className="warn">Пропущено: {s.reason}</p>
       ))}
+
+      {/* --- Панель паттерна: корень проблемы и его места --- */}
+      <div className={`scrim${openPattern ? ' on' : ''}`} onClick={() => setOpenPattern(null)} />
+      <aside className={`drawer${openPattern ? ' on' : ''}`}>
+        {openPattern ? (
+          <>
+            <div className="dh">
+              <h3>{openPattern.title}</h3>
+              <div className="hint">
+                <b>{openPattern.ruleId}</b> · {DOMAIN_LABELS[openPattern.domain]}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <span className={`pill ${severityClass(openPattern.severity)}`}>
+                  {severityLabel(openPattern.severity)}
+                </span>
+                <span className="pill mute" style={{ marginLeft: 6 }}>
+                  {openPattern.count} мест
+                </span>
+              </div>
+            </div>
+            <div className="db">
+              <div className="hint" style={{ marginBottom: 6 }}>Выражение</div>
+              <div className="code">{openPattern.expression || openPattern.message}</div>
+              <div className="hint" style={{ margin: '14px 0 6px' }}>
+                Где встречается ({openPattern.places.length} из {openPattern.count})
+              </div>
+              <table className="rq">
+                <thead>
+                  <tr><th>Объект</th><th>Таблица</th><th>Строка</th></tr>
+                </thead>
+                <tbody>
+                  {openPattern.places.map((place, i) => (
+                    <tr key={`${place.name}-${i}`}>
+                      <td>{place.name || '—'}</td>
+                      <td className="hint">{place.table || '—'}</td>
+                      <td className="hint">{place.line ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="hint" style={{ margin: '14px 0 6px' }}>Что делать</div>
+              <p className="muted">{openPattern.recommendation}</p>
+            </div>
+            <div className="df">
+              <button className="btn pri" onClick={() => setOpenPattern(null)}>Закрыть</button>
+              {onOpenScript ? (
+                <button className="btn" onClick={() => { setOpenPattern(null); onOpenScript(); }}>
+                  → Скрипт загрузки
+                </button>
+              ) : null}
+              {onOpenModel ? (
+                <button className="btn" onClick={() => { setOpenPattern(null); onOpenModel(); }}>
+                  → Модель данных
+                </button>
+              ) : null}
+              <button className="btn">Настроить правило</button>
+            </div>
+          </>
+        ) : null}
+      </aside>
     </section>
   );
 }

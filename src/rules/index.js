@@ -9,6 +9,7 @@ import { advancedRules } from './advanced.js';
 import { metadataRules } from './metadata.js';
 import { enrichRule, isRuleApplicable, platformLabel, PLATFORM_ANY } from './platforms.js';
 import { scopeForRule } from './scopes.js';
+import { domainForRule } from './domains.js';
 import { normalizeRuleSettings, severityFor } from './settings.js';
 
 export const ALL_RULES = [
@@ -45,6 +46,8 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
   const ruleStats = ALL_RULES.map((rule) => ({
     id: rule.id,
     category: rule.category,
+    // Домен — «какая забота», а не «в каком файле лежит правило».
+    domain: domainForRule(rule.id, rule.category),
     severity: severityFor(rule.id, rule.severity, settings),
     title: rule.title,
     description: rule.description,
@@ -99,6 +102,7 @@ export function runRules(graph, index, config = {}, ctxScript = null) {
           ruleId,
           severity: severityFor(ruleId, f.severity, settings),
           scope: f.scope ?? scopeForRule(ruleId, rule.category),
+          domain: f.domain ?? domainForRule(ruleId, rule.category),
         });
         const stat = statById.get(rule.id);
         if (stat) stat.count += 1;

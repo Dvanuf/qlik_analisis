@@ -7,7 +7,18 @@
  */
 import { useMemo, useState } from 'react';
 import { buildHeatmap, topRules, summaryRows } from '../../../src/report/heatmap.js';
-import type { BatchItem, BatchTotals, Comparison, HistoryRun } from '../types.js';
+import type { BatchItem, BatchTotals, Comparison, DomainId, HistoryRun } from '../types.js';
+
+/** Домены в порядке интерфейса и их подписи. */
+const DOMAIN_ORDER: DomainId[] = ['model', 'script', 'dash', 'expr', 'vars', 'conn'];
+const DOMAIN_LABELS: Record<DomainId, string> = {
+  model: 'Модель данных',
+  script: 'Скрипт загрузки',
+  dash: 'Дашборд и объекты',
+  expr: 'Меры и выражения',
+  vars: 'Переменные',
+  conn: 'Подключения и окружение',
+};
 
 type Props = {
   batch: { results: BatchItem[]; totals: BatchTotals } | null;
@@ -25,6 +36,16 @@ type Props = {
   /** Детальный анализ одного приложения из сводки. */
   onAnalyzeApp: (appId: string) => void;
 };
+
+/** Уровень ячейки карты доменов: чем больше мест, тем темнее. */
+function domainHeatLevel(value: number, total: number): number {
+  if (!value) return 0;
+  const share = value / Math.max(1, total);
+  if (share > 0.3) return 4;
+  if (share > 0.15) return 3;
+  if (share > 0.05) return 2;
+  return 1;
+}
 
 export default function SummaryTab(props: Props) {
   const {
@@ -44,6 +65,29 @@ export default function SummaryTab(props: Props) {
   const heatmap = useMemo(() => buildHeatmap(results), [results]);
   const top = useMemo(() => topRules(results, 10), [results]);
   const rows = useMemo(() => summaryRows(results), [results]);
+
+  /**
+   * Карта «домен × важность»: сколько мест в каждом домене.
+   *
+   * Считаем по находкам всех приложений — домен у находки проставлен ядром.
+   */
+  const domainHeat = useMemo(() => {
+    const cells: Record<string, number> = {};
+    const max = { error: 0, warning: 0, info: 0 };
+    let total = 0;
+    for (const r of results) {
+      for (const f of r.findings ?? []) {
+        const domain = f.domain ?? 'dash';
+        const sev = f.severity ?? 'info';
+        const places = f.count ?? 1;
+        const key = `${domain}|${sev}`;
+        cells[key] = (cells[key] ?? 0) + places;
+        total += places;
+        if (places > max[sev as 'error']) max[sev as 'error'] = places;
+      }
+    }
+    return { cells, total };
+  }, [results]);
 
   const owners = useMemo(() => [...new Set(rows.map((r) => r.owner ?? 'не указан'))].sort(), [rows]);
   const streams = useMemo(() => [...new Set(rows.map((r) => r.stream ?? 'не указан'))].sort(), [rows]);
@@ -149,6 +193,40 @@ export default function SummaryTab(props: Props) {
       {heatmap.apps.length > 40 && (
         <p className="muted small">Показаны первые 40 приложений из {heatmap.apps.length}.</p>
       )}
+
+      {/* --- Карта «домен × важность» --- */}
+      <h3>Домены и важность</h3>
+      <p className="muted small">
+        Сколько мест приходится на каждый домен. Всего: {domainHeat.total}.
+      </p>
+      <table className="heatmap">
+        <thead>
+          <tr>
+            <th>Домен</th>
+            <th>Ошибка</th>
+            <th>Предупреждение</th>
+            <th>Замечание</th>
+            <th>Всего</th>
+          </tr>
+        </thead>
+        <tbody>
+          {DOMAIN_ORDER.map((d) => {
+            const error = domainHeat.cells[`${d}|error`] ?? 0;
+            const warning = domainHeat.cells[`${d}|warning`] ?? 0;
+            const info = domainHeat.cells[`${d}|info`] ?? 0;
+            const sum = error + warning + info;
+            return (
+              <tr key={d}>
+                <td className="hint">{DOMAIN_LABELS[d]}</td>
+                <td className={`heat-${domainHeatLevel(error, domainHeat.total)}`}>{error || ''}</td>
+                <td className={`heat-${domainHeatLevel(warning, domainHeat.total)}`}>{warning || ''}</td>
+                <td className={`heat-${domainHeatLevel(info, domainHeat.total)}`}>{info || ''}</td>
+                <td className="num">{sum}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
 
       {/* --- Топ правил --- */}
       <h3>Топ-10 самых частых правил</h3>

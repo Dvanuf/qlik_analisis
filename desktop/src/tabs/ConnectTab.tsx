@@ -16,12 +16,33 @@ const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
   { id: 'qlikview', label: 'QlikView 12', hint: 'Doc API: скрипт и модель данных' },
 ];
 
-/** Шаги сценария подключения. */
+/**
+ * Шаги сценария подключения.
+ *
+ * Под каждым шагом — что именно происходит: пользователь не должен
+ * угадывать, что нажать дальше.
+ */
 const STEPS = [
-  { id: 'signin', title: 'Войти в хаб' },
-  { id: 'apps', title: 'Загрузить список приложений' },
-  { id: 'select', title: 'Выбрать приложение' },
-  { id: 'analyze', title: 'Анализировать' },
+  {
+    id: 'signin',
+    title: 'Войти в хаб',
+    desc: 'Откроется окно авторизации Qlik. Логин и пароль вводятся в браузере.',
+  },
+  {
+    id: 'apps',
+    title: 'Загрузить список приложений',
+    desc: 'Приложения хаба с метаданными: поток, владелец, тэги, вид.',
+  },
+  {
+    id: 'select',
+    title: 'Выбрать приложение',
+    desc: 'Отметьте радиокнопкой приложение для анализа.',
+  },
+  {
+    id: 'analyze',
+    title: 'Запустить анализ',
+    desc: '54 проверки в 6 доменах: модель данных, скрипт, объекты, меры, переменные.',
+  },
 ] as const;
 
 type Props = {
@@ -162,7 +183,7 @@ export default function ConnectTab(props: Props) {
     if (!signedIn) return { label: 'Войти в хаб (откроется окно авторизации)', run: onSignIn };
     if (!appsLoaded) return { label: 'Загрузить список приложений', run: onLoadApps };
     if (!appSelected) return { label: 'Выберите приложение в списке ниже', run: () => setOpen(true) };
-    return { label: `Анализировать «${currentApp?.title ?? ''}»`, run: onAnalyze };
+    return { label: `\u25b6 Запустить анализ «${currentApp?.title ?? ''}»`, run: onAnalyze };
   })();
 
   const toggleSelected = (id: string) => {
@@ -182,7 +203,10 @@ export default function ConnectTab(props: Props) {
           return (
             <div key={step.id} className={`step ${state}`} role="listitem">
               <span className="num">{state === 'done' ? '✓' : i + 1}</span>
-              <span>{step.title}</span>
+              <span className="tx">
+                <b>{step.title}</b>
+                <i>{step.desc}</i>
+              </span>
             </div>
           );
         })}
@@ -332,40 +356,15 @@ export default function ConnectTab(props: Props) {
               className="combo-input"
               value={query}
               placeholder="Поиск приложения по названию…"
-              onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+              onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setOpen(true)}
               aria-label="Поиск приложения"
             />
-            {open && (
-              <div className="combo-list">
-                {filtered.length === 0 && <div className="combo-empty">Ничего не найдено</div>}
-                {filtered.slice(0, 300).map((a) => (
-                  <div
-                    key={a.id}
-                    className={`combo-item${a.id === appId ? ' active' : ''}`}
-                    onClick={() => { onAppId(a.id); setOpen(false); }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(a.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={() => toggleSelected(a.id)}
-                      aria-label={`Выбрать ${a.title} для пакетного анализа`}
-                    />
-                    <span>{a.title}</span>
-                    <span className="meta">
-                      {a.size ? `${Math.round(a.size / 1048576)} МБ` : 'размер неизвестен'}
-                      {a.stream ? ` · ${a.stream}` : ''}
-                      {a.owner ? ` · ${a.owner}` : ''}
-                    </span>
-                  </div>
-                ))}
-                {filtered.length > 300 && (
-                  <div className="combo-empty">Показаны первые 300 из {filtered.length} — уточните поиск</div>
-                )}
-              </div>
-            )}
           </div>
+          <p className="legend hint">
+            <b>Радиокнопка</b> — приложение, которое будет проанализировано.
+            {' '}<b>Флажок</b> — включить приложение в пакетный анализ (несколько сразу).
+          </p>
 
           <div className="combo-filters">
             <label>
@@ -426,6 +425,128 @@ export default function ConnectTab(props: Props) {
               })}
             </div>
           )}
+
+          {/* --- Таблица приложений: радиокнопка — анализ, флажок — пакет --- */}
+          <div style={{ maxHeight: 430, overflow: 'auto' }}>
+            <table className="rq">
+              <thead>
+                <tr>
+                  <th style={{ width: 64 }} title="Приложение для анализа">Анализ</th>
+                  <th style={{ width: 64 }} title="Пакетный анализ">Пакет</th>
+                  <th>Приложение</th>
+                  <th style={{ width: 90 }}>Размер</th>
+                  <th style={{ width: 170 }}>Поток</th>
+                  <th style={{ width: 230 }}>Владелец</th>
+                  <th style={{ width: 260 }}>Тэги</th>
+                  <th style={{ width: 130 }}>Вид</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((a) => (
+                  <tr
+                    key={a.id}
+                    className={a.id === appId ? 'rule' : ''}
+                    onClick={() => onAppId(a.id)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="radio"
+                        name="qaApp"
+                        checked={a.id === appId}
+                        onChange={() => onAppId(a.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Проанализировать ${a.title}`}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(a.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleSelected(a.id)}
+                        aria-label={`Выбрать ${a.title} для пакетного анализа`}
+                      />
+                    </td>
+                    <td style={{ fontWeight: a.id === appId ? 600 : 400 }}>
+                      {a.title}
+                      {a.id === appId ? (
+                        <span className="pill ok" style={{ marginLeft: 8 }}>будет проанализировано</span>
+                      ) : null}
+                    </td>
+                    <td className="hint">{a.size ? `${(a.size / 1048576).toFixed(1).replace('.', ',')} МБ` : '—'}</td>
+                    <td className="hint">{a.stream || '—'}</td>
+                    <td className="hint">{a.owner || '—'}</td>
+                    <td className="hint">{(a.tags ?? []).join(', ') || '—'}</td>
+                    <td>
+                      <span className={`pill ${a.published === true ? 'ok' : 'mute'}`}>
+                        {a.published === true ? 'опубликовано' : 'личное'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="muted" style={{ padding: 20, textAlign: 'center' }}>
+                      Ничего не найдено по текущим фильтрам
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* --- Панель запуска: что будет запущено и кнопка --- */}
+          <div className={`runbar${currentApp ? '' : ' empty'}`}>
+            <div className="rb-info">
+              {currentApp ? (
+                <>
+                  <div className="rb-t">
+                    {currentApp.title}
+                    <span className="pill ok">будет проанализировано</span>
+                  </div>
+                  <div className="rb-s">
+                    <span className="mono">{currentApp.id}</span>
+                    {' · '}
+                    {currentApp.size
+                      ? `${(currentApp.size / 1048576).toFixed(1).replace('.', ',')} МБ`
+                      : 'размер неизвестен'}
+                    {' · поток «'}{currentApp.stream || 'не указан'}»'
+                    {' · '}
+                    {currentApp.published === true ? 'опубликовано' : 'личное'}
+                    {currentApp.owner ? ` · ${currentApp.owner}` : ''}
+                    {selectedIds.length > 0
+                      ? ` · в пакетном анализе ещё ${selectedIds.length - (selectedIds.includes(currentApp.id) ? 1 : 0)}`
+                      : ''}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rb-t">Приложение не выбрано</div>
+                  <div className="rb-s">
+                    Отметьте радиокнопкой приложение в таблице выше — здесь появится кнопка запуска.
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="rb-act">
+              <button
+                className="btn pri"
+                onClick={onAnalyze}
+                disabled={!currentApp || Boolean(busy) || batchRunning}
+              >
+                ▶ Запустить анализ «{currentApp?.title ?? 'приложения'}»
+              </button>
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={() => onAnalyzeAll(selectedIds)}
+                  disabled={Boolean(busy) || batchRunning}
+                >
+                  ▶ Пакетный анализ ({selectedIds.length} прилож.)
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
