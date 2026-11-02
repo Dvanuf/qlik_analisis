@@ -13,7 +13,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - run: npm ci
 
@@ -24,6 +24,12 @@ jobs:
           QLIK_WS_URL: ${{ secrets.QLIK_WS_URL }}
           QLIK_API_KEY: ${{ secrets.QLIK_API_KEY }}
         run: |
+          # Без секретов сервера анализировать нечего: сообщаем и выходим без ошибки.
+          # Иначе прогон падал бы на каждом коммите из-за отсутствия доступа.
+          if [ -z "$QLIK_WS_URL" ]; then
+            echo "QLIK_WS_URL не задан — анализ сервера пропущен (нужен секрет репозитория)."
+            exit 0
+          fi
           node bin/analyze.js \
             --url "$QLIK_WS_URL" \
             --api-key "$QLIK_API_KEY" \
