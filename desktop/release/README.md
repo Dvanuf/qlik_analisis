@@ -142,5 +142,5 @@ macOS-сборки (`.dmg` и `.zip`) лежат в этом каталоге, �
 прикреплены к GitHub Releases.
 
 Windows-пакеты (`.exe`) собираются в CI — workflow **CI**, артефакт
-`qlik-analyzer-windows` (108 МБ). Скачиваются из GitHub Actions по коммиту
-версии; в релизы пока не прикрепляются.
+`qlik-analyzer-windows` (108 МБ). С версии **0.8.2** `.exe` скачивается из
+GitHub Actions по коммиту версии и прикрепляется к GitHub Releases.
