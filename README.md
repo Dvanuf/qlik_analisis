@@ -615,6 +615,12 @@ cd .. && git add -A && git commit -m "release: v0.1.11" && git tag v0.1.11
 git push origin main --tags
 ```
 
+**GitHub Releases.** Начиная с 0.7.0 сборка выкладывается и как релиз на GitHub:
+в `desktop/release/` лежат `.dmg` и `.zip`, они же прикрепляются к релизу —
+[`Releases`](https://github.com/Dvanuf/qlik_analisis/releases). Windows-пакет
+собирается в CI (workflow `CI`, артефакт `qlik-analyzer-windows`) и скачивается
+из GitHub Actions по коммиту версии.
+
 Восстановить конкретную версию: `git checkout v0.1.10 && cd desktop && npm ci && npm run build`.
 
 ### Как добавить правило

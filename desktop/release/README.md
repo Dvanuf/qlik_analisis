@@ -4,6 +4,15 @@
 версия добавляется рядом с предыдущими. Полное описание изменений — в `CHANGELOG.md`
 в корне проекта, исходники каждой версии — в git по тегу `v<версия>`.
 
+Начиная с **0.7.0** сборки выкладываются и как GitHub Releases — по ссылке
+[`Releases`](https://github.com/Dvanuf/qlik_analisis/releases):
+
+| Версия | Релиз |
+|---|---|
+| 0.8.1 | [v0.8.1 — веб-интерфейс ИИ-чата на сервере](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.1) |
+| 0.8.0 | [v0.8.0 — серверный ИИ-слой](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.0) |
+| 0.7.0 | [v0.7.0 — десктопный ИИ-слой](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.7.0) |
+
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
 | `Qlik Analyzer-0.8.1-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.8.1 |
@@ -125,6 +134,9 @@ npx electron-builder --mac dmg
 `Qlik Analyzer-0.1.5-x64.exe` — установщик NSIS: спросит папку, создаст ярлык на рабочем столе.
 Приложение пока не подписано — SmartScreen предупредит, нужно «Подробнее» → «Выполнить в любом случае».
 
+macOS-сборки (`.dmg` и `.zip`) лежат в этом каталоге, на рабочем столе и
+прикреплены к GitHub Releases.
+
 Windows-пакеты (`.exe`) собираются в CI — workflow **CI**, артефакт
 `qlik-analyzer-windows` (108 МБ). Скачиваются из GitHub Actions по коммиту
-версии; macOS-сборки лежат в этом каталоге и на рабочем столе.
+версии; в релизы пока не прикрепляются.
