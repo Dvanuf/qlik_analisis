@@ -37,5 +37,21 @@
     "passwordEnv": "QLIK_PASSWORD",
     "insecure": true,
     "platform": "qlikview"
+  },
+  "ai": {
+    "provider": "zai",
+    "fallback": ["gemini", "local"],
+    "sensitive": false,
+    "limits": {
+      "requestsPerMinute": 10,
+      "dailyCap": 200,
+      "cacheTtlMs": 60000
+    },
+    "providers": {
+      "local": {
+        "baseUrl": "http://localhost:11434/v1",
+        "model": "qwen3:8b"
+      }
+    }
   }
 }

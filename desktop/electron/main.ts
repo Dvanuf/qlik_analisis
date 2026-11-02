@@ -258,6 +258,30 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
 
+        // Вкладка «ИИ-чат»: поле вопроса, кнопка настроек, подсказки.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+              .filter(function (b) { return b.textContent.indexOf('ИИ-чат') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 700));
+        const ai = await win.webContents.executeJavaScript(`
+          (function () {
+            var panel = document.querySelector('.ai-tab');
+            return JSON.stringify({
+              hasPanel: !!panel,
+              hasInput: document.querySelectorAll('.ai-input input').length,
+              hasSettingsButton: Array.prototype.slice.call(document.querySelectorAll('.ai-tab button'))
+                .some(function (b) { return b.textContent.indexOf('Настройки ИИ') >= 0; }),
+              prompts: document.querySelectorAll('.ai-prompts button').length,
+              log: document.querySelectorAll('.ai-log').length
+            });
+          })()
+        `);
+
         const image = await win.webContents.capturePage();
         // В упакованном приложении app.asar доступен только для чтения —
         // скриншот пишем в каталог пользователя.
@@ -291,6 +315,7 @@ async function runSmokeCheck(): Promise<void> {
           analysis: JSON.parse(String(analysis)),
           script: JSON.parse(String(script)),
           model: JSON.parse(String(model)),
+          ai: JSON.parse(String(ai)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {

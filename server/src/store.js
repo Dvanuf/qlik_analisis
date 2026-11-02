@@ -67,6 +67,23 @@ export class ReportStore {
     return this.list().find((e) => e.jobId === jobId) ?? null;
   }
 
+  /**
+   * Содержимое JSON-отчёта: сводка и находки.
+   * Индекс хранит только метаданные, поэтому содержимое читается из файла.
+   * @param {string} jobId
+   * @returns {object|null}
+   */
+  readJson(jobId) {
+    const safe = String(jobId).replace(/[^\w-]/g, '');
+    const p = resolve(this.reportsDir, `${safe}.json`);
+    if (!existsSync(p)) return null;
+    try {
+      return JSON.parse(readFileSync(p, 'utf8'));
+    } catch {
+      return null;
+    }
+  }
+
   /** Путь к HTML-файлу (для отдачи по HTTP). */
   htmlPath(jobId) {
     const safe = String(jobId).replace(/[^\w-]/g, '');

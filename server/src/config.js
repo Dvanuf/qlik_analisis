@@ -7,6 +7,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { resolveAi } from '../../src/config.js';
 
 export const DEFAULT_SERVER_CONFIG = 'server/server.config.json';
 
@@ -77,6 +78,9 @@ export function resolveServerConfig(raw = {}) {
       // null = определяется автоматически по типу API (QIX Engine API / QlikView Doc API).
       platform: qlik.platform ?? null,
     },
+    // ИИ-слой: те же настройки, что и в десктопе, но ключи — только из
+    // переменных окружения (QLIK_AI_ZAI_KEY, QLIK_AI_GEMINI_KEY).
+    ai: resolveAi({}, { ai: raw.ai ?? {} }),
   };
 }
 

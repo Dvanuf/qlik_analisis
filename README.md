@@ -468,7 +468,12 @@ node server/server.js --host 0.0.0.0      # доступ из сети
   `proxy` (доменный вход через IIS/nginx с Kerberos — рекомендуется).
 
 REST API: `/api/apps`, `/api/analyze`, `/api/analyze-all`, `/api/jobs`,
-`/api/reports`, `/api/stream`, `/api/health`.
+`/api/reports`, `/api/stream`, `/api/health`, `/api/ai/analyze`.
+
+**ИИ-слой на сервере**: маршрут `POST /api/ai/analyze` (роль `analyst`) отвечает
+на вопрос по результатам анализа тем же ядром, что и десктоп. Ключи провайдеров
+берутся из окружения сервера (`QLIK_AI_ZAI_KEY`, `QLIK_AI_GEMINI_KEY`) и никогда
+не передаются в теле запроса.
 
 Подробности, конфигурация и развёртывание — [`server/README.md`](server/README.md).
 

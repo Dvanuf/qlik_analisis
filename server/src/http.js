@@ -17,6 +17,8 @@
  *   GET  /reports/:id.json       — находки (JSON)
  *   DELETE /api/reports/:id      — удалить отчёт
  *   GET  /api/stream             — SSE-поток прогресса задач
+ *   GET  /api/ai/status          — какие ИИ-провайдеры настроены (без ключей)
+ *   POST /api/ai/analyze         — вопрос к ИИ по результатам анализа
  */
 import { createServer } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
@@ -27,6 +29,9 @@ import { analyzeApp, analyzeAllApps, fetchApps, rulesCatalog } from './qlik.js';
 import { listLibrary } from '../../src/script/library.js';
 import { JobQueue } from './queue.js';
 import { ReportStore } from './store.js';
+import { analyze, PROVIDERS } from '../../src/ai/index.js';
+import { aiKeyEnvNames, envValue } from '../../src/config.js';
+import { maskSecrets } from '../../src/logging/mask.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(HERE, '..', 'public');
@@ -163,6 +168,7 @@ export function createApp(options) {
       const isAnalyst = ['analyst', 'admin'].includes(auth.role ?? 'viewer');
       const needsAnalyst = pathname === '/api/analyze'
         || pathname === '/api/analyze-all'
+        || pathname === '/api/ai/analyze'
         || /^\/api\/jobs\/[^/]+\/cancel$/.test(pathname);
       if (needsAnalyst && !isAnalyst) {
         sendJson(res, 403, { error: 'Недостаточно прав для запуска анализа (нужна роль analyst)' });
@@ -218,6 +224,94 @@ export function createApp(options) {
         const body = await readBody(req);
         const job = queue.enqueue('analyze-all', { platform: body.platform }, auth.user);
         sendJson(res, 202, { jobId: job.id, status: job.status });
+        return;
+      }
+
+      // --- ИИ-слой ---
+      if (pathname === '/api/ai/status') {
+        const names = aiKeyEnvNames(config.ai);
+        sendJson(res, 200, {
+          provider: config.ai.provider,
+          fallback: config.ai.fallback,
+          sensitive: config.ai.sensitive,
+          limits: config.ai.limits,
+          providers: Object.entries(PROVIDERS).map(([id, p]) => ({
+            id,
+            label: p.label,
+            model: config.ai.providers?.[id]?.model ?? p.model,
+            external: p.external,
+            needsKey: p.needsKey,
+            // Ключ задан? В ответ попадает только факт, не значение.
+            hasKey: Boolean(envValue([names[id] ?? ''])),
+          })),
+        });
+        return;
+      }
+
+      if (pathname === '/api/ai/analyze' && req.method === 'POST') {
+        const body = await readBody(req);
+        const question = String(body.question ?? '').trim();
+        if (!question) {
+          sendJson(res, 400, { error: 'Не задан вопрос' });
+          return;
+        }
+
+        // Контекст: либо сохранённый отчёт по reportId, либо присланные данные.
+        let context = body;
+        if (body.reportId) {
+          const report = store.get(String(body.reportId));
+          if (!report) {
+            sendJson(res, 404, { error: 'Отчёт не найден' });
+            return;
+          }
+          // Содержимое отчёта лежит в файле, в индексе — только метаданные.
+          const json = store.readJson(String(body.reportId)) ?? {};
+          context = {
+            ...body,
+            summary: json.summary ?? report.summary ?? {},
+            findings: json.findings ?? [],
+          };
+        }
+
+        // Ключи провайдеров — только из окружения сервера, не из тела запроса.
+        const names = aiKeyEnvNames(config.ai);
+        const apiKeys = {};
+        for (const [id, name] of Object.entries(names)) {
+          const value = envValue([name ?? '']);
+          if (value) apiKeys[id] = value;
+        }
+
+        try {
+          const result = await analyze(question, {
+            analysis: {
+              summary: context.summary ?? {},
+              findings: context.findings ?? [],
+            },
+            runs: context.runs ?? [],
+            comparison: context.comparison ?? null,
+            app: context.app ?? {},
+            maxChars: config.ai.maxSummaryChars,
+          }, {
+            provider: config.ai.provider,
+            fallback: config.ai.fallback,
+            apiKeys,
+            sensitive: config.ai.sensitive,
+            providers: config.ai.providers,
+            limits: config.ai.limits,
+            statePath: resolve(config.server.dataDir, 'ai-state.json'),
+          });
+          sendJson(res, 200, {
+            text: result.text,
+            provider: result.provider,
+            model: result.model,
+            truncated: result.truncated,
+            redacted: result.redacted,
+            cached: result.cached,
+          });
+        } catch (err) {
+          // Текст ошибки не должен содержать ключей.
+          sendJson(res, 502, { error: maskSecrets(String(err?.message ?? err)) });
+        }
         return;
       }
 

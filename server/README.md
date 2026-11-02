@@ -47,6 +47,15 @@ node server/server.js --auth proxy                     # аутентифика�
     "passwordEnv": "QLIK_PASSWORD",
     "insecure": true,
     "platform": "qlikview"
+  },
+  "ai": {
+    "provider": "zai",
+    "fallback": ["gemini", "local"],
+    "sensitive": false,
+    "limits": { "requestsPerMinute": 10, "dailyCap": 200, "cacheTtlMs": 60000 },
+    "providers": {
+      "local": { "baseUrl": "http://localhost:11434/v1", "model": "qwen3:8b" }
+    }
   }
 }
 ```
@@ -128,6 +137,8 @@ node server/server.js --auth proxy                     # аутентифика�
 | GET | `/reports/:id.html` | Сам отчёт | любая |
 | GET | `/reports/:id.json` | Находки в JSON | любая |
 | GET | `/api/stream` | SSE-поток прогресса задач | любая |
+| GET | `/api/ai/status` | Какие ИИ-провайдеры настроены (без ключей) | любая |
+| POST | `/api/ai/analyze` | Вопрос к ИИ по результатам анализа | analyst |
 
 ### Примеры
 
@@ -145,7 +156,25 @@ curl -u 'ivan:пароль' -X POST -H 'Content-Type: application/json' \
 
 # состояние задачи
 curl -u 'ivan:пароль' http://localhost:8080/api/jobs/job-1792670375053-1
+
+# вопрос к ИИ по сохранённому отчёту
+curl -u 'ivan:пароль' -X POST -H 'Content-Type: application/json' \
+  -d '{"question":"Что исправлять в первую очередь?","reportId":"job-1792670375053-1"}' \
+  http://localhost:8080/api/ai/analyze
 ```
+
+### ИИ-слой на сервере
+
+Маршрут `/api/ai/analyze` отвечает на вопрос по результатам анализа тем же
+ядром, что и десктопное приложение (`src/ai/`). К модели уходит **агрегированная
+сводка** — счётчики, топ правил, динамика и отклонения, а не полный скрипт.
+
+- **Ключи — только из окружения сервера**: `QLIK_AI_ZAI_KEY`, `QLIK_AI_GEMINI_KEY`.
+  В теле запроса ключ передать нельзя — сервер его не читает.
+- Контекст берётся из сохранённого отчёта (`reportId`) или присылается телом запроса.
+- Ответ приходит как `{"text", "provider", "model", "truncated", "redacted"}`;
+  при сбое провайдера — 502 с текстом ошибки без ключей.
+- Роль `analyst` обязательна: `viewer` получает 403.
 
 ## Устройство
 
