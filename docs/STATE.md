@@ -3,7 +3,7 @@
 Документ отвечает на вопрос «с чего начать новую задачу». Правила работы с AI —
 в [`AGENTS.md`](../AGENTS.md), история версий — в [`CHANGELOG.md`](../CHANGELOG.md).
 
-**Обновлено:** 02.11.2026 · **Текущая версия:** 0.8.1 (собирается)
+**Обновлено:** 02.11.2026 · **Текущая версия:** 0.8.1 (тег `v0.8.1`)
 
 Что можно перенести из расширения QS Metadata Explorer — в
 [`QSME-ANALYSIS.md`](QSME-ANALYSIS.md) (проверено на живом хабе 26.10.2026).
@@ -23,11 +23,12 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 |---|---|
 | Исходники | `/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer` |
 | Архив всех сборок | `<проект>/desktop/release/` |
-| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.6.3-{arm64.dmg,arm64-mac.zip,x64.exe}` |
+| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.8.1-{arm64.dmg,arm64-mac.zip}` |
 | Лог входа в хаб | `~/Library/Application Support/qlik-analyzer-desktop/hub-login.log` |
 | Настройки правил | `~/Library/Application Support/qlik-analyzer-desktop/rules.json` |
 | История прогонов | `~/Library/Application Support/qlik-analyzer-desktop/history.sqlite` |
 | Учётные данные хаба (зашифрованы) | `~/Library/Application Support/qlik-analyzer-desktop/hub-credentials.bin` |
+| GitHub Releases | `https://github.com/Dvanuf/qlik_analisis/releases` (с 0.7.0) |
 | Ключи ИИ-провайдеров (зашифрованы) | `~/Library/Application Support/qlik-analyzer-desktop/ai-keys.bin` |
 | Настройки ИИ (провайдер, лимиты) | `~/Library/Application Support/qlik-analyzer-desktop/ai-config.json` |
 | Счётчики запросов ИИ | `~/Library/Application Support/qlik-analyzer-desktop/ai-state.json` |
