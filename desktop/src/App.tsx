@@ -9,10 +9,11 @@ import LibraryTab from './tabs/LibraryTab.js';
 import SummaryTab from './tabs/SummaryTab.js';
 import ModelTab from './tabs/ModelTab.js';
 import ScriptTab from './tabs/ScriptTab.js';
+import AiTab from './tabs/AiTab.js';
 import type {
   AnalysisResult, AnalyzeProgress, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
-  Comparison, DoctorStep, HistoryRun, LibraryFunction, Platform, RuleInfo, RulesConfig,
-  Severity, Tab,
+  Comparison, DoctorStep, Finding, HistoryRun, LibraryFunction, Platform, RuleInfo,
+  RulesConfig, Severity, Tab,
 } from './types.js';
 
 
@@ -141,6 +142,8 @@ export default function App() {
   // Приложения, отмеченные для пакетного анализа.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  // Находка, по которой пользователь хочет спросить ИИ.
+  const [aiFocus, setAiFocus] = useState<Finding | null>(null);
 
   const [ruleSearch, setRuleSearch] = useState('');
   const [ruleCat, setRuleCat] = useState('all');
@@ -747,6 +750,7 @@ export default function App() {
           ['summary', 'Сводный отчёт'],
           ['rules', 'Правила'],
           ['library', 'Каталог функций'],
+          ['ai', 'ИИ-чат'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button key={id} className={`tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)}>
             {label}
@@ -821,6 +825,20 @@ export default function App() {
           onSaveRulesConfig={(c) => void saveRulesConfig(c)}
           onOpenScript={() => setTab('script')}
           onOpenModel={() => setTab('model')}
+          onAskAi={(finding) => {
+            setAiFocus(finding);
+            setTab('ai');
+          }}
+        />
+      )}
+
+      {tab === 'ai' && (
+        <AiTab
+          analysis={analysis}
+          appTitle={analysis?.appName ?? analysis?.file ?? ''}
+          platform={platform === 'auto' ? '' : platform}
+          focus={aiFocus}
+          onFocusUsed={() => setAiFocus(null)}
         />
       )}
 

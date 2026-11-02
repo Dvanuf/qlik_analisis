@@ -1,0 +1,100 @@
+/**
+ * Описания провайдеров ИИ.
+ *
+ * Все три говорят по OpenAI-совместимому протоколу (POST /chat/completions),
+ * поэтому транспорт общий. Различаются они базовым адресом, моделью, наличием
+ * ключа и тем, уходят ли данные с машины пользователя.
+ *
+ * external: true — данные покидают машину, значит применяется маскирование
+ * и режим конфиденциальности такие провайдеры исключает.
+ */
+
+/**
+ * Описание провайдера ИИ.
+ * @typedef {object} AiProvider
+ * @property {string} id — идентификатор провайдера.
+ * @property {string} label — подпись для интерфейса.
+ * @property {string} baseUrl — адрес OpenAI-совместимого эндпоинта.
+ * @property {string} model — модель по умолчанию.
+ * @property {string|null} apiKeyEnv — имя переменной окружения с ключом.
+ * @property {boolean} needsKey — нужен ли ключ.
+ * @property {boolean} external — уходят ли данные с машины.
+ * @property {number} timeoutMs — таймаут запроса.
+ */
+
+/** @type {Record<string, AiProvider>} */
+export const PROVIDERS = {
+  zai: {
+    id: 'zai',
+    label: 'Z.ai — GLM-4.7-Flash',
+    // Бесплатный тариф: модель glm-4.7-flash не тарифицируется.
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    model: 'glm-4.7-flash',
+    apiKeyEnv: 'QLIK_AI_ZAI_KEY',
+    needsKey: true,
+    external: true,
+    timeoutMs: 45000,
+  },
+  gemini: {
+    id: 'gemini',
+    label: 'Google Gemini — Flash',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-2.5-flash',
+    apiKeyEnv: 'QLIK_AI_GEMINI_KEY',
+    needsKey: true,
+    external: true,
+    timeoutMs: 45000,
+  },
+  local: {
+    id: 'local',
+    label: 'Локальная модель — Ollama / LM Studio',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'qwen3:8b',
+    apiKeyEnv: null,
+    needsKey: false,
+    external: false,
+    timeoutMs: 180000,
+  },
+};
+
+/** Порядок провайдеров по умолчанию: платный-бесплатный → бесплатный → локальный. */
+export const PROVIDER_ORDER = ['zai', 'gemini', 'local'];
+
+/**
+ * Собирает цепочку провайдеров: основной + резервные, без повторов.
+ * @param {string} primary
+ * @param {string[]} [fallback]
+ * @returns {string[]}
+ */
+export function providerChain(primary = 'zai', fallback = []) {
+  const list = [primary, ...(fallback ?? [])].map((x) => String(x ?? '').trim()).filter(Boolean);
+  return [...new Set(list)].filter((id) => Boolean(PROVIDERS[id]));
+}
+
+/**
+ * Описание провайдера с учётом переопределений из конфигурации.
+ * @param {string} id
+ * @param {{baseUrl?: string, model?: string}} [override]
+ * @returns {object|null}
+ */
+export function resolveProvider(id, override = {}) {
+  const base = PROVIDERS[id];
+  if (!base) return null;
+  return {
+    ...base,
+    baseUrl: override.baseUrl ?? base.baseUrl,
+    model: override.model ?? base.model,
+  };
+}
+
+/**
+ * Провайдеры, которым можно отправлять данные при sensitive: false.
+ * В режиме конфиденциальности остаётся только локальный.
+ * @param {string[]} chain
+ * @param {boolean} sensitive
+ * @returns {string[]}
+ */
+export function externalOnly(chain, sensitive) {
+  if (!sensitive) return chain;
+  return chain.filter((id) => PROVIDERS[id]?.external === false);
+}

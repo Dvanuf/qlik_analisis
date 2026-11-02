@@ -27,6 +27,8 @@ import { openHistory, saveRun, listRuns, compareRuns, latestRunForApp, RULES_VER
 import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
 import { buildXlsx } from '../../src/report/xlsx.js';
 import { normalizeCredentials, isSessionUsable, parseCredentials } from '../../src/session/credentials.js';
+import { analyze as aiAnalyze, PROVIDERS } from '../../src/ai/index.js';
+import { resolveAi } from '../../src/config.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -1026,4 +1028,225 @@ function looksLikeText(filePath: string): boolean {
   } catch {
     return true;
   }
+function looksLikeText(filePath: string): boolean {
+  try {
+    const head = readFileSync(filePath).subarray(0, 4);
+    return !(head[0] === 0x50 && head[1] === 0x4b);
+  } catch {
+    return true;
+  }
+}
+
+/* ------------------------------ ИИ-слой -------------------------------- */
+
+/**
+ * Ключи провайдеров хранятся в зашифрованном виде (safeStorage) — так же,
+ * как сессионная cookie хаба. В renderer ключи не попадают: renderer видит
+ * только признак «ключ задан» и маскированное значение.
+ */
+const AI_KEYS_FILE = 'ai-keys.bin';
+/** Настройки ИИ (провайдер, лимиты, режим конфиденциальности) — обычный JSON. */
+const AI_CONFIG_FILE = 'ai-config.json';
+
+function aiKeysPath(): string {
+  return resolve(app.getPath('userData'), AI_KEYS_FILE);
+}
+
+function aiConfigPath(): string {
+  return resolve(app.getPath('userData'), AI_CONFIG_FILE);
+}
+
+/** Читает ключи провайдеров из зашифрованного файла. */
+async function loadAiKeys(): Promise<Record<string, string>> {
+  const file = aiKeysPath();
+  if (!existsSync(file)) return {};
+  try {
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(readFileSync(file));
+    const keys = JSON.parse(result) as Record<string, string>;
+    // Ключ хранения мог быть ротирован — перешифровываем файл новым ключом.
+    if (shouldReEncrypt) {
+      writeFileSync(file, await safeStorage.encryptStringAsync(result));
+    }
+    return keys ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** Сохраняет ключи провайдеров в зашифрованном виде. */
+async function saveAiKeys(keys: Record<string, string>): Promise<void> {
+  const clean: Record<string, string> = {};
+  for (const [id, value] of Object.entries(keys ?? {})) {
+    if (value && String(value).trim()) clean[id] = String(value).trim();
+  }
+  const file = aiKeysPath();
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, await safeStorage.encryptStringAsync(JSON.stringify(clean)));
+  renameSync(tmp, file);
+}
+
+/** Читает настройки ИИ из файла (битый файл — значения по умолчанию). */
+function readAiConfig(): Record<string, unknown> {
+  const file = aiConfigPath();
+  if (!existsSync(file)) return {};
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** Сохраняет настройки ИИ в файл. */
+function writeAiConfig(config: Record<string, unknown>): void {
+  const file = aiConfigPath();
+  writeFileSync(file, `${JSON.stringify(config ?? {}, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * Итоговые настройки ИИ: файл приложения + переменные окружения + умолчания.
+ */
+function aiSettings(): ReturnType<typeof resolveAi> {
+  const saved = readAiConfig();
+  return resolveAi({}, { ai: saved });
+}
+
+/** Какие провайдеры настроены — без самих ключей. */
+ipcMain.handle('core:ai-status', async () => {
+  const settings = aiSettings();
+  const keys = await loadAiKeys();
+  const providers = Object.entries(PROVIDERS).map(([id, p]) => ({
+    id,
+    label: p.label,
+    model: settings.providers?.[id]?.model ?? p.model,
+    baseUrl: settings.providers?.[id]?.baseUrl ?? p.baseUrl,
+    external: p.external,
+    needsKey: p.needsKey,
+    // Ключ задан? В интерфейс попадает только факт, не значение.
+    hasKey: Boolean(keys[id] ?? process.env[p.apiKeyEnv ?? '']),
+    // Для локального провайдера ключ не нужен.
+    keyRequired: p.needsKey && !keys[id] && !process.env[p.apiKeyEnv ?? ''],
+  }));
+  return {
+    providers,
+    provider: settings.provider,
+    fallback: settings.fallback,
+    sensitive: settings.sensitive,
+    limits: settings.limits,
+    maxSummaryChars: settings.maxSummaryChars,
+  };
+});
+
+/** Сохранение настроек ИИ: провайдер, лимиты, режим конфиденциальности. */
+ipcMain.handle('core:ai-settings-save', (_e, payload: Record<string, unknown>) => {
+  const current = readAiConfig();
+  writeAiConfig({ ...current, ...(payload ?? {}) });
+  return true;
+});
+
+/** Сохранение ключей провайдеров (в зашифрованном виде). */
+ipcMain.handle('core:ai-keys-save', async (_e, payload: { zai?: string; gemini?: string }) => {
+  const keys = await loadAiKeys();
+  for (const id of ['zai', 'gemini'] as const) {
+    const value = payload?.[id];
+    if (typeof value === 'string' && value.trim()) keys[id] = value.trim();
+    else if (value === '') delete keys[id];
+  }
+  await saveAiKeys(keys);
+  return true;
+});
+
+/** Удаление всех ключей провайдеров. */
+ipcMain.handle('core:ai-keys-clear', async () => {
+  const file = aiKeysPath();
+  if (existsSync(file)) rmSync(file);
+  return true;
+});
+
+/** Текущий запрос ИИ — его можно отменить. */
+let aiAbort: AbortController | null = null;
+
+/** Отмена текущего запроса ИИ. */
+ipcMain.handle('core:ai-cancel', () => {
+  aiAbort?.abort();
+  aiAbort = null;
+  return true;
+});
+
+/**
+ * Вопрос к ИИ по результатам анализа.
+ *
+ * Renderer присылает вопрос и контекст (сводку находок, историю прогонов).
+ * Наружу к провайдеру уходит агрегированная сводка, а не сырой анализ.
+ */
+ipcMain.handle('core:ai-ask', async (_e, payload: {
+  question?: string;
+  app?: { id?: string; title?: string; owner?: string; platform?: string };
+  summary?: unknown;
+  runs?: unknown[];
+  comparison?: unknown;
+  focus?: { ruleId?: string; title?: string; target?: string; message?: string } | null;
+}) => {
+  const settings = aiSettings();
+  const keys = await loadAiKeys();
+  const apiKeys: Record<string, string> = { ...keys };
+  // Ключ из окружения имеет приоритет над сохранённым в приложении.
+  for (const [id, p] of Object.entries(PROVIDERS)) {
+    const fromEnv = p.apiKeyEnv ? process.env[p.apiKeyEnv] : undefined;
+    if (fromEnv) apiKeys[id] = fromEnv;
+  }
+
+  aiAbort?.abort();
+  aiAbort = new AbortController();
+  const controller = aiAbort;
+
+  // Фокус находки: точечный вопрос добавляет в сводку одну находку.
+  const focus = payload?.focus ?? null;
+  const summaryData = (payload?.summary ?? {}) as Record<string, unknown>;
+  const findings = Array.isArray(summaryData.findings) ? summaryData.findings : [];
+
+  try {
+    const result = await aiAnalyze(payload?.question ?? '', {
+      analysis: {
+        summary: (summaryData.summary ?? {}) as never,
+        findings: findings as never[],
+      },
+      runs: (payload?.runs ?? []) as never[],
+      comparison: (payload?.comparison ?? null) as never,
+      app: payload?.app ?? {},
+      maxChars: settings.maxSummaryChars,
+    }, {
+      provider: settings.provider,
+      fallback: settings.fallback,
+      apiKeys,
+      sensitive: settings.sensitive,
+      providers: settings.providers as Record<string, { baseUrl?: string; model?: string }>,
+      limits: settings.limits,
+      statePath: resolve(app.getPath('userData'), 'ai-state.json'),
+      signal: controller.signal,
+      onEvent: (event: { type?: string; message?: string; provider?: string }) => {
+        mainWindow?.webContents.send('ai:event', event);
+      },
+    });
+
+    // Точечный вопрос: находка, о которой спросили, добавляется в сводку.
+    const answer = focus
+      ? `${result.text}\n\n— по находке ${focus.ruleId ?? ''}${focus.target ? ` (${focus.target})` : ''}`
+      : result.text;
+
+    return {
+      ok: true,
+      text: answer,
+      provider: result.provider,
+      model: result.model,
+      truncated: result.truncated,
+      redacted: result.redacted,
+      cached: result.cached,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: maskSecrets(message) };
+  } finally {
+    if (aiAbort === controller) aiAbort = null;
+  }
+});
 }

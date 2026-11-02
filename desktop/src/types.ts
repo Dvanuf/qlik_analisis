@@ -2,7 +2,48 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'connect' | 'analysis' | 'script' | 'summary' | 'model' | 'rules' | 'library';
+export type Tab = 'connect' | 'analysis' | 'script' | 'summary' | 'model' | 'rules' | 'library' | 'ai';
+
+/**
+ * Провайдер ИИ в интерфейсе.
+ * Значения ключей в интерфейс не попадают — только признак «ключ задан».
+ */
+export type AiProviderInfo = {
+  id: string; label: string; model: string; baseUrl: string;
+  external: boolean; needsKey: boolean; hasKey: boolean; keyRequired: boolean;
+};
+
+/** Состояние ИИ-слоя. */
+export type AiStatus = {
+  providers: AiProviderInfo[];
+  provider: string;
+  fallback: string[];
+  sensitive: boolean;
+  limits: { requestsPerMinute: number; dailyCap: number; cacheTtlMs: number };
+  maxSummaryChars: number;
+};
+
+/** Ответ ИИ-слоя. */
+export type AiAnswer = {
+  ok: boolean;
+  text?: string;
+  error?: string;
+  provider?: string;
+  model?: string;
+  truncated?: boolean;
+  redacted?: boolean;
+  cached?: boolean;
+};
+
+/** Реплика в чате. */
+export type AiMessage = {
+  role: 'user' | 'assistant';
+  text: string;
+  /** Провайдер, давший ответ. */
+  provider?: string;
+  /** Предупреждение: сводка обрезана, данные обезличены. */
+  note?: string;
+};
 /**
  * Платформа приложения.
  * 'auto' — определить по данным сервера (по умолчанию): один и тот же

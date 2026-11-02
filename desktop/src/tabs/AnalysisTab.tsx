@@ -67,6 +67,8 @@ type Props = {
   onOpenScript?: () => void;
   /** Переход к вкладке «Модель данных». */
   onOpenModel?: () => void;
+  /** Переход к вкладке «ИИ-чат» с вопросом по находке. */
+  onAskAi?: (finding: Finding) => void;
 };
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
@@ -163,7 +165,7 @@ function PatternRows(props: {
 export default function AnalysisTab(props: Props) {
   const {
     analysis, categories, exportNote, onExport, onExportScript, onExportDataModel,
-    rulesConfig, onSaveRulesConfig, onOpenScript, onOpenModel,
+    rulesConfig, onSaveRulesConfig, onOpenScript, onOpenModel, onAskAi,
   } = props;
 
   // Активный домен: null — показываем все.
@@ -621,12 +623,22 @@ export default function AnalysisTab(props: Props) {
                     <div className="muted small">Таблицы: {f.tables.join(', ')}</div>
                   )}
                   {isOpen && (
-                    <button
-                      className="link"
-                      onClick={(e) => { e.stopPropagation(); suppressFinding(f); }}
-                    >
-                      подавить это правило
-                    </button>
+                    <div className="row-actions">
+                      {onAskAi && (
+                        <button
+                          className="link"
+                          onClick={(e) => { e.stopPropagation(); onAskAi(f); }}
+                        >
+                          объяснить ИИ
+                        </button>
+                      )}
+                      <button
+                        className="link"
+                        onClick={(e) => { e.stopPropagation(); suppressFinding(f); }}
+                      >
+                        подавить это правило
+                      </button>
+                    </div>
                   )}
                 </td>
                 <td>{f.target?.name ?? '—'}</td>

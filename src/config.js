@@ -172,7 +172,128 @@ export function resolveRules(cli = {}, config = {}) {
   };
 }
 
-/** Пути вывода из config-файла + CLI (поддерживает {env} и {app}). */
+/**
+ * Переопределение провайдера ИИ из конфигурации.
+ * @typedef {object} AiProviderOverride
+ * @property {string|undefined} baseUrl — адрес эндпоинта.
+ * @property {string|undefined} model — модель.
+ * @property {string|undefined} apiKeyEnv — имя переменной окружения с ключом.
+ */
+
+/**
+ * Итоговые настройки ИИ-слоя.
+ * @typedef {object} AiSettings
+ * @property {string} provider — основной провайдер.
+ * @property {string|undefined} model — модель по умолчанию.
+ * @property {string[]} fallback — резервные провайдеры.
+ * @property {boolean} sensitive — режим конфиденциальности.
+ * @property {{requestsPerMinute: number, dailyCap: number, cacheTtlMs: number}} limits — лимиты.
+ * @property {number} maxSummaryChars — предел размера сводки.
+ * @property {Record<string, AiProviderOverride>} providers — переопределения провайдеров.
+ */
+
+/**
+ * Настройки ИИ-слоя: провайдеры, резервная цепочка, лимиты.
+ *
+ * Приоритет значений: CLI-флаг > переменная окружения > config-файл > умолчание.
+ * Секреты в config-файле не хранятся: указывается ИМЯ переменной окружения
+ * (apiKeyEnv), значение берётся из process.env.
+ *
+ * @param {object} [cli] — разобранные аргументы CLI
+ * @param {object} [config] — содержимое config-файла
+ * @returns {AiSettings}
+ */
+export function resolveAi(cli = {}, config = {}) {
+  const cfg = config.ai ?? {};
+  const envCfg = cfg;
+
+  const provider = cli.aiProvider
+    ?? envValue(['QLIK_AI_PROVIDER'])
+    ?? envCfg.provider
+    ?? 'zai';
+  const model = cli.aiModel
+    ?? envValue(['QLIK_AI_MODEL'])
+    ?? envCfg.model
+    ?? undefined;
+  const fallback = cli.aiFallback
+    ?? (envValue(['QLIK_AI_FALLBACK'])?.split(',').map((s) => s.trim()).filter(Boolean))
+    ?? envCfg.fallback
+    ?? ['gemini', 'local'];
+  // Флаг «чувствительные данные» читается из окружения как «1»/«0».
+  // Проверять нужно undefined, а не сравнивать с «1»: иначе false от
+  // сравнения перехватывал бы значение из файла конфигурации.
+  const sensitiveEnv = envValue(['QLIK_AI_SENSITIVE']);
+  const sensitive = cli.aiSensitive
+    ?? (sensitiveEnv === undefined ? undefined : sensitiveEnv === '1')
+    ?? envCfg.sensitive
+    ?? false;
+
+  const limits = {
+    requestsPerMinute: Number(
+      cli.aiRequestsPerMinute ?? envValue(['QLIK_AI_RPM']) ?? envCfg.limits?.requestsPerMinute ?? 10,
+    ),
+    dailyCap: Number(
+      cli.aiDailyCap ?? envValue(['QLIK_AI_DAILY_CAP']) ?? envCfg.limits?.dailyCap ?? 200,
+    ),
+    cacheTtlMs: Number(
+      cli.aiCacheTtlMs ?? envValue(['QLIK_AI_CACHE_TTL_MS']) ?? envCfg.limits?.cacheTtlMs ?? 60000,
+    ),
+  };
+
+  const maxSummaryChars = Number(
+    cli.aiMaxSummaryChars ?? envValue(['QLIK_AI_MAX_SUMMARY']) ?? envCfg.maxSummaryChars ?? 12000,
+  );
+
+  // Адреса и модели провайдеров можно переопределить: локальный сервер может
+  // слушать не на 11434, а модель — отличаться от значения по умолчанию.
+  const providers = {};
+  for (const id of ['zai', 'gemini', 'local']) {
+    const over = envCfg.providers?.[id] ?? {};
+    providers[id] = {
+      baseUrl: over.baseUrl,
+      model: over.model,
+      apiKeyEnv: over.apiKeyEnv,
+    };
+  }
+
+  return {
+    provider,
+    model,
+    fallback: Array.isArray(fallback) ? fallback : [fallback],
+    sensitive: Boolean(sensitive),
+    limits,
+    maxSummaryChars,
+    providers,
+  };
+}
+
+/**
+ * Имена переменных окружения с ключами провайдеров.
+ * @param {AiSettings} [aiConfig] — результат resolveAi
+ * @returns {Record<string, string|null>} идентификатор провайдера → имя переменной
+ */
+export function aiKeyEnvNames(aiConfig = {}) {
+  const defaults = {
+    zai: 'QLIK_AI_ZAI_KEY',
+    gemini: 'QLIK_AI_GEMINI_KEY',
+    local: null,
+  };
+  const out = {};
+  for (const [id, over] of Object.entries(aiConfig.providers ?? {})) {
+    out[id] = over?.apiKeyEnv ?? defaults[id] ?? null;
+  }
+  for (const [id, name] of Object.entries(defaults)) {
+    if (out[id] === undefined) out[id] = name;
+  }
+  return out;
+}
+
+/**
+ * Пути вывода из config-файла + CLI (поддерживает {env} и {app}).
+ * @param {object} cli — разобранные аргументы CLI
+ * @param {object} config — содержимое config-файла
+ * @param {object} target — подключение
+ */
 export function resolvePaths(cli = {}, config = {}, target = {}) {
   const p = config.paths ?? {};
   const fmt = (tpl, fallback) => String(tpl ?? fallback)

@@ -93,6 +93,24 @@ const api = {
     ipcRenderer.on('doctor:step', listener);
     return () => ipcRenderer.removeListener('doctor:step', listener);
   },
+  /** ИИ-слой: состояние провайдеров (без ключей). */
+  aiStatus: () => ipcRenderer.invoke('core:ai-status'),
+  /** ИИ-слой: сохранение настроек (провайдер, лимиты, режим конфиденциальности). */
+  aiSaveSettings: (settings: unknown) => ipcRenderer.invoke('core:ai-settings-save', settings),
+  /** ИИ-слой: сохранение ключей провайдеров (в зашифрованном виде). */
+  aiSaveKeys: (keys: { zai?: string; gemini?: string }) => ipcRenderer.invoke('core:ai-keys-save', keys),
+  /** ИИ-слой: удаление ключей провайдеров. */
+  aiClearKeys: () => ipcRenderer.invoke('core:ai-keys-clear'),
+  /** ИИ-слой: вопрос по результатам анализа. */
+  aiAsk: (payload: unknown) => ipcRenderer.invoke('core:ai-ask', payload),
+  /** ИИ-слой: отмена текущего запроса. */
+  aiCancel: () => ipcRenderer.invoke('core:ai-cancel'),
+  /** ИИ-слой: события прогресса — подписка возвращает функцию отписки. */
+  onAiEvent: (cb: (event: { type?: string; message?: string; provider?: string }) => void) => {
+    const listener = (_e: unknown, event: { type?: string; message?: string; provider?: string }) => cb(event);
+    ipcRenderer.on('ai:event', listener);
+    return () => ipcRenderer.removeListener('ai:event', listener);
+  },
 };
 
 export type QlikAnalyzerApi = typeof api;

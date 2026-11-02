@@ -641,3 +641,42 @@ table.rq tr.pat { cursor: pointer; }
 .codeview .l.hit { background: var(--ws); box-shadow: inset 3px 0 0 var(--warning); }
 .codeview .l.hit .n { color: var(--warning); font-weight: 700; }
 .codeview .l.flash { background: var(--ds); box-shadow: inset 3px 0 0 var(--danger); }
+
+/* --- ИИ-чат ---------------------------------------------------------- */
+.ai-tab h2 { margin-bottom: 4px; }
+.ai-settings {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r1, 8px);
+  background: var(--panel-2);
+}
+.ai-settings .kv td { vertical-align: top; }
+.ai-settings select {
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--text); font-size: 13px;
+}
+.ai-keys { margin-top: 12px; }
+.ai-keys h3 { font-size: 13px; margin: 0 0 4px; }
+.ai-keys .form { grid-template-columns: 1fr 1fr auto; }
+.ai-log {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r1, 8px);
+  background: var(--panel-2);
+  max-height: 460px;
+  overflow: auto;
+}
+.ai-msg { margin-bottom: 12px; }
+.ai-msg:last-child { margin-bottom: 0; }
+.ai-msg-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+.ai-msg-text { white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
+.ai-msg.user .ai-msg-text { color: var(--muted); }
+.ai-prompts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ai-input { display: flex; gap: 8px; }
+.ai-input input {
+  flex: 1; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 6px; font-size: 13px; background: var(--panel); color: var(--text);
+}
+.row-actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
