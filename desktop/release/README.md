@@ -6,10 +6,10 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
-| `Qlik Analyzer-0.8.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | (собирается в CI) | 0.8.0 |
+| `Qlik Analyzer-0.8.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.8.0 |
 | `Qlik Analyzer-0.8.0-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.8.0 |
 | `Qlik Analyzer-0.8.0-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.8.0 |
-| `Qlik Analyzer-0.7.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | (собирается в CI) | 0.7.0 |
+| `Qlik Analyzer-0.7.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.7.0 |
 | `Qlik Analyzer-0.7.0-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.7.0 |
 | `Qlik Analyzer-0.7.0-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.7.0 |
 | `Qlik Analyzer-0.6.3-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.6.3 |
@@ -121,3 +121,7 @@ npx electron-builder --mac dmg
 
 `Qlik Analyzer-0.1.5-x64.exe` — установщик NSIS: спросит папку, создаст ярлык на рабочем столе.
 Приложение пока не подписано — SmartScreen предупредит, нужно «Подробнее» → «Выполнить в любом случае».
+
+Windows-пакеты (`.exe`) собираются в CI — workflow **CI**, артефакт
+`qlik-analyzer-windows` (108 МБ). Скачиваются из GitHub Actions по коммиту
+версии; macOS-сборки лежат в этом каталоге и на рабочем столе.
