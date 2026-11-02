@@ -53,6 +53,7 @@ export default function AiTab(props: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [statusError, setStatusError] = useState('');
   const [zaiKey, setZaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [savingKeys, setSavingKeys] = useState(false);
@@ -62,9 +63,13 @@ export default function AiTab(props: Props) {
   useEffect(() => {
     let alive = true;
     void api().aiStatus().then((s) => {
-      if (alive) setStatus(s);
-    }).catch(() => {
-      if (alive) setNote('Не удалось прочитать настройки ИИ.');
+      if (!alive) return;
+      setStatus(s);
+      setStatusError('');
+    }).catch((err) => {
+      if (!alive) return;
+      setStatusError(err instanceof Error ? err.message : String(err));
+      setNote('Не удалось прочитать настройки ИИ.');
     });
     return () => {
       alive = false;
@@ -168,6 +173,17 @@ export default function AiTab(props: Props) {
     }
   }
 
+  /** Повторно прочитать состояние ИИ-слоя — после сбоя чтения или правки ключей. */
+  async function reloadStatus(): Promise<void> {
+    try {
+      const s = await api().aiStatus();
+      setStatus(s);
+      setStatusError('');
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   /** Включить или выключить режим конфиденциальности. */
   async function toggleSensitive(): Promise<void> {
     if (!status) return;
@@ -194,7 +210,7 @@ export default function AiTab(props: Props) {
         динамика по прогонам — полный скрипт и содержимое приложения не передаются.
       </p>
 
-      {showSettings && status && (
+      {showSettings && (status ? (
         <div className="ai-settings">
           <div className="kv">
             <table>
@@ -291,7 +307,14 @@ export default function AiTab(props: Props) {
             </div>
           </div>
         </div>
-      )}
+      ) : (
+        <div className="ai-settings ai-settings-error">
+          <p className="warn">
+            {statusError || 'Не удалось прочитать настройки ИИ.'}
+          </p>
+          <button className="btn" onClick={() => void reloadStatus()}>Повторить</button>
+        </div>
+      ))}
 
       {!hasAnalysis && (
         <p className="warn">

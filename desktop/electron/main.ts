@@ -230,10 +230,29 @@ async function runSmokeCheck(): Promise<void> {
         await new Promise((r) => setTimeout(r, 600));
         const script = await win.webContents.executeJavaScript(`
           (function () {
+            var de = document.documentElement;
+            var code = document.querySelector('.codeview');
+            var card = code ? code.closest('.card') : null;
+            // Проба длинной неразрывной строки: она не должна выводить окно за пределы.
+            var probe = null;
+            if (code) {
+              probe = document.createElement('div');
+              probe.className = 'l';
+              probe.innerHTML = '<span class="n">999</span><span class="c"></span>';
+              probe.querySelector('.c').textContent = new Array(402).join('X');
+              code.appendChild(probe);
+            }
+            var overflowProbe = de.scrollWidth - de.clientWidth;
+            if (probe && probe.parentNode) probe.parentNode.removeChild(probe);
             return JSON.stringify({
               lines: document.querySelectorAll('.codeview .l').length,
               findings: document.querySelectorAll('.srclist li').length,
-              jumpField: document.querySelectorAll('.lnjump input').length
+              jumpField: document.querySelectorAll('.lnjump input').length,
+              // Горизонтальное переполнение окна — регрессия вёрстки вкладки «Скрипт загрузки».
+              overflowX: de.scrollWidth - de.clientWidth,
+              overflowProbe: overflowProbe,
+              codeWidth: code ? code.offsetWidth : 0,
+              cardWidth: card ? card.offsetWidth : 0
             });
           })()
         `);
@@ -282,6 +301,56 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
 
+        const scriptParsed = JSON.parse(String(script)) as {
+          overflowX?: number;
+          overflowProbe?: number;
+          codeWidth?: number;
+          cardWidth?: number;
+        };
+        if ((scriptParsed.overflowX ?? 0) > 1) {
+          throw new Error(`Горизонтальное переполнение окна: ${scriptParsed.overflowX}px`);
+        }
+        if ((scriptParsed.overflowProbe ?? 0) > 1) {
+          throw new Error(`Длинная строка скрипта выходит за окно: ${scriptParsed.overflowProbe}px`);
+        }
+
+        // ИИ-слой: обработчики IPC должны быть зарегистрированы при старте приложения.
+        const aiStatus = await win.webContents.executeJavaScript(`
+          (function () {
+            return window.qa.aiStatus().then(function (s) {
+              return JSON.stringify({
+                ok: true,
+                provider: s && s.provider,
+                providers: (s && s.providers || []).length
+              });
+            }, function (e) {
+              return JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+            });
+          })()
+        `);
+        const aiStatusParsed = JSON.parse(String(aiStatus)) as { ok: boolean; error?: string };
+        if (!aiStatusParsed.ok) throw new Error(`ИИ-статус недоступен: ${aiStatusParsed.error}`);
+
+        // Блок «Настройки ИИ» должен открываться по кнопке.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.ai-tab button'))
+              .filter(function (b) { return b.textContent.indexOf('Настройки ИИ') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 500));
+        const aiSettings = await win.webContents.executeJavaScript(`
+          (function () {
+            return JSON.stringify({
+              block: document.querySelectorAll('.ai-settings').length,
+              rows: document.querySelectorAll('.ai-settings .kv tr').length,
+              keyInputs: document.querySelectorAll('.ai-keys input').length
+            });
+          })()
+        `);
+
         const image = await win.webContents.capturePage();
         // В упакованном приложении app.asar доступен только для чтения —
         // скриншот пишем в каталог пользователя.
@@ -316,6 +385,8 @@ async function runSmokeCheck(): Promise<void> {
           script: JSON.parse(String(script)),
           model: JSON.parse(String(model)),
           ai: JSON.parse(String(ai)),
+          aiStatus: aiStatusParsed,
+          aiSettings: JSON.parse(String(aiSettings)),
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {
@@ -1053,13 +1124,6 @@ function looksLikeText(filePath: string): boolean {
   } catch {
     return true;
   }
-function looksLikeText(filePath: string): boolean {
-  try {
-    const head = readFileSync(filePath).subarray(0, 4);
-    return !(head[0] === 0x50 && head[1] === 0x4b);
-  } catch {
-    return true;
-  }
 }
 
 /* ------------------------------ ИИ-слой -------------------------------- */
@@ -1274,4 +1338,3 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
     if (aiAbort === controller) aiAbort = null;
   }
 });
-}

@@ -9,12 +9,16 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.8.2 | [v0.8.2 — исправления ИИ-чата и вёрстки](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.2) |
 | 0.8.1 | [v0.8.1 — веб-интерфейс ИИ-чата на сервере](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.1) |
 | 0.8.0 | [v0.8.0 — серверный ИИ-слой](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.0) |
 | 0.7.0 | [v0.7.0 — десктопный ИИ-слой](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.7.0) |
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.8.2-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.8.2 |
+| `Qlik Analyzer-0.8.2-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.8.2 |
+| `Qlik Analyzer-0.8.2-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.8.2 |
 | `Qlik Analyzer-0.8.1-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.8.1 |
 | `Qlik Analyzer-0.8.1-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.8.1 |
 | `Qlik Analyzer-0.8.1-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.8.1 |
