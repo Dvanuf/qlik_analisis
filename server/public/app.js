@@ -10,6 +10,7 @@ const state = {
   rules: [],
   appSearch: '',
   ruleSearch: '',
+  ai: { status: null, messages: [], busy: false },
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -126,6 +127,9 @@ async function loadReports() {
     </tr>`).join('')
     || '<tr><td colspan="5" class="muted">отчётов пока нет</td></tr>';
 
+  // Список отчётов нужен и для выбора контекста в ИИ-чате.
+  renderAiReports();
+
   $$('#reports-table button[data-del]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       try {
@@ -160,6 +164,89 @@ function renderRules() {
     </tr>`).join('');
 }
 
+// --- ИИ-чат ---
+async function loadAiStatus() {
+  try {
+    state.ai.status = await api('/api/ai/status');
+  } catch {
+    state.ai.status = null;
+  }
+  renderAiStatus();
+  renderAiReports();
+}
+
+function renderAiStatus() {
+  const st = state.ai.status;
+  const el = $('#ai-status');
+  if (!st) {
+    el.textContent = 'ИИ-слой недоступен';
+    return;
+  }
+  const ready = st.providers.filter((p) => !p.needsKey || p.hasKey).map((p) => p.label);
+  el.textContent = `провайдер: ${st.provider} · доступны: ${ready.join(', ') || 'нет'}`
+    + ` · лимит ${st.limits.requestsPerMinute}/мин, ${st.limits.dailyCap}/сутки`;
+  // Наблюдатель не может задавать вопросы — роль analyst обязательна.
+  const canAsk = Boolean(state.me?.canAnalyze);
+  $('#ai-send').disabled = !canAsk || state.ai.busy;
+  $('#ai-question').disabled = !canAsk;
+  if (!canAsk) el.textContent += ' · нужна роль analyst';
+}
+
+function renderAiReports() {
+  const select = $('#ai-report');
+  const current = select.value;
+  select.innerHTML = state.reports.map((r) =>
+    `<option value="${esc(r.jobId)}">${esc(r.title)} — ${esc(r.jobId)}</option>`).join('');
+  if (current) select.value = current;
+}
+
+function renderAiLog() {
+  const log = $('#ai-log');
+  log.innerHTML = state.ai.messages.map((m) => `
+    <div class="ai-msg ${m.role}">
+      <div class="ai-msg-head"><b>${m.role === 'user' ? 'Вы' : 'ИИ'}</b>${
+  m.provider ? `<span class="muted small">${esc(m.provider)}</span>` : ''}${
+  m.note ? `<span class="muted small">${esc(m.note)}</span>` : ''}</div>
+      <div class="ai-msg-text">${esc(m.text)}</div>
+    </div>`).join('')
+    || '<p class="muted">Задайте вопрос по результатам анализа.</p>';
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendAiQuestion() {
+  const input = $('#ai-question');
+  const question = input.value.trim();
+  if (!question || state.ai.busy) return;
+  input.value = '';
+  state.ai.messages.push({ role: 'user', text: question });
+  state.ai.busy = true;
+  renderAiLog();
+  renderAiStatus();
+  try {
+    const reportId = $('#ai-report').value;
+    const res = await api('/api/ai/analyze', {
+      method: 'POST',
+      body: JSON.stringify(reportId ? { question, reportId } : { question }),
+    });
+    const notes = [];
+    if (res.truncated) notes.push('сводка обрезана');
+    if (res.redacted) notes.push('данные обезличены');
+    if (res.cached) notes.push('ответ из кэша');
+    state.ai.messages.push({
+      role: 'assistant',
+      text: res.text ?? 'Пустой ответ',
+      provider: res.provider,
+      note: notes.join(' · '),
+    });
+  } catch (err) {
+    state.ai.messages.push({ role: 'assistant', text: `Ошибка: ${err.message}` });
+  } finally {
+    state.ai.busy = false;
+    renderAiLog();
+    renderAiStatus();
+  }
+}
+
 // --- SSE: прогресс задач ---
 function connectStream() {
   const es = new EventSource('/api/stream');
@@ -190,6 +277,13 @@ $('#rule-search').addEventListener('input', (e) => {
   renderRules();
 });
 $('#btn-reload-apps').addEventListener('click', () => void loadApps());
+$('#ai-send').addEventListener('click', () => void sendAiQuestion());
+$('#ai-question').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    void sendAiQuestion();
+  }
+});
 $('#btn-analyze-all').addEventListener('click', async () => {
   try {
     const res = await api('/api/analyze-all', { method: 'POST', body: '{}' });
@@ -204,7 +298,7 @@ $('#btn-analyze-all').addEventListener('click', async () => {
 (async () => {
   try {
     await loadMe();
-    await Promise.all([loadRules(), loadJobs(), loadReports()]);
+    await Promise.all([loadRules(), loadJobs(), loadReports(), loadAiStatus()]);
     connectStream();
     await loadApps();
   } catch (err) {

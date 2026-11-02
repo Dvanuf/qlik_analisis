@@ -96,3 +96,16 @@ tr:hover td { background: #f8fafc; }
 
 a { color: #1d4ed8; }
 code { background: #eef2f7; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+
+/* --- ИИ-чат --- */
+.ai-log {
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 12px; max-height: 420px; overflow: auto; margin-bottom: 12px;
+}
+.ai-msg { margin-bottom: 12px; }
+.ai-msg:last-child { margin-bottom: 0; }
+.ai-msg-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+.ai-msg-text { white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
+.ai-msg.user .ai-msg-text { color: var(--muted); }
+.ai-input { display: flex; gap: 8px; }
+.ai-input .search { flex: 1; }

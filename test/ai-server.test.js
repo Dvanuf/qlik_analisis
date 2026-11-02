@@ -178,3 +178,16 @@ test('сервер ИИ: сбой провайдера не выдаёт клю�
     delete process.env.QLIK_AI_ZAI_KEY;
   }
 });
+
+test('сервер ИИ: веб-интерфейс содержит вкладку чата', async (t) => {
+  const { base } = await withServer(t);
+  const html = await (await fetch(`${base}/`)).text();
+  assert.match(html, /data-tab="ai"/);
+  assert.match(html, /id="ai-question"/);
+  assert.match(html, /id="ai-log"/);
+  assert.match(html, /id="ai-report"/);
+  // Логика отправки вопроса — в клиентском скрипте.
+  const js = await (await fetch(`${base}/app.js`)).text();
+  assert.match(js, /sendAiQuestion/);
+  assert.match(js, /renderAiReports/);
+});
