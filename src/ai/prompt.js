@@ -54,6 +54,24 @@ export function buildUserMessage(question, summary) {
 }
 
 /**
+ * Обновляет вопрос в правленном тексте запроса.
+ *
+ * Когда пользователь поправил промпт, а потом задал другой вопрос, модель
+ * получила бы старый. Первая строка вида «Вопрос: …» заменяется на новую,
+ * остальной текст правки остаётся нетронутым.
+ *
+ * @param {string|undefined} user — правленное сообщение пользователя
+ * @param {string} question — новый вопрос
+ * @returns {string|undefined}
+ */
+export function withFreshQuestion(user, question) {
+  if (typeof user !== 'string' || !user.startsWith('Вопрос: ')) return user;
+  const newline = user.indexOf('\n');
+  const tail = newline === -1 ? '' : user.slice(newline);
+  return `Вопрос: ${String(question ?? '').trim()}${tail}`;
+}
+
+/**
  * Собирает сообщения для чат-эндпоинта.
  *
  * @param {string} question — вопрос пользователя

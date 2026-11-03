@@ -15,7 +15,7 @@
 import { AiError, AI_ERROR, toAiError } from './errors.js';
 import { PROVIDERS, providerChain, resolveProvider } from './providers.js';
 import { chatCompletion } from './openai.js';
-import { buildMessages } from './prompt.js';
+import { buildMessages, withFreshQuestion } from './prompt.js';
 import { createRedactor } from './redact.js';
 import { buildSummary, DEFAULT_MAX_CHARS } from './summary.js';
 import { Limits, DEFAULT_LIMITS } from './limits.js';
@@ -180,7 +180,11 @@ function composeMessages({
   const messages = buildMessages(question, summary.text, {
     history,
     system: override?.system,
-    user: override?.user,
+    // В правленном тексте обновляется вопрос: пользователь мог задать новый
+    // вопрос уже после правки промпта.
+    user: override?.user !== undefined && override?.user !== null
+      ? withFreshQuestion(override.user, question)
+      : undefined,
   });
   return {
     messages: redactor

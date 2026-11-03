@@ -217,3 +217,31 @@ test('история диалога доходит до провайдера', a
   assert.equal(sent[1].content, 'первый вопрос');
   assert.equal(sent[2].content, 'первый ответ');
 });
+
+test('в правленном промпте вопрос обновляется на новый', async (t) => {
+  const srv = await withProvider(t, 'Ответ модели');
+  await analyze('новый вопрос', data, {
+    provider: 'local',
+    providers: { local: { baseUrl: srv.baseUrl, model: 'test-model' } },
+    limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+    override: { user: 'Вопрос: старый вопрос\n\nСводка результатов анализа:\nсводка' },
+  });
+  const sent = srv.calls[0].messages;
+  const user = sent[sent.length - 1].content;
+  assert.match(user, /^Вопрос: новый вопрос/);
+  assert.doesNotMatch(user, /старый вопрос/);
+  // Остальная правка сохраняется.
+  assert.match(user, /Сводка результатов анализа:/);
+});
+
+test('правка без строки «Вопрос» уходит как есть', async (t) => {
+  const srv = await withProvider(t, 'Ответ модели');
+  await analyze('новый вопрос', data, {
+    provider: 'local',
+    providers: { local: { baseUrl: srv.baseUrl, model: 'test-model' } },
+    limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+    override: { user: 'мой текст без вопроса' },
+  });
+  const sent = srv.calls[0].messages;
+  assert.equal(sent[sent.length - 1].content, 'мой текст без вопроса');
+});

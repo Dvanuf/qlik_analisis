@@ -130,6 +130,7 @@ export default function AiTab(props: Props) {
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.text }));
 
+
     try {
       const answer = await api().aiAsk({
         question: q,
@@ -147,7 +148,8 @@ export default function AiTab(props: Props) {
           }
           : null,
         history,
-        // Правка промпта, если пользователь её внёс.
+        // Правка промпта, если пользователь её внёс. Вопрос в правленном
+        // тексте обновляется на стороне main-процесса.
         promptOverride: override,
       });
       if (answer.ok && answer.text) {
