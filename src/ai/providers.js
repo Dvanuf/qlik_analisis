@@ -20,30 +20,39 @@
  * @property {boolean} needsKey — нужен ли ключ.
  * @property {boolean} external — уходят ли данные с машины.
  * @property {number} timeoutMs — таймаут запроса.
+ * @property {number} [maxTokens] — предел длины ответа в токенах.
+ * @property {object} [thinking] — параметры режима размышления провайдера.
  */
 
 /** @type {Record<string, AiProvider>} */
 export const PROVIDERS = {
   zai: {
     id: 'zai',
-    label: 'Z.ai — GLM-4.7-Flash',
-    // Бесплатный тариф: модель glm-4.7-flash не тарифицируется.
+    label: 'Z.ai — GLM-4.5-Flash',
+    // Бесплатный тариф: модель glm-4.5-flash не тарифицируется.
+    // glm-4.7-flash тоже бесплатна, но часто отвечает «модель перегружена».
     baseUrl: 'https://api.z.ai/api/paas/v4',
-    model: 'glm-4.7-flash',
+    model: 'glm-4.5-flash',
     apiKeyEnv: 'QLIK_AI_ZAI_KEY',
     needsKey: true,
     external: true,
-    timeoutMs: 45000,
+    // GLM отвечает 30–90 с: стандартных 45 с не хватает.
+    timeoutMs: 120000,
+    maxTokens: 8000,
+    // Без этого бюджет уходит в reasoning_content, а content приходит пустым.
+    thinking: { type: 'disabled' },
   },
   gemini: {
     id: 'gemini',
     label: 'Google Gemini — Flash',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.5-flash',
+    // Псевдоним всегда указывает на актуальную стабильную Flash-модель:
+    // конкретные номера версий устаревают и исчезают из API.
+    model: 'gemini-flash-latest',
     apiKeyEnv: 'QLIK_AI_GEMINI_KEY',
     needsKey: true,
     external: true,
-    timeoutMs: 45000,
+    timeoutMs: 90000,
   },
   local: {
     id: 'local',

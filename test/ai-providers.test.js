@@ -6,7 +6,10 @@ import { statusToError, joinUrl } from '../src/ai/openai.js';
 
 test('провайдеры: описаны с адресами, моделями и признаком внешнего', () => {
   assert.equal(PROVIDERS.zai.baseUrl, 'https://api.z.ai/api/paas/v4');
-  assert.equal(PROVIDERS.zai.model, 'glm-4.7-flash');
+  // Модели по умолчанию должны быть рабочими: glm-4.7-flash часто отвечает
+  // «перегружена», а gemini-2.5-flash исчез из API.
+  assert.equal(PROVIDERS.zai.model, 'glm-4.5-flash');
+  assert.equal(PROVIDERS.gemini.model, 'gemini-flash-latest');
   assert.equal(PROVIDERS.gemini.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
   assert.equal(PROVIDERS.local.baseUrl, 'http://localhost:11434/v1');
   // Локальная модель — единственная, чьи данные не покидают машину.
@@ -28,12 +31,27 @@ test('провайдеры: конфиденциальный режим оста
   assert.deepEqual(externalOnly(chain, true), ['local']);
 });
 
+test('провайдеры: у Z.ai отключено размышление и задан предел ответа', () => {
+  // Без thinking бюджет уходит в reasoning_content, а content пустой.
+  assert.deepEqual(PROVIDERS.zai.thinking, { type: 'disabled' });
+  assert.ok(PROVIDERS.zai.maxTokens > 0);
+  // GLM отвечает 30–90 с: таймаут по умолчанию 45 с обрывал запрос.
+  assert.ok(PROVIDERS.zai.timeoutMs >= 90000);
+  // Локальный провайдер не получает лишних параметров запроса.
+  assert.equal(PROVIDERS.local.thinking, undefined);
+  assert.equal(PROVIDERS.local.maxTokens, undefined);
+});
+
 test('провайдеры: переопределение адреса и модели из конфигурации', () => {
   const p = resolveProvider('local', { baseUrl: 'http://127.0.0.1:1234/v1', model: 'qwen3:14b' });
   assert.equal(p.baseUrl, 'http://127.0.0.1:1234/v1');
   assert.equal(p.model, 'qwen3:14b');
   // Остальные поля дескриптора сохраняются.
   assert.equal(p.timeoutMs, PROVIDERS.local.timeoutMs);
+  // Параметры запроса провайдера не теряются при переопределении модели.
+  const zai = resolveProvider('zai', { model: 'glm-4.7-flash' });
+  assert.deepEqual(zai.thinking, { type: 'disabled' });
+  assert.equal(zai.maxTokens, PROVIDERS.zai.maxTokens);
   assert.equal(resolveProvider('нет-такого'), null);
 });
 
@@ -81,6 +99,14 @@ test('Gemini: RESOURCE_EXHAUSTED читается как лимит, а не к�
   const exhausted = statusToError(429, '{"error":{"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded"}}', 'gemini');
   assert.equal(exhausted.code, AI_ERROR.RATE_LIMITED);
   assert.match(exhausted.message, /Google Gemini/);
+});
+
+test('Gemini: ошибка в массиве разбирается, а гео-блокировка объясняется', () => {
+  // Google отдаёт ошибку массивом: [{error: {...}}].
+  const body = '[{"error":{"code":400,"message":"User location is not supported for the API use.","status":"FAILED_PRECONDITION"}}]';
+  const err = statusToError(400, body, 'gemini');
+  assert.match(err.message, /регион/i);
+  assert.match(err.message, /location/i);
 });
 
 test('Retry-After провайдера попадает в ошибку', () => {

@@ -298,6 +298,10 @@ async function callProvider(provider, params) {
         signal: params.signal,
         stream: params.stream,
         temperature: params.temperature,
+        // Параметры запроса, заданные провайдером: у Z.ai это отключение
+        // размышления и предел длины ответа.
+        maxTokens: provider.maxTokens,
+        thinking: provider.thinking,
         provider: provider.id,
         onDelta: params.onDelta,
       });
@@ -435,18 +439,24 @@ export async function analyze(prompt, data = {}, options = {}) {
 
   let lastError = null;
   let attempts = 0;
+  // Провайдеры, к которым обращались, и те, что пропущены без ключа.
+  const failures = [];
+  const skipped = [];
 
   for (const id of allowed) {
     const descriptor = resolveProvider(id, providers[id] ?? {});
     const apiKey = apiKeys?.[id] ?? (descriptor.apiKeyEnv ? process.env[descriptor.apiKeyEnv] : undefined);
 
     if (descriptor.needsKey && !apiKey) {
-      lastError = new AiError(
+      // Нет ключа — это пропуск, а не сбой цепочки: запрос уходит к резервному.
+      // Ошибкой цепочки это становится, только если не сработал никто.
+      const skip = new AiError(
         AI_ERROR.NO_KEY,
         `Не задан ключ провайдера ${descriptor.label}. Укажите его в настройках ИИ.`,
         { provider: id },
       );
-      onEvent?.({ type: 'skip', provider: id, message: lastError.message });
+      skipped.push({ provider: id, label: descriptor.label, error: skip });
+      onEvent?.({ type: 'skip', provider: id, message: skip.message });
       continue;
     }
 
@@ -494,12 +504,46 @@ export async function analyze(prompt, data = {}, options = {}) {
     } catch (err) {
       const error = toAiError(err, id);
       lastError = error;
+      failures.push({ provider: id, label: descriptor.label, error });
       attempts += 1;
       if (error.code === AI_ERROR.CANCELLED) throw error;
       onEvent?.({ type: 'error', provider: id, message: error.message });
     }
   }
 
-  throw lastError ?? new AiError(AI_ERROR.PROVIDER_UNAVAILABLE, 'Ни один провайдер не ответил.');
+  throw chainError(failures, skipped, lastError);
+}
+
+/**
+ * Итоговая ошибка цепочки провайдеров.
+ *
+ * Пропуск «нет ключа» не должен заменять настоящую причину сбоя: если
+ * провайдер отвечал и упал, показываем именно его ошибку, а цепочку —
+ * рядом, чтобы было видно, кого ещё пробовали.
+ *
+ * @param {Array<{provider: string, label: string, error: AiError}>} failures
+ * @param {Array<{provider: string, label: string, error: AiError}>} skipped
+ * @param {AiError|null} lastError
+ * @returns {AiError}
+ */
+export function chainError(failures = [], skipped = [], lastError = null) {
+  // Основная ошибка — у первого провайдера, который действительно отвечал.
+  const primary = failures[0]?.error ?? skipped[0]?.error ?? lastError;
+  const others = [
+    ...failures.slice(1).map((f) => `${f.label}: ${f.error.message}`),
+    ...skipped.map((s) => `${s.label}: ключ не задан`),
+  ];
+  if (!primary) {
+    return new AiError(AI_ERROR.PROVIDER_UNAVAILABLE, 'Ни один провайдер не ответил.');
+  }
+  if (!others.length) return primary;
+  const message = `${primary.message} Цепочка: ${others.join('; ')}.`;
+  return new AiError(primary.code, message, {
+    status: primary.status,
+    provider: primary.provider,
+    detail: primary.detail,
+    retryAfterMs: primary.retryAfterMs,
+    businessCode: primary.businessCode,
+  });
 }
 

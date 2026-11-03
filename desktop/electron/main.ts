@@ -28,6 +28,7 @@ import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
 import { buildXlsx } from '../../src/report/xlsx.js';
 import { normalizeCredentials, isSessionUsable, parseCredentials } from '../../src/session/credentials.js';
 import { analyze as aiAnalyze, buildPromptPreview, providerChain, PROVIDERS } from '../../src/ai/index.js';
+import { AiError } from '../../src/ai/errors.js';
 import { resolveAi } from '../../src/config.js';
 
 let mainWindow: BrowserWindow | null = null;
@@ -1259,6 +1260,10 @@ ipcMain.handle('core:ai-status', async () => {
     fallback: settings.fallback,
     // Итоговая цепочка: её реально обходит запрос при сбое основного.
     chain: providerChain(settings.provider, settings.fallback),
+    // Цепочка, в которой есть хотя бы один готовый к работе провайдер:
+    // без ключа запрос уйдёт в никуда.
+    readyChain: providerChain(settings.provider, settings.fallback)
+      .filter((id) => !PROVIDERS[id].needsKey || keys[id] || process.env[PROVIDERS[id].apiKeyEnv ?? '']),
     sensitive: settings.sensitive,
     limits: settings.limits,
     maxSummaryChars: settings.maxSummaryChars,
@@ -1273,12 +1278,18 @@ ipcMain.handle('core:ai-settings-save', (_e, payload: Record<string, unknown>) =
 });
 
 /** Сохранение ключей провайдеров (в зашифрованном виде). */
-ipcMain.handle('core:ai-keys-save', async (_e, payload: { zai?: string; gemini?: string }) => {
+ipcMain.handle('core:ai-keys-save', async (_e, payload: Record<string, string>) => {
   const keys = await loadAiKeys();
-  for (const id of ['zai', 'gemini'] as const) {
+  // Ключи сохраняются для всех провайдеров, которым ключ вообще нужен:
+  // жёсткий список из двух имён терял ключи остальных.
+  for (const id of Object.keys(PROVIDERS)) {
+    if (!PROVIDERS[id].needsKey) continue;
     const value = payload?.[id];
-    if (typeof value === 'string' && value.trim()) keys[id] = value.trim();
-    else if (value === '') delete keys[id];
+    // Пустая строка значит «ключ удалить», а отсутствие поля — «не трогать»:
+    // иначе сохранение одного ключа затирало бы второй.
+    if (typeof value !== 'string') continue;
+    if (value.trim()) keys[id] = value.trim();
+    else delete keys[id];
   }
   await saveAiKeys(keys);
   return true;
@@ -1440,7 +1451,11 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: maskSecrets(message) };
+    // Код и провайдер — чтобы интерфейс показал настоящую причину сбоя,
+    // а не «неизвестная ошибка».
+    const code = err instanceof AiError ? err.code : null;
+    const provider = err instanceof AiError ? err.provider : null;
+    return { ok: false, error: maskSecrets(message), code, provider };
   } finally {
     if (aiAbort === controller) aiAbort = null;
   }

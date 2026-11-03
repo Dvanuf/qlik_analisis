@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { analyze, isRetryable, retryDelay } from '../src/ai/index.js';
+import { analyze, chainError, isRetryable, retryDelay } from '../src/ai/index.js';
+import { PROVIDERS } from '../src/ai/providers.js';
 import { AiError, AI_ERROR } from '../src/ai/errors.js';
 
 /**
@@ -143,6 +144,122 @@ test('fallback: без ключа провайдер пропускается б
   });
   assert.equal(result.provider, 'local');
   assert.equal(first.calls.length, 0);
+});
+
+test('fallback: пропуск без ключа не заменяет настоящую ошибку основного', async (t) => {
+  // Регрессия 0.8.3: ошибка основного провайдера терялась, а пользователю
+  // показывалось «не задан ключ» от резервного, который даже не пробовали.
+  const first = await withServer(t, (res) => replyError(res, 500));
+  const second = await withServer(t, (res) => replyText(res, 'ответ резервного'));
+  await assert.rejects(
+    () => analyze('вопрос', {}, {
+      provider: 'zai',
+      fallback: ['gemini'],
+      providers: {
+        zai: { baseUrl: first.baseUrl, model: 'm' },
+        gemini: { baseUrl: second.baseUrl, model: 'm' },
+      },
+      // Ключ есть только у основного: резерв пропускается без обращения к сети.
+      apiKeys: { zai: 'k' },
+      limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+    }),
+    (err) => {
+      assert.equal(err.code, AI_ERROR.PROVIDER_UNAVAILABLE);
+      // В сообщении — сбой основного провайдера, а не «нет ключа».
+      assert.match(err.message, /вернул 500/);
+      assert.doesNotMatch(err.message, /Не задан ключ провайдера Z\.ai/);
+      // Пропущенный резерв виден в цепочке.
+      assert.match(err.message, /Цепочка/);
+      return true;
+    },
+  );
+  assert.equal(first.calls.length, 2);
+  assert.equal(second.calls.length, 0);
+});
+
+test('fallback: в сообщении видно, кого ещё пробовали', async (t) => {
+  const first = await withServer(t, (res) => replyError(res, 500));
+  const second = await withServer(t, (res) => replyError(res, 429));
+  await assert.rejects(
+    () => analyze('вопрос', {}, {
+      provider: 'zai',
+      fallback: ['local'],
+      providers: {
+        zai: { baseUrl: first.baseUrl, model: 'm' },
+        local: { baseUrl: second.baseUrl, model: 'm' },
+      },
+      apiKeys: { zai: 'k' },
+      limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+    }),
+    (err) => {
+      assert.match(err.message, /Цепочка/);
+      assert.match(err.message, /локальная модель/);
+      return true;
+    },
+  );
+});
+
+test('fallback: у всех провайдеров нет ключа — понятная ошибка про ключ', async () => {
+  await assert.rejects(
+    () => analyze('вопрос', {}, {
+      provider: 'zai',
+      fallback: ['gemini'],
+      apiKeys: {},
+      limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+    }),
+    (err) => {
+      assert.equal(err.code, AI_ERROR.NO_KEY);
+      assert.match(err.message, /ключ/i);
+      return true;
+    },
+  );
+});
+
+test('fallback: в тело запроса Z.ai уходят thinking и max_tokens', async (t) => {
+  const { baseUrl, calls } = await withServer(t, (res) => replyText(res, 'ok'));
+  await analyze('вопрос', {}, {
+    provider: 'zai',
+    providers: { zai: { baseUrl, model: 'glm-4.5-flash' } },
+    apiKeys: { zai: 'k' },
+    limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+  });
+  const body = calls[0].body;
+  assert.deepEqual(body.thinking, { type: 'disabled' });
+  assert.equal(body.max_tokens, PROVIDERS.zai.maxTokens);
+});
+
+test('fallback: ответ берётся из content, а не из reasoning_content', async (t) => {
+  const srv = await withServer(t, (res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      choices: [{
+        message: { content: 'Готовый ответ', reasoning_content: 'черновик размышлений' },
+        finish_reason: 'stop',
+      }],
+    }));
+  });
+  const result = await analyze('вопрос', {}, {
+    provider: 'local',
+    providers: { local: { baseUrl: srv.baseUrl, model: 'm' } },
+    limits: { requestsPerMinute: 10, dailyCap: 0, cacheTtlMs: 0 },
+  });
+  assert.equal(result.text, 'Готовый ответ');
+  assert.equal(result.text.includes('размышлений'), false);
+});
+
+test('fallback: ошибка цепочки собирается из сбоев и пропусков', () => {
+  const primary = new AiError(AI_ERROR.PROVIDER_UNAVAILABLE, 'основной упал', { provider: 'zai' });
+  const skip = new AiError(AI_ERROR.NO_KEY, 'нет ключа', { provider: 'gemini' });
+  const err = chainError(
+    [{ provider: 'zai', label: 'Z.ai', error: primary }],
+    [{ provider: 'gemini', label: 'Google Gemini', error: skip }],
+  );
+  assert.equal(err.code, AI_ERROR.PROVIDER_UNAVAILABLE);
+  assert.match(err.message, /основной упал/);
+  assert.match(err.message, /Google Gemini: ключ не задан/);
+  // Без резервов сообщение остаётся исходным.
+  const alone = chainError([{ provider: 'zai', label: 'Z.ai', error: primary }], []);
+  assert.equal(alone.message, 'основной упал');
 });
 
 test('fallback: все провайдеры исчерпаны — понятная ошибка', async (t) => {

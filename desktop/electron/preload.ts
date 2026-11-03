@@ -98,7 +98,7 @@ const api = {
   /** ИИ-слой: сохранение настроек (провайдер, лимиты, режим конфиденциальности). */
   aiSaveSettings: (settings: unknown) => ipcRenderer.invoke('core:ai-settings-save', settings),
   /** ИИ-слой: сохранение ключей провайдеров (в зашифрованном виде). */
-  aiSaveKeys: (keys: { zai?: string; gemini?: string }) => ipcRenderer.invoke('core:ai-keys-save', keys),
+  aiSaveKeys: (keys: Record<string, string>) => ipcRenderer.invoke('core:ai-keys-save', keys),
   /** ИИ-слой: удаление ключей провайдеров. */
   aiClearKeys: () => ipcRenderer.invoke('core:ai-keys-clear'),
   /** ИИ-слой: вопрос по результатам анализа. */

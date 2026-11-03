@@ -35,7 +35,7 @@ const PROMPTS = [
 type QaApi = {
   aiStatus: () => Promise<AiStatus>;
   aiSaveSettings: (settings: unknown) => Promise<boolean>;
-  aiSaveKeys: (keys: { zai?: string; gemini?: string }) => Promise<boolean>;
+  aiSaveKeys: (keys: Record<string, string>) => Promise<boolean>;
   aiClearKeys: () => Promise<boolean>;
   aiAsk: (payload: unknown) => Promise<AiAnswer>;
   /** Фактический промпт, который уйдёт модели: для просмотра и правки. */
@@ -57,6 +57,7 @@ export default function AiTab(props: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [savingKeys, setSavingKeys] = useState(false);
+  const [clearingKeys, setClearingKeys] = useState(false);
   const [statusError, setStatusError] = useState('');
   const [zaiKey, setZaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
@@ -165,9 +166,14 @@ export default function AiTab(props: Props) {
         }]);
         onFocusUsed?.();
       } else {
+        // Показываем то, что вернул провайдер: код ошибки и цепочку
+        // пробованных провайдеров, а не обезличенное «неизвестная ошибка».
+        const parts = [`Не удалось получить ответ: ${answer.error ?? 'неизвестная ошибка'}`];
+        if (answer.code) parts.push(`Код: ${answer.code}`);
+        if (answer.provider) parts.push(`Провайдер: ${answer.provider}`);
         setMessages((m) => [...m, {
           role: 'assistant',
-          text: `Не удалось получить ответ: ${answer.error ?? 'неизвестная ошибка'}`,
+          text: parts.join(' · '),
         }]);
       }
     } catch (err) {
@@ -222,7 +228,12 @@ export default function AiTab(props: Props) {
   async function saveKeys(): Promise<void> {
     setSavingKeys(true);
     try {
-      await api().aiSaveKeys({ zai: zaiKey, gemini: geminiKey });
+      // Отправляем только заполненные поля: пустое поле означает «не трогать»,
+      // иначе сохранение ключа одного провайдера стирал бы ключ другого.
+      const payload: Record<string, string> = {};
+      if (zaiKey.trim()) payload.zai = zaiKey.trim();
+      if (geminiKey.trim()) payload.gemini = geminiKey.trim();
+      await api().aiSaveKeys(payload);
       setZaiKey('');
       setGeminiKey('');
       const s = await api().aiStatus();
@@ -232,6 +243,23 @@ export default function AiTab(props: Props) {
       setNote(`Не удалось сохранить ключи: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSavingKeys(false);
+    }
+  }
+
+  /** Удалить сохранённые ключи провайдеров. */
+  async function clearKeys(): Promise<void> {
+    setClearingKeys(true);
+    try {
+      await api().aiClearKeys();
+      setZaiKey('');
+      setGeminiKey('');
+      const s = await api().aiStatus();
+      setStatus(s);
+      setNote('Ключи удалены с этого компьютера.');
+    } catch (err) {
+      setNote(`Не удалось удалить ключи: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setClearingKeys(false);
     }
   }
 
@@ -325,6 +353,11 @@ export default function AiTab(props: Props) {
                       status.providers.find((p) => p.id === id)?.label ?? id
                     )).join(' → ')}
                     {(status.chain ?? []).length < 2 ? ' — резерв не задан' : ''}
+                    {(status.readyChain ?? []).length === 0 ? (
+                      <span className="warn">
+                        {' '}Ни у одного провайдера в цепочке не задан ключ — запрос не уйдёт.
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
                 <tr>
@@ -352,7 +385,7 @@ export default function AiTab(props: Props) {
             <h3>Ключи провайдеров</h3>
             <p className="muted small">
               Ключ хранится в зашифрованном виде на вашем компьютере и не попадает в интерфейс.
-              Для Z.ai нужен Standard API Key (бесплатная модель glm-4.7-flash).
+              Для Z.ai нужен Standard API Key (бесплатная модель glm-4.5-flash).
             </p>
             <div className="form">
               <label>
@@ -375,6 +408,13 @@ export default function AiTab(props: Props) {
               </label>
               <button className="btn" onClick={() => void saveKeys()} disabled={savingKeys}>
                 {savingKeys ? 'Сохранение…' : 'Сохранить ключи'}
+              </button>
+              <button
+                className="btn"
+                onClick={() => void clearKeys()}
+                disabled={clearingKeys}
+              >
+                {clearingKeys ? 'Удаление…' : 'Удалить ключи'}
               </button>
             </div>
           </div>

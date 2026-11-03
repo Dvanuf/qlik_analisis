@@ -32,7 +32,9 @@ export function joinUrl(baseUrl, path) {
 function errorMessage(body) {
   try {
     const parsed = JSON.parse(body);
-    return String(parsed?.error?.message ?? parsed?.message ?? parsed?.error ?? '').slice(0, 300);
+    // Google отдаёт ошибку массивом: [{error: {...}}] — берём первый элемент.
+    const root = Array.isArray(parsed) ? parsed[0] : parsed;
+    return String(root?.error?.message ?? root?.message ?? root?.error ?? '').slice(0, 300);
   } catch {
     return String(body ?? '').slice(0, 300);
   }
@@ -94,13 +96,15 @@ function providerLabel(id) {
 function parseErrorBody(body) {
   try {
     const parsed = JSON.parse(body);
-    const err = parsed?.error ?? parsed;
-    const code = err?.code ?? parsed?.code ?? null;
-    const status = err?.status ?? parsed?.status ?? null;
+    // Google отдаёт ошибку массивом: [{error: {...}}] — берём первый элемент.
+    const root = Array.isArray(parsed) ? parsed[0] : parsed;
+    const err = root?.error ?? root;
+    const code = err?.code ?? root?.code ?? null;
+    const status = err?.status ?? root?.status ?? null;
     return {
       code,
       status: status ? String(status) : null,
-      message: String(err?.message ?? parsed?.message ?? '').slice(0, 300),
+      message: String(err?.message ?? root?.message ?? '').slice(0, 300),
     };
   } catch {
     return { code: null, status: null, message: String(body ?? '').slice(0, 300) };
@@ -157,6 +161,14 @@ export function statusToError(status, body, provider, headers = {}) {
       extra,
     );
   }
+  if (parsed.status === 'FAILED_PRECONDITION' && /location|not supported/i.test(detail)) {
+    // Ключ верный, но провайдер не работает из этого региона.
+    return new AiError(
+      AI_ERROR.BAD_RESPONSE,
+      `${label}: доступ из вашего региона не поддерживается (${detail}).`,
+      extra,
+    );
+  }
   if (status === 404) {
     return new AiError(
       AI_ERROR.BAD_RESPONSE,
@@ -183,7 +195,8 @@ export function statusToError(status, body, provider, headers = {}) {
  *
  * @param {{baseUrl: string, model: string, messages: Array<object>, apiKey?: string,
  *   timeoutMs?: number, signal?: AbortSignal, stream?: boolean, temperature?: number,
- *   maxTokens?: number, provider?: string, onDelta?: (chunk: string) => void}} options
+ *   maxTokens?: number, thinking?: object, provider?: string,
+ *   onDelta?: (chunk: string) => void}} options
  * @returns {Promise<{text: string, usage: object|null, model: string, finishReason: string|null}>}
  */
 export function chatCompletion(options = {}) {
@@ -197,6 +210,7 @@ export function chatCompletion(options = {}) {
     stream = false,
     temperature = 0.2,
     maxTokens,
+    thinking,
     provider = '?',
     onDelta,
   } = options;
@@ -207,6 +221,10 @@ export function chatCompletion(options = {}) {
     messages,
     temperature,
     ...(maxTokens ? { max_tokens: maxTokens } : {}),
+    // GLM по умолчанию тратит токены на «размышление»: бюджет уходит в
+    // reasoning_content, а content приходит пустым. Явное отключение режима
+    // размышления возвращает нормальный ответ (замер: 83 с → 41 с).
+    ...(thinking ? { thinking } : {}),
     ...(stream ? { stream: true } : {}),
   };
   const body = Buffer.from(JSON.stringify(payload), 'utf8');
@@ -248,6 +266,8 @@ export function chatCompletion(options = {}) {
           try {
             const parsed = JSON.parse(text);
             const choice = parsed?.choices?.[0];
+            // Берём только content: reasoning_content — это черновые размышления
+            // модели, а не ответ пользователю.
             const content = choice?.message?.content ?? '';
             resolve({
               text: typeof content === 'string' ? content : JSON.stringify(content ?? ''),

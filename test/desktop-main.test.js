@@ -114,6 +114,27 @@ test('main.ts: ИИ-обработчики зарегистрированы', ()
   }
 });
 
+test('main.ts: ключи сохраняются для всех провайдеров, а не по жёсткому списку', () => {
+  // Регрессия 0.8.4: список ['zai', 'gemini'] в обработчике сохранения
+  // терял ключи остальных провайдеров, а пустое поле затирало ключ
+  // второго провайдера.
+  const handler = MAIN.slice(MAIN.indexOf("ipcMain.handle('core:ai-keys-save'"));
+  const body = handler.slice(0, handler.indexOf('});'));
+  assert.ok(body.includes('Object.keys(PROVIDERS)'), 'ключи сохраняются не по списку провайдеров');
+  assert.equal(body.includes("['zai', 'gemini']"), false, 'остался жёсткий список провайдеров');
+  // Отсутствующее поле означает «не трогать», а не «удалить».
+  assert.ok(body.includes("typeof value !== 'string'"), 'пустое поле трактуется как удаление');
+});
+
+test('main.ts: ответ на вопрос содержит код и провайдера ошибки', () => {
+  // Интерфейс должен показывать настоящую причину сбоя, а не обезличенную
+  // строку: для этого нужен машинночитаемый код и имя провайдера.
+  const handler = MAIN.slice(MAIN.indexOf("ipcMain.handle('core:ai-ask'"));
+  assert.ok(handler.includes('err instanceof AiError'), 'нет разбора AiError в core:ai-ask');
+  assert.ok(handler.includes('code'), 'нет кода ошибки в ответе');
+  assert.ok(handler.includes('provider'), 'нет провайдера в ответе');
+});
+
 test('тесты: test() не вложен в другой test()', () => {
   // Регрессия 0.8.3: новые тесты попали внутрь чужого теста. В Node 22
   // такой подтест отменяется, а родитель падает с «subtests failed» —

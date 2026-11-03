@@ -301,8 +301,8 @@ node bin/analyze.js analyze-all \
 
 | Провайдер | Модель | Ключ | Когда использовать |
 |---|---|---|---|
-| **Z.ai** | `glm-4.7-flash` | Standard API Key | основной: модель бесплатна |
-| **Google Gemini** | `gemini-2.5-flash` | ключ AI Studio | резервный: бесплатный тариф |
+| **Z.ai** | `glm-4.5-flash` | Standard API Key | основной: модель бесплатна |
+| **Google Gemini** | `gemini-flash-latest` | ключ AI Studio | резервный: бесплатный тариф |
 | **Локально** | Ollama / LM Studio | не нужен | данные не должны покидать машину |
 
 Все три говорят по OpenAI-совместимому протоколу, поэтому переключение —

@@ -20,6 +20,8 @@ export type AiStatus = {
   fallback: string[];
   /** Итоговая цепочка провайдеров: основной и резервные. */
   chain: string[];
+  /** Подмножество цепочки с провайдерами, у которых задан ключ. */
+  readyChain: string[];
   sensitive: boolean;
   limits: { requestsPerMinute: number; dailyCap: number; cacheTtlMs: number };
   maxSummaryChars: number;
@@ -55,6 +57,8 @@ export type AiAnswer = {
   ok: boolean;
   text?: string;
   error?: string;
+  /** Машиночитаемый код ошибки ИИ-слоя (NO_KEY, TIMEOUT, RATE_LIMITED…). */
+  code?: string;
   provider?: string;
   model?: string;
   truncated?: boolean;
