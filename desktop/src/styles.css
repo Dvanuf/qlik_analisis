@@ -660,7 +660,8 @@ table.rq tr.pat { cursor: pointer; }
 }
 .ai-keys { margin-top: 12px; }
 .ai-keys h3 { font-size: 13px; margin: 0 0 4px; }
-.ai-keys .form { grid-template-columns: 1fr 1fr auto; }
+/* Два поля ключей и две кнопки: сохранение и удаление. */
+.ai-keys .form { grid-template-columns: 1fr 1fr auto auto; }
 .ai-log {
   margin: 14px 0;
   padding: 12px;
