@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -97,4 +97,39 @@ test('main.ts: ИИ-обработчики зарегистрированы', ()
   for (const channel of required) {
     assert.ok(MAIN.includes(`ipcMain.handle('${channel}'`), `нет обработчика ${channel}`);
   }
+});
+
+test('main.ts: ИИ-обработчики зарегистрированы', () => {
+  const required = [
+    'core:ai-status',
+    'core:ai-settings-save',
+    'core:ai-keys-save',
+    'core:ai-keys-clear',
+    'core:ai-cancel',
+    'core:ai-ask',
+    'core:ai-prompt',
+  ];
+  for (const channel of required) {
+    assert.ok(MAIN.includes(`ipcMain.handle('${channel}'`), `нет обработчика ${channel}`);
+  }
+});
+
+test('тесты: test() не вложен в другой test()', () => {
+  // Регрессия 0.8.3: новые тесты попали внутрь чужого теста. В Node 22
+  // такой подтест отменяется, а родитель падает с «subtests failed» —
+  // локально на Node 24 файл проходил, в CI падал.
+  const dir = resolve(HERE, '..', 'test');
+  const nested = [];
+  for (const name of readdirSync(dir).filter((f) => f.endsWith('.test.js'))) {
+    const lines = readFileSync(resolve(dir, name), 'utf8').split('\n');
+    let depth = 0;
+    for (const [i, line] of lines.entries()) {
+      if (/^test\(.*=>\s*\{/.test(line)) depth += 1;
+      if (/^\}\);/.test(line)) depth = Math.max(0, depth - 1);
+      if (depth > 0 && /^\s{2,}test\(/.test(line)) {
+        nested.push(`${name}:${i + 1}`);
+      }
+    }
+  }
+  assert.deepEqual(nested, [], `вложенные тесты: ${nested.join(', ')}`);
 });

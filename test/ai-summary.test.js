@@ -117,6 +117,8 @@ test('сводка: формат выводит потенциал упроще�
   const text = formatSummary(data);
   assert.match(text, /Потенциал упрощения/);
   assert.match(text, /строк данных: 500/);
+});
+
 test('сводка: показывает владельца приложения', () => {
   const { text } = buildSummary({
     analysis: fakeAnalysis(),
@@ -177,13 +179,4 @@ test('сводка: без находок и фокуса лишних блок�
   const { text } = buildSummary({ analysis: { summary: {}, findings: [] } });
   assert.doesNotMatch(text, /Конкретные находки/);
   assert.doesNotMatch(text, /О чём конкретно спросили/);
-});
-});
-
-test('сводка: показывает владельца приложения', () => {
-  const { text } = buildSummary({
-    analysis: fakeAnalysis(),
-    app: { title: 'Продажи РФ', owner: 'Иванов Иван Иванович' },
-  });
-  assert.match(text, /владелец: Иванов Иван Иванович/);
 });
