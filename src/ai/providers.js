@@ -59,6 +59,25 @@ export const PROVIDERS = {
 
 /** Порядок провайдеров по умолчанию: платный-бесплатный → бесплатный → локальный. */
 export const PROVIDER_ORDER = ['zai', 'gemini', 'local'];
+/**
+ * Убирает из списка резервов всё, что не может быть резервом.
+ *
+ * Остаются только известные провайдеры, без повторов и без основного:
+ * основной и так первый в цепочке, а «резерв = основной» бессмысленно —
+ * такая настройка тихо оставляет запрос без резерва.
+ *
+ * @param {string} primary
+ * @param {string[]} [fallback]
+ * @returns {string[]}
+ */
+export function sanitizeFallback(primary = '', fallback = []) {
+  const list = Array.isArray(fallback) ? fallback : [fallback];
+  return [...new Set(list
+    .map((x) => String(x ?? '').trim())
+    .filter(Boolean)
+    .filter((id) => Boolean(PROVIDERS[id]))
+    .filter((id) => id !== primary))];
+}
 
 /**
  * Собирает цепочку провайдеров: основной + резервные, без повторов.
@@ -67,9 +86,12 @@ export const PROVIDER_ORDER = ['zai', 'gemini', 'local'];
  * @returns {string[]}
  */
 export function providerChain(primary = 'zai', fallback = []) {
-  const list = [primary, ...(fallback ?? [])].map((x) => String(x ?? '').trim()).filter(Boolean);
+  const list = [primary, ...sanitizeFallback(primary, fallback)]
+    .map((x) => String(x ?? '').trim())
+    .filter(Boolean);
   return [...new Set(list)].filter((id) => Boolean(PROVIDERS[id]));
 }
+
 
 /**
  * Описание провайдера с учётом переопределений из конфигурации.

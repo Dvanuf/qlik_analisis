@@ -47,14 +47,45 @@ test('статусы провайдера превращаются в понят
   assert.equal(badKey.code, AI_ERROR.NO_KEY);
   assert.match(badKey.message, /ключ/i);
 
+  // 429 без бизнес-кода — обычное ограничение частоты запросов.
   const limit = statusToError(429, '{}', 'zai');
-  assert.equal(limit.code, AI_ERROR.QUOTA_EXHAUSTED);
+  assert.equal(limit.code, AI_ERROR.RATE_LIMITED);
+  assert.match(limit.message, /Z\.ai/);
 
   const down = statusToError(503, '{}', 'zai');
   assert.equal(down.code, AI_ERROR.PROVIDER_UNAVAILABLE);
 
   const wrongModel = statusToError(404, '{}', 'zai');
   assert.equal(wrongModel.code, AI_ERROR.BAD_RESPONSE);
+});
+
+test('бизнес-коды Z.ai различают «подождать» и «ждать бесполезно»', () => {
+  // Модель перегружена — запрос стоит повторить.
+  const busy = statusToError(429, '{"error":{"code":"1305","message":"模型繁忙"}}', 'zai');
+  assert.equal(busy.code, AI_ERROR.RATE_LIMITED);
+  assert.match(busy.message, /перегружена/);
+  assert.equal(busy.businessCode, 1305);
+
+  // Денег на счёте нет — повтор не поможет.
+  const noMoney = statusToError(429, '{"error":{"code":"1113","message":"余额不足"}}', 'zai');
+  assert.equal(noMoney.code, AI_ERROR.QUOTA_EXHAUSTED);
+  assert.match(noMoney.message, /средств/);
+  assert.equal(noMoney.businessCode, 1113);
+
+  // Частота запросов — временная беда.
+  const tooFast = statusToError(429, '{"error":{"code":"1302"}}', 'zai');
+  assert.equal(tooFast.code, AI_ERROR.RATE_LIMITED);
+});
+
+test('Gemini: RESOURCE_EXHAUSTED читается как лимит, а не как сбой', () => {
+  const exhausted = statusToError(429, '{"error":{"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded"}}', 'gemini');
+  assert.equal(exhausted.code, AI_ERROR.RATE_LIMITED);
+  assert.match(exhausted.message, /Google Gemini/);
+});
+
+test('Retry-After провайдера попадает в ошибку', () => {
+  const err = statusToError(429, '{}', 'zai', { 'retry-after': '12' });
+  assert.equal(err.retryAfterMs, 12000);
 });
 
 test('неизвестная ошибка становится ошибкой провайдера, а не теряется', () => {

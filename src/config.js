@@ -7,6 +7,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { sanitizeFallback } from './ai/providers.js';
 
 export const DEFAULT_CONFIG_NAME = 'qlik-analyzer.config.json';
 
@@ -259,7 +260,9 @@ export function resolveAi(cli = {}, config = {}) {
   return {
     provider,
     model,
-    fallback: Array.isArray(fallback) ? fallback : [fallback],
+    // Резервные провайдеры очищаются: неизвестные и повтор основного
+    // не могут быть резервом и тихо оставляют запрос без резерва.
+    fallback: sanitizeFallback(provider, Array.isArray(fallback) ? fallback : [fallback]),
     sensitive: Boolean(sensitive),
     limits,
     maxSummaryChars,

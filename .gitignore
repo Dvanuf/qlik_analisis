@@ -19,3 +19,11 @@ reports/
 # Данные сервера (отчёты, индекс)
 server/data/
 server/data-test/
+
+# Данные сервера (отчёты, индекс)
+server/data/
+
+# Служебные файлы редактора (Cline)
+.clineignore
+.clinerules/
+.project-context/

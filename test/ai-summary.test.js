@@ -117,6 +117,67 @@ test('сводка: формат выводит потенциал упроще�
   const text = formatSummary(data);
   assert.match(text, /Потенциал упрощения/);
   assert.match(text, /строк данных: 500/);
+test('сводка: показывает владельца приложения', () => {
+  const { text } = buildSummary({
+    analysis: fakeAnalysis(),
+    app: { title: 'Продажи РФ', owner: 'Иванов Иван Иванович' },
+  });
+  assert.match(text, /владелец: Иванов Иван Иванович/);
+});
+
+test('сводка: показывает конкретные находки с объектом, строкой и рекомендацией', () => {
+  const analysis = fakeAnalysis();
+  analysis.findings.push({
+    ruleId: 'S100',
+    severity: 'error',
+    title: 'Поле без ключа',
+    count: 4,
+    message: 'Поле не участвует в расчёте',
+    recommendation: 'Добавьте ключ',
+    target: { kind: 'field', name: 'Amount' },
+    table: 'Sales',
+    line: 42,
+  });
+  const { text } = buildSummary({ analysis });
+  assert.match(text, /Конкретные находки/);
+  assert.match(text, /S100 \[error\]/);
+  assert.match(text, /Amount/);
+  assert.match(text, /строка 42/);
+  assert.match(text, /Рекомендация: Добавьте ключ/);
+});
+
+test('сводка: находки, релевантные вопросу, идут первыми', () => {
+  const analysis = fakeAnalysis();
+  analysis.findings = [
+    { ruleId: 'S001', severity: 'error', title: 'Без ключа', count: 1, message: 'Ключ', recommendation: '' },
+    { ruleId: 'S900', severity: 'warning', title: 'Размер таблицы Sales', count: 2, message: 'Много строк', recommendation: '' },
+  ];
+  const { data } = buildSummary({ analysis, question: 'что не так с таблицей Sales' });
+  assert.equal(data.concrete[0].ruleId, 'S900');
+});
+
+test('сводка: находка, выбранная пользователем, попадает в сводку', () => {
+  const { text } = buildSummary({
+    analysis: fakeAnalysis(),
+    focus: {
+      ruleId: 'S001',
+      severity: 'error',
+      title: 'Без ключа',
+      target: 'Amount',
+      message: 'Поле без ключа',
+      recommendation: 'Добавьте ключ',
+    },
+  });
+  assert.match(text, /О чём конкретно спросили/);
+  assert.match(text, /S001 \[error\]/);
+  assert.match(text, /Amount/);
+});
+
+test('сводка: без находок и фокуса лишних блоков нет', () => {
+  const { text } = buildSummary({ analysis: { summary: {}, findings: [] } });
+  assert.doesNotMatch(text, /Конкретные находки/);
+  assert.doesNotMatch(text, /О чём конкретно спросили/);
+});
 });
 
 test('сводка: показывает владельца приложения', () => {

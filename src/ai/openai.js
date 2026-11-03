@@ -45,42 +45,136 @@ function errorMessage(body) {
  * @param {string} provider
  * @returns {AiError}
  */
-export function statusToError(status, body, provider) {
+/**
+ * Бизнес-коды Z.ai (GLM): код → что произошло.
+ *
+ * Провайдер отдаёт HTTP 429 с кодом в теле ответа. По коду видно, стоит ли
+ * повторять запрос: «баланс исчерпан» ждать бесполезно, а «модель
+ * перегружена» — повторяем.
+ *
+ * @see https://docs.bigmodel.cn/cn/faq/api-code
+ */
+const ZAI_CODES = {
+  1113: { message: 'на счёте Z.ai закончились средства', retryable: false },
+  1210: { message: 'Z.ai отклонил параметры запроса', retryable: false },
+  1211: { message: 'Z.ai не знает такую модель', retryable: false },
+  1261: { message: 'промпт слишком длинный для Z.ai', retryable: false },
+  1301: { message: 'Z.ai отклонил запрос по политике безопасности', retryable: false },
+  1302: { message: 'достигнут лимит частоты запросов Z.ai', retryable: true },
+  1305: { message: 'модель Z.ai сейчас перегружена', retryable: true },
+  1308: { message: 'исчерпан лимит использования Z.ai до сброса', retryable: false },
+  1309: { message: 'истёк срок действия пакета Z.ai', retryable: false },
+  1310: { message: 'исчерпан недельный или месячный лимит Z.ai', retryable: false },
+  1311: { message: 'у этой модели нет доступа по вашему тарифу', retryable: false },
+  1313: { message: 'сработало ограничение fair use Z.ai', retryable: false },
+  1314: { message: 'корпоративный пакет Z.ai недействителен', retryable: false },
+  1316: { message: 'исчерпан 5-часовой лимит Z.ai', retryable: false },
+  1317: { message: 'исчерпан 7-дневный лимит Z.ai', retryable: false },
+};
+
+/**
+ * Человеческое имя провайдера для сообщений об ошибке.
+ * @param {string} id
+ * @returns {string}
+ */
+function providerLabel(id) {
+  const labels = {
+    zai: 'Z.ai',
+    gemini: 'Google Gemini',
+    local: 'локальная модель',
+  };
+  return labels[id] ?? id;
+}
+
+/**
+ * Разбирает тело ошибки: код и сообщение провайдера.
+ * @param {string} body
+ * @returns {{code: string|number|null, status: string|null, message: string}}
+ */
+function parseErrorBody(body) {
+  try {
+    const parsed = JSON.parse(body);
+    const err = parsed?.error ?? parsed;
+    const code = err?.code ?? parsed?.code ?? null;
+    const status = err?.status ?? parsed?.status ?? null;
+    return {
+      code,
+      status: status ? String(status) : null,
+      message: String(err?.message ?? parsed?.message ?? '').slice(0, 300),
+    };
+  } catch {
+    return { code: null, status: null, message: String(body ?? '').slice(0, 300) };
+  }
+}
+
+/**
+ * Классифицирует HTTP-статус провайдера в типизированную ошибку.
+ * @param {number} status
+ * @param {string} body
+ * @param {string} provider
+ * @param {object} [headers] — заголовки ответа: оттуда берём Retry-After
+ * @returns {AiError}
+ */
+export function statusToError(status, body, provider, headers = {}) {
   const detail = errorMessage(body);
+  const parsed = parseErrorBody(body);
+  const label = providerLabel(provider);
+  // Код Z.ai приходит строкой, поэтому приводим к числу, если это возможно.
+  const numCode = Number(parsed.code);
+  const business = Number.isFinite(numCode) ? ZAI_CODES[numCode] : null;
+  const retryAfter = Number(headers?.['retry-after'] ?? headers?.['Retry-After'] ?? 0);
+  const extra = { status, provider, detail, retryAfterMs: retryAfter > 0 ? retryAfter * 1000 : 0 };
+
   if (status === 401 || status === 403) {
     return new AiError(
       AI_ERROR.NO_KEY,
       provider === 'local'
         ? 'Локальный сервер отклонил запрос: проверьте, что модель загружена.'
-        : 'Провайдер отклонил ключ: проверьте его в настройках ИИ.',
-      { status, provider, detail },
+        : `${label} отклонил ключ: проверьте его в настройках ИИ.`,
+      extra,
     );
   }
   if (status === 429) {
+    // Бизнес-код важнее общего текста: по нему видно, ждать или переключаться.
+    if (business) {
+      return new AiError(
+        business.retryable ? AI_ERROR.RATE_LIMITED : AI_ERROR.QUOTA_EXHAUSTED,
+        `${label}: ${business.message}.`,
+        { ...extra, businessCode: numCode },
+      );
+    }
+    if (parsed.status === 'RESOURCE_EXHAUSTED') {
+      const quota = /token/i.test(detail) ? 'лимит токенов' : 'лимит запросов';
+      return new AiError(
+        AI_ERROR.RATE_LIMITED,
+        `${label}: исчерпан ${quota} на стороне сервиса. Попробуйте позже.`,
+        { ...extra, businessCode: parsed.status },
+      );
+    }
     return new AiError(
-      AI_ERROR.QUOTA_EXHAUSTED,
-      'Провайдер вернул 429: лимит запросов на стороне сервиса. Попробуйте позже.',
-      { status, provider, detail },
+      AI_ERROR.RATE_LIMITED,
+      `${label}: превышен лимит запросов на стороне сервиса. Попробуйте позже.`,
+      extra,
     );
   }
   if (status === 404) {
     return new AiError(
       AI_ERROR.BAD_RESPONSE,
-      `Провайдер не знает адрес ${provider} или модель. Проверьте настройки ИИ.`,
-      { status, provider, detail },
+      `${label} не знает адрес ${provider} или модель. Проверьте настройки ИИ.`,
+      extra,
     );
   }
   if (status >= 500) {
     return new AiError(
       AI_ERROR.PROVIDER_UNAVAILABLE,
-      `Провайдер вернул ${status}. Попробуйте позже или переключитесь на резервного.`,
-      { status, provider, detail },
+      `${label} вернул ${status}. Попробуйте позже или переключитесь на резервного.`,
+      extra,
     );
   }
   return new AiError(
     AI_ERROR.BAD_RESPONSE,
-    `Провайдер вернул ${status}${detail ? `: ${detail}` : ''}`,
-    { status, provider, detail },
+    `${label} вернул ${status}${detail ? `: ${detail}` : ''}`,
+    extra,
   );
 }
 
@@ -136,7 +230,12 @@ export function chatCompletion(options = {}) {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
-          reject(statusToError(status, Buffer.concat(chunks).toString('utf8'), provider));
+          reject(statusToError(
+            status,
+            Buffer.concat(chunks).toString('utf8'),
+            provider,
+            res.headers ?? {},
+          ));
         });
         return;
       }

@@ -27,7 +27,7 @@ import { openHistory, saveRun, listRuns, compareRuns, latestRunForApp, RULES_VER
 import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
 import { buildXlsx } from '../../src/report/xlsx.js';
 import { normalizeCredentials, isSessionUsable, parseCredentials } from '../../src/session/credentials.js';
-import { analyze as aiAnalyze, PROVIDERS } from '../../src/ai/index.js';
+import { analyze as aiAnalyze, buildPromptPreview, providerChain, PROVIDERS } from '../../src/ai/index.js';
 import { resolveAi } from '../../src/config.js';
 
 let mainWindow: BrowserWindow | null = null;
@@ -350,8 +350,45 @@ async function runSmokeCheck(): Promise<void> {
             });
           })()
         `);
+        // Блок «Промпт запроса» должен открываться и показывать текст промпта.
+        const aiPrompt = await win.webContents.executeJavaScript(`
+          (function () {
+            var d = document.querySelector('.ai-prompt');
+            if (!d) return JSON.stringify({ ok: false, error: 'нет блока промпта' });
+            d.open = true;
+            d.dispatchEvent(new Event('toggle'));
+            return window.qa.aiPrompt({
+              question: 'что исправить в первую очередь?',
+              app: { title: 'Продажи РФ', platform: 'qlik-sense' },
+              summary: {
+                summary: { findings: { total: 1, bySeverity: { error: 1 } }, score: 70 },
+                findings: [{ ruleId: 'S001', severity: 'error', title: 'Без ключа', count: 1 }]
+              }
+            }).then(function (p) {
+              return JSON.stringify({
+                ok: Boolean(p && p.ok),
+                provider: p && p.provider,
+                hasSystem: Boolean(p && p.system),
+                hasUser: Boolean(p && p.user),
+                userLen: p && p.user ? p.user.length : 0
+              });
+            }, function (e) {
+              return JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+            });
+          })()
+        `);
+        const aiPromptParsed = JSON.parse(String(aiPrompt)) as {
+          ok: boolean; error?: string; provider?: string; hasSystem?: boolean; hasUser?: boolean; userLen?: number;
+        };
+        if (!aiPromptParsed.ok) {
+          throw new Error(`Промпт ИИ недоступен: ${aiPromptParsed.error}`);
+        }
+        if (!aiPromptParsed.hasSystem || !aiPromptParsed.hasUser) {
+          throw new Error('Промпт ИИ собран без системной инструкции или без текста запроса');
+        }
 
         const image = await win.webContents.capturePage();
+
         // В упакованном приложении app.asar доступен только для чтения —
         // скриншот пишем в каталог пользователя.
         const out = app.isPackaged
@@ -387,6 +424,7 @@ async function runSmokeCheck(): Promise<void> {
           ai: JSON.parse(String(ai)),
           aiStatus: aiStatusParsed,
           aiSettings: JSON.parse(String(aiSettings)),
+          aiPrompt: aiPromptParsed,
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {
@@ -1219,6 +1257,8 @@ ipcMain.handle('core:ai-status', async () => {
     providers,
     provider: settings.provider,
     fallback: settings.fallback,
+    // Итоговая цепочка: её реально обходит запрос при сбое основного.
+    chain: providerChain(settings.provider, settings.fallback),
     sensitive: settings.sensitive,
     limits: settings.limits,
     maxSummaryChars: settings.maxSummaryChars,
@@ -1262,6 +1302,63 @@ ipcMain.handle('core:ai-cancel', () => {
 });
 
 /**
+ * Фактический промпт, который уйдёт модели.
+ *
+ * Собирается в том же месте и по тем же правилам, что и реальный запрос:
+ * та же сводка, то же обезличивание, тот же провайдер. Пользователь видит
+ * ровно то, что отправится, и может поправить текст перед отправкой.
+ */
+ipcMain.handle('core:ai-prompt', async (_e, payload: {
+  question?: string;
+  app?: { id?: string; title?: string; owner?: string; platform?: string };
+  summary?: unknown;
+  runs?: unknown[];
+  comparison?: unknown;
+  focus?: { ruleId?: string; title?: string; target?: string; message?: string; severity?: string; recommendation?: string; line?: number | null } | null;
+  history?: { role?: string; content?: string }[];
+  promptOverride?: { system?: string; user?: string } | null;
+}) => {
+  const settings = aiSettings();
+  const focus = payload?.focus ?? null;
+  const summaryData = (payload?.summary ?? {}) as Record<string, unknown>;
+  const findings = Array.isArray(summaryData.findings) ? summaryData.findings : [];
+  try {
+    const preview = buildPromptPreview(payload?.question ?? '', {
+      analysis: {
+        summary: (summaryData.summary ?? {}) as never,
+        findings: findings as never[],
+      },
+      runs: (payload?.runs ?? []) as never[],
+      comparison: (payload?.comparison ?? null) as never,
+      app: payload?.app ?? {},
+      maxChars: settings.maxSummaryChars,
+      focus: focus as never,
+    }, {
+      provider: settings.provider,
+      fallback: settings.fallback,
+      sensitive: settings.sensitive,
+      providers: settings.providers as Record<string, { baseUrl?: string; model?: string }>,
+      history: (payload?.history ?? []).map((m) => ({
+        role: m?.role === 'assistant' ? 'assistant' : 'user',
+        content: String(m?.content ?? ''),
+      })).filter((m) => m.content.trim()),
+      override: payload?.promptOverride ?? null,
+    });
+    return { ok: true, ...preview };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: maskSecrets(message) };
+  }
+});
+
+/**
+ * Вопрос к ИИ по результатам анализа.
+ * Вопрос к ИИ по результатам анализа.
+ *
+ * Renderer присылает вопрос и контекст (сводку находок, историю прогонов).
+ * Наружу к провайдеру уходит агрегированная сводка, а не сырой анализ.
+ */
+/**
  * Вопрос к ИИ по результатам анализа.
  *
  * Renderer присылает вопрос и контекст (сводку находок, историю прогонов).
@@ -1273,7 +1370,9 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
   summary?: unknown;
   runs?: unknown[];
   comparison?: unknown;
-  focus?: { ruleId?: string; title?: string; target?: string; message?: string } | null;
+  focus?: { ruleId?: string; title?: string; target?: string; message?: string; severity?: string; recommendation?: string; line?: number | null } | null;
+  history?: { role?: string; content?: string }[];
+  promptOverride?: { system?: string; user?: string } | null;
 }) => {
   const settings = aiSettings();
   const keys = await loadAiKeys();
@@ -1303,6 +1402,7 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
       comparison: (payload?.comparison ?? null) as never,
       app: payload?.app ?? {},
       maxChars: settings.maxSummaryChars,
+      focus: focus as never,
     }, {
       provider: settings.provider,
       fallback: settings.fallback,
@@ -1312,12 +1412,19 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
       limits: settings.limits,
       statePath: resolve(app.getPath('userData'), 'ai-state.json'),
       signal: controller.signal,
+      // История диалога: без неё ответы повторяют друг друга.
+      history: (payload?.history ?? []).map((m) => ({
+        role: m?.role === 'assistant' ? 'assistant' : 'user',
+        content: String(m?.content ?? ''),
+      })).filter((m) => m.content.trim()),
+      // Правка промпта из интерфейса: уходит вместо штатного текста.
+      override: payload?.promptOverride ?? null,
       onEvent: (event: { type?: string; message?: string; provider?: string }) => {
         mainWindow?.webContents.send('ai:event', event);
       },
     });
 
-    // Точечный вопрос: находка, о которой спросили, добавляется в сводку.
+    // Точечный вопрос: находка, о которой спросили, добавляется к ответу.
     const answer = focus
       ? `${result.text}\n\n— по находке ${focus.ruleId ?? ''}${focus.target ? ` (${focus.target})` : ''}`
       : result.text;

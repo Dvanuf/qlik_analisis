@@ -673,9 +673,18 @@ table.rq tr.pat { cursor: pointer; }
 .ai-msg { margin-bottom: 12px; }
 .ai-msg:last-child { margin-bottom: 0; }
 .ai-msg-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+.ai-prompts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ai-prompt { margin: 10px 0; }
+.ai-prompt textarea {
+  display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 6px; font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--panel); color: var(--text); resize: vertical;
+}
+.ai-prompt label { display: block; margin-top: 8px; }
+.ai-prompt .row-actions { margin-top: 8px; }
 .ai-msg-text { white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
 .ai-msg.user .ai-msg-text { color: var(--muted); }
-.ai-prompts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .ai-input { display: flex; gap: 8px; }
 .ai-input input {
   flex: 1; padding: 8px 10px; border: 1px solid var(--line);

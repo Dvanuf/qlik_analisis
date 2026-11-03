@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveAi, aiKeyEnvNames } from '../src/config.js';
+import { providerChain } from '../src/ai/providers.js';
 
 test('конфигурация ИИ: значения по умолчанию', () => {
   const cfg = resolveAi({}, {});
@@ -52,7 +53,20 @@ test('конфигурация ИИ: переменная окружения в�
   } finally {
     delete process.env.QLIK_AI_PROVIDER;
   }
+  const cfg = resolveAi({}, {
+    ai: { provider: 'zai', fallback: ['zai', 'nope', 'gemini', 'gemini'] },
+  });
+  // Основной провайдер резервом быть не может, неизвестные отбрасываются.
+  assert.deepEqual(cfg.fallback, ['gemini']);
 });
+
+test('конфигурация ИИ: цепочка провайдеров всегда непустая', () => {
+  const cfg = resolveAi({}, { ai: { provider: 'zai', fallback: ['zai'] } });
+  assert.equal(providerChain(cfg.provider, cfg.fallback)[0], 'zai');
+  // Резерв, равный основному, не оставляет запрос без резерва.
+  assert.equal(providerChain(cfg.provider, cfg.fallback).length, 1);
+});
+
 
 test('конфигурация ИИ: имена переменных с ключами', () => {
   const names = aiKeyEnvNames(resolveAi({}, {}));

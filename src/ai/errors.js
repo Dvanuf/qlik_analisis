@@ -36,7 +36,8 @@ export class AiError extends Error {
   /**
    * @param {string} code — код из AI_ERROR
    * @param {string} message — текст для пользователя
-   * @param {{status?: number, provider?: string, detail?: string}} [details]
+   * @param {{status?: number, provider?: string, detail?: string,
+   *   retryAfterMs?: number, businessCode?: string|number}} [details]
    */
   constructor(code, message, details = {}) {
     super(message);
@@ -45,6 +46,10 @@ export class AiError extends Error {
     this.status = details.status;
     this.provider = details.provider;
     this.detail = details.detail;
+    // Сколько провайдер просил подождать (Retry-After).
+    this.retryAfterMs = details.retryAfterMs ?? 0;
+    // Бизнес-код провайдера: у Z.ai он объясняет причину 429.
+    this.businessCode = details.businessCode ?? null;
   }
 }
 

@@ -18,9 +18,36 @@ export type AiStatus = {
   providers: AiProviderInfo[];
   provider: string;
   fallback: string[];
+  /** Итоговая цепочка провайдеров: основной и резервные. */
+  chain: string[];
   sensitive: boolean;
   limits: { requestsPerMinute: number; dailyCap: number; cacheTtlMs: number };
   maxSummaryChars: number;
+};
+
+/**
+ * Фактический промпт, который уйдёт модели.
+ *
+ * Показывается пользователю раскрывающимся блоком: текст можно прочитать
+ * и поправить перед отправкой.
+ */
+export type AiPromptPreview = {
+  ok: boolean;
+  /** Системная инструкция модели. */
+  system?: string;
+  /** Сообщение пользователя: вопрос и сводка. */
+  user?: string;
+  /** Провайдер, которому уйдёт запрос. */
+  provider?: string;
+  /** Модель провайдера. */
+  model?: string;
+  /** Уходят ли данные с машины. */
+  external?: boolean;
+  /** Была ли сводка обрезана. */
+  truncated?: boolean;
+  /** Обезличены ли данные перед отправкой. */
+  redacted?: boolean;
+  error?: string;
 };
 
 /** Ответ ИИ-слоя. */

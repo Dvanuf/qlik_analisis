@@ -234,7 +234,10 @@ test('fallback: конфиденциальный режим без локаль�
 test('fallback: повторяемые и неповторяемые ошибки различаются', () => {
   assert.equal(isRetryable(new AiError(AI_ERROR.PROVIDER_UNAVAILABLE, 'x')), true);
   assert.equal(isRetryable(new AiError(AI_ERROR.TIMEOUT, 'x')), true);
-  assert.equal(isRetryable(new AiError(AI_ERROR.QUOTA_EXHAUSTED, 'x')), true);
+  // Ограничение частоты запросов — временное, повторяем.
+  assert.equal(isRetryable(new AiError(AI_ERROR.RATE_LIMITED, 'x')), true);
+  // Исчерпанный лимит: повтор не поможет — ждём до сброса или переключаемся.
+  assert.equal(isRetryable(new AiError(AI_ERROR.QUOTA_EXHAUSTED, 'x')), false);
   assert.equal(isRetryable(new AiError(AI_ERROR.NO_KEY, 'x')), false);
   assert.equal(isRetryable(new AiError(AI_ERROR.BAD_RESPONSE, 'x')), false);
   assert.equal(isRetryable(new AiError(AI_ERROR.CANCELLED, 'x')), false);

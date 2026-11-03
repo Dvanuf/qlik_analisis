@@ -8,7 +8,9 @@
  * Настройки провайдера, ключей и лимитов — в блоке «Настройки ИИ».
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AiAnswer, AiMessage, AiStatus, AnalysisResult, Finding } from '../types.js';
+import type {
+  AiAnswer, AiMessage, AiPromptPreview, AiStatus, AnalysisResult, Finding,
+} from '../types.js';
 
 type Props = {
   analysis: AnalysisResult | null;
@@ -36,6 +38,8 @@ type QaApi = {
   aiSaveKeys: (keys: { zai?: string; gemini?: string }) => Promise<boolean>;
   aiClearKeys: () => Promise<boolean>;
   aiAsk: (payload: unknown) => Promise<AiAnswer>;
+  /** Фактический промпт, который уйдёт модели: для просмотра и правки. */
+  aiPrompt: (payload: unknown) => Promise<AiPromptPreview>;
   aiCancel: () => Promise<boolean>;
   onAiEvent: (cb: (e: { type?: string; message?: string; provider?: string }) => void) => () => void;
 };
@@ -52,11 +56,17 @@ export default function AiTab(props: Props) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
+  const [savingKeys, setSavingKeys] = useState(false);
   const [statusError, setStatusError] = useState('');
   const [zaiKey, setZaiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
-  const [savingKeys, setSavingKeys] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [prompt, setPrompt] = useState<AiPromptPreview | null>(null);
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [promptNote, setPromptNote] = useState('');
+  /** Правка промпта: null — уходит штатный текст. */
+  const [override, setOverride] = useState<{ system?: string; user?: string } | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
 
   /** Загрузить состояние ИИ-слоя при открытии вкладки. */
@@ -114,6 +124,12 @@ export default function AiTab(props: Props) {
     setNote('');
     setMessages((m) => [...m, { role: 'user', text: q }]);
 
+    // История диалога: без неё модель каждый раз отвечает как в первый раз.
+    const history = messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.text }));
+
     try {
       const answer = await api().aiAsk({
         question: q,
@@ -125,8 +141,14 @@ export default function AiTab(props: Props) {
             title: focus.title,
             target: focus.target?.name ?? '',
             message: focus.message,
+            severity: focus.severity,
+            recommendation: focus.recommendation,
+            line: focus.line ?? null,
           }
           : null,
+        history,
+        // Правка промпта, если пользователь её внёс.
+        promptOverride: override,
       });
       if (answer.ok && answer.text) {
         const notes: string[] = [];
@@ -153,6 +175,44 @@ export default function AiTab(props: Props) {
       }]);
     } finally {
       setBusy(false);
+    }
+  }
+  /** Загрузить фактический промпт, который уйдёт модели. */
+  async function loadPrompt(): Promise<void> {
+    if (!hasAnalysis) return;
+    setPromptBusy(true);
+    setPromptNote('');
+    try {
+      const preview = await api().aiPrompt({
+        question: question.trim(),
+        app: { title: appTitle, platform },
+        summary: context,
+        focus: focus
+          ? {
+            ruleId: focus.ruleId,
+            title: focus.title,
+            target: focus.target?.name ?? '',
+            message: focus.message,
+            severity: focus.severity,
+            recommendation: focus.recommendation,
+            line: focus.line ?? null,
+          }
+          : null,
+        history: messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .slice(-6)
+          .map((m) => ({ role: m.role, content: m.text })),
+      });
+      if (preview.ok) {
+        setPrompt(preview);
+      } else {
+        setPrompt(null);
+        setPromptNote(preview.error ?? 'Не удалось собрать промпт.');
+      }
+    } catch (err) {
+      setPromptNote(`Не удалось собрать промпт: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPromptBusy(false);
     }
   }
 
@@ -257,6 +317,16 @@ export default function AiTab(props: Props) {
                   </td>
                 </tr>
                 <tr>
+                  <td>Цепочка запросов</td>
+                  <td className="muted small">
+                    {(status.chain ?? [status.provider]).map((id) => (
+                      status.providers.find((p) => p.id === id)?.label ?? id
+                    )).join(' → ')}
+                    {(status.chain ?? []).length < 2 ? ' — резерв не задан' : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td>Конфиденциальность</td>
                   <td>Конфиденциальность</td>
                   <td>
                     <label className="muted small">
@@ -359,6 +429,89 @@ export default function AiTab(props: Props) {
             </button>
           ))}
         </div>
+      )}
+
+      {hasAnalysis && (
+        <details
+          className="advanced ai-prompt"
+          open={showPrompt}
+          onToggle={(e) => {
+            const open = (e.target as HTMLDetailsElement).open;
+            setShowPrompt(open);
+            // Промпт собирается только когда его действительно смотрят.
+            if (open && !prompt) void loadPrompt();
+          }}
+        >
+          <summary>
+            Промпт запроса
+            {override ? ' (изменён)' : ''}
+          </summary>
+          <p className="muted small">
+            Этот текст уходит модели. Его можно прочитать и поправить перед отправкой.
+          </p>
+          <div className="row-actions">
+            <button className="btn small" onClick={() => void loadPrompt()} disabled={promptBusy}>
+              {promptBusy ? 'Сборка…' : 'Обновить'}
+            </button>
+            <button
+              className="btn small"
+              onClick={() => setOverride(null)}
+              disabled={!override}
+            >
+              Сбросить правку
+            </button>
+            <button
+              className="btn small"
+              onClick={() => {
+                if (!prompt) return;
+                void navigator.clipboard?.writeText(
+                  `${prompt.system ?? ''}\n\n---\n\n${prompt.user ?? ''}`,
+                );
+                setPromptNote('Промпт скопирован в буфер обмена.');
+              }}
+              disabled={!prompt}
+            >
+              Скопировать
+            </button>
+          </div>
+          {promptNote && <p className="muted small">{promptNote}</p>}
+          {prompt && (
+            <>
+              <p className="muted small">
+                Провайдер: {prompt.provider} · {prompt.model}
+                {prompt.external ? ' · данные обезличиваются' : ' · данные не покидают машину'}
+                {prompt.truncated ? ' · сводка обрезана' : ''}
+              </p>
+              <label className="muted small">
+                Инструкция модели
+                <textarea
+                  rows={8}
+                  value={override?.system ?? prompt.system ?? ''}
+                  onChange={(e) => setOverride({
+                    system: e.target.value,
+                    user: override?.user ?? prompt.user ?? '',
+                  })}
+                />
+              </label>
+              <label className="muted small">
+                Вопрос и данные приложения
+                <textarea
+                  rows={12}
+                  value={override?.user ?? prompt.user ?? ''}
+                  onChange={(e) => setOverride({
+                    system: override?.system ?? prompt.system ?? '',
+                    user: e.target.value,
+                  })}
+                />
+              </label>
+              <p className="muted small">
+                {override
+                  ? 'Изменённый текст уйдёт модели вместо штатного.'
+                  : 'Чтобы изменить промпт, отредактируйте поле выше.'}
+              </p>
+            </>
+          )}
+        </details>
       )}
 
       <div className="ai-input">

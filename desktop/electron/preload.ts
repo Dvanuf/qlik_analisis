@@ -103,6 +103,8 @@ const api = {
   aiClearKeys: () => ipcRenderer.invoke('core:ai-keys-clear'),
   /** ИИ-слой: вопрос по результатам анализа. */
   aiAsk: (payload: unknown) => ipcRenderer.invoke('core:ai-ask', payload),
+  /** ИИ-слой: фактический промпт, который уйдёт модели (для просмотра и правки). */
+  aiPrompt: (payload: unknown) => ipcRenderer.invoke('core:ai-prompt', payload),
   /** ИИ-слой: отмена текущего запроса. */
   aiCancel: () => ipcRenderer.invoke('core:ai-cancel'),
   /** ИИ-слой: события прогресса — подписка возвращает функцию отписки. */

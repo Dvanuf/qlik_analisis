@@ -42,6 +42,8 @@ export { Limits } from './limits.js';
 export const MAX_ATTEMPTS_PER_PROVIDER = 2;
 /** Базовая пауза между повторами (мс); растёт экспоненциально. */
 export const RETRY_BASE_MS = 800;
+/** Больше минуты ждать нельзя: лимит запросов за это время не восстановится. */
+export const MAX_RETRY_AFTER_MS = 60000;
 
 /**
  * Пауза перед повтором: экспоненциальный рост плюс случайный разброс.
@@ -56,6 +58,22 @@ export function retryDelay(attempt, base = RETRY_BASE_MS) {
   return Math.max(0, Math.round(exp + jitter));
 }
 
+
+/**
+ * Пауза перед повтором с учётом Retry-After.
+ *
+ * Провайдер может сказать, сколько ждать. Но ждать дольше минуты нельзя:
+ * пользователь успеет закрыть окно, а лимит запросов не восстановится.
+ *
+ * @param {AiError} error
+ * @param {number} attempt
+ * @returns {number}
+ */
+export function retryWait(error, attempt) {
+  const requested = Number(error?.retryAfterMs ?? 0);
+  if (requested > 0) return Math.min(requested, MAX_RETRY_AFTER_MS);
+  return retryDelay(attempt);
+}
 /**
  * Пауза с поддержкой отмены.
  * @param {number} ms
@@ -103,21 +121,158 @@ export function isRetryable(error) {
   if (error.code === AI_ERROR.BAD_RESPONSE) return false;
   if (error.code === AI_ERROR.DATA_TOO_LARGE) return false;
   if (error.code === AI_ERROR.NO_LOCAL_PROVIDER) return false;
+  // Исчерпанный лимит — ждать бессмысленно: надо переключаться на резервного.
+  if (error.code === AI_ERROR.QUOTA_EXHAUSTED) return false;
   return true;
 }
 
 /**
- * Ключ для кэша ответов: провайдер, модель, вопрос и сводка.
+ * Ключ для кэша ответов: провайдер, модель, вопрос и сводку.
+ *
+ * В ключ входят также история диалога и правка промпта: иначе отредактированный
+ * промпт получил бы из кэша ответ на исходный.
  * @param {string} provider
  * @param {string} model
  * @param {string} prompt
  * @param {string} summary
+ * @param {object} [extra]
  * @returns {string}
  */
-function cacheKey(provider, model, prompt, summary) {
-  return Limits.key(provider, model, prompt, summary);
+function cacheKey(provider, model, prompt, summary, extra = {}) {
+  const history = (extra.history ?? []).map((m) => `${m.role}:${m.content}`).join('\n');
+  const override = extra.override
+    ? `sys:${extra.override.system ?? ''}\nusr:${extra.override.user ?? ''}`
+    : '';
+  return Limits.key(provider, model, prompt, summary, history, override);
 }
 
+/**
+ * Значения, которые нужно скрыть перед отправкой во внешний API.
+ * @param {object} data
+ * @returns {Array<{value: string, kind: string}>}
+ */
+function redactionNames(data = {}) {
+  return [
+    { value: data?.app?.title ?? data?.app?.name, kind: 'Приложение' },
+    { value: data?.app?.owner, kind: 'Владелец' },
+  ].filter((n) => n.value);
+}
+
+/**
+ * Собирает сообщения для одного провайдера.
+ *
+ * Для внешнего провайдера маскируется всё сообщение целиком — и сводка, и
+ * вопрос пользователя: иначе имя, вписанное в вопрос вручную, ушло бы наружу.
+ *
+ * @param {object} params
+ * @param {string} params.question
+ * @param {object} params.summary — результат buildSummary
+ * @param {Array<object>} [params.history] — прежние реплики диалога
+ * @param {object|null} [params.override] — {system, user} — правка промпта
+ * @param {boolean} [params.external] — уходят ли данные с машины
+ * @param {Array<object>} [params.names] — значения для маскирования
+ * @returns {{messages: Array<object>, redactor: object|null}}
+ */
+function composeMessages({
+  question, summary, history = [], override = null, external = false, names = [],
+}) {
+  const redactor = external ? createRedactor({ names }) : null;
+  const messages = buildMessages(question, summary.text, {
+    history,
+    system: override?.system,
+    user: override?.user,
+  });
+  return {
+    messages: redactor
+      ? messages.map((m) => ({ role: m.role, content: redactor.mask(m.content) }))
+      : messages,
+    redactor,
+  };
+}
+
+/**
+ * Возвращает настоящие значения вместо плейсхолдеров.
+ *
+ * Маскирование нужно для внешнего провайдера, но пользователь должен видеть
+ * в ответе своё название приложения, а не «Приложение_1». Подстановка идёт
+ * локально — наружу уходит обезличенный текст.
+ *
+ * @param {string} text
+ * @param {object|null} redactor
+ * @returns {string}
+ */
+export function restoreNames(text, redactor) {
+  if (!redactor?.replacements?.size) return String(text ?? '');
+  let out = String(text ?? '');
+  // Длинные плейсхолдеры — первыми: «Приложение_1» не должен повредить «Приложение_11».
+  const pairs = [...redactor.replacements.entries()]
+    .map(([original, placeholder]) => [placeholder, original])
+    .sort((a, b) => String(b[0]).length - String(a[0]).length);
+  for (const [placeholder, original] of pairs) {
+    if (!placeholder || !out.includes(placeholder)) continue;
+    out = out.split(placeholder).join(original);
+  }
+  return out;
+}
+
+/**
+ * Готовит промпт для показа в интерфейсе: ровно тот текст, который уйдёт
+ * первому провайдеру цепочки.
+ *
+ * @param {string} prompt — вопрос пользователя
+ * @param {object} [data] — {analysis, runs, comparison, app, maxChars, focus}
+ * @param {object} [options]
+ * @param {string} [options.provider]
+ * @param {string[]} [options.fallback]
+ * @param {boolean} [options.sensitive]
+ * @param {object} [options.providers]
+ * @param {Array<object>} [options.history]
+ * @param {object|null} [options.override]
+ * @returns {{system: string, user: string, provider: string, model: string,
+ *   external: boolean, truncated: boolean, redacted: boolean}}
+ */
+export function buildPromptPreview(prompt, data = {}, options = {}) {
+  const {
+    provider = 'zai', fallback = [], sensitive = false, providers = {},
+    history = [], override = null,
+  } = options;
+  const chain = providerChain(provider, fallback);
+  const allowed = sensitive
+    ? chain.filter((id) => PROVIDERS[id]?.external === false)
+    : chain;
+  if (!allowed.length) {
+    throw new AiError(
+      AI_ERROR.NO_LOCAL_PROVIDER,
+      'Режим конфиденциальности: доступна только локальная модель. Укажите её в настройках ИИ.',
+    );
+  }
+  const first = allowed[0];
+  const descriptor = resolveProvider(first, providers[first] ?? {});
+  const maxChars = Number(data?.maxChars ?? DEFAULT_MAX_CHARS);
+  const summary = buildSummary({
+    ...data,
+    maxChars,
+    question: prompt,
+    focus: data?.focus ?? null,
+  });
+  const { messages, redactor } = composeMessages({
+    question: prompt,
+    summary,
+    history,
+    override,
+    external: descriptor.external === true,
+    names: redactionNames(data),
+  });
+  return {
+    system: messages.find((m) => m.role === 'system')?.content ?? '',
+    user: messages[messages.length - 1]?.content ?? '',
+    provider: first,
+    model: descriptor.model,
+    external: descriptor.external === true,
+    truncated: summary.truncated,
+    redacted: Boolean(redactor),
+  };
+}
 
 /**
  * Запрашивает модель у одного провайдера с повторами.
@@ -155,7 +310,7 @@ async function callProvider(provider, params) {
       const error = toAiError(err, provider.id);
       lastError = error;
       if (!isRetryable(error) || attempt >= MAX_ATTEMPTS_PER_PROVIDER) throw error;
-      await sleep(retryDelay(attempt), params.signal);
+      await sleep(retryWait(error, attempt), params.signal);
     }
   }
   throw lastError ?? new AiError(AI_ERROR.PROVIDER_UNAVAILABLE, 'Провайдер недоступен.');
@@ -195,6 +350,7 @@ function getLimiter(options = {}) {
 /**
  * Единая точка входа ИИ-слоя.
  *
+ *
  * @param {string} prompt — вопрос пользователя
  * @param {object} data — {analysis, runs, comparison, app, maxChars}
  * @param {object} [options]
@@ -208,6 +364,8 @@ function getLimiter(options = {}) {
  * @param {AbortSignal} [options.signal]
  * @param {(chunk: string) => void} [options.onDelta] — потоковый вывод
  * @param {(event: object) => void} [options.onEvent] — события прогресса
+ * @param {Array<{role: string, content: string}>} [options.history] — прежние реплики диалога
+ * @param {{system?: string, user?: string}|null} [options.override] — правка промпта из интерфейса
  * @returns {Promise<AiAnswer>}
  */
 export async function analyze(prompt, data = {}, options = {}) {
@@ -223,6 +381,8 @@ export async function analyze(prompt, data = {}, options = {}) {
     onDelta,
     onEvent,
     stream = false,
+    history = [],
+    override = null,
   } = options;
 
   const chain = providerChain(provider, fallback);
@@ -242,17 +402,24 @@ export async function analyze(prompt, data = {}, options = {}) {
   }
 
   const limiter = getLimiter({ ...options, limits, statePath });
-
   // 1. Агрегация: наружу уходит сводка, а не сырой результат анализа.
   const maxChars = Number(data?.maxChars ?? DEFAULT_MAX_CHARS);
-  const summary = buildSummary({ ...data, maxChars });
+  const question = String(prompt ?? '').trim();
+  const summary = buildSummary({
+    ...data,
+    maxChars,
+    question,
+    focus: data?.focus ?? null,
+  });
   if (summary.truncated) {
     onEvent?.({ type: 'truncated', message: `Сводка обрезана до ${maxChars} символов.` });
   }
 
-  const question = String(prompt ?? '').trim();
   const firstModel = providers[allowed[0]]?.model ?? PROVIDERS[allowed[0]]?.model;
-  const key = cacheKey(allowed[0], firstModel, question, summary.text);
+  const key = cacheKey(allowed[0], firstModel, question, summary.text, {
+    history,
+    override,
+  });
   const cached = limiter.getCached(key);
   if (cached) {
     onEvent?.({ type: 'cached', message: 'Ответ взят из кэша.' });
@@ -279,24 +446,21 @@ export async function analyze(prompt, data = {}, options = {}) {
       continue;
     }
 
-    // 3. Обезличивание: внешние провайдеры получают маскированную сводку.
-    let payload = summary.text;
-    let redacted = false;
-    if (descriptor.external) {
-      const redactor = createRedactor({
-        names: [
-          { value: data?.app?.title ?? data?.app?.name, kind: 'Приложение' },
-          { value: data?.app?.owner, kind: 'Владелец' },
-        ].filter((n) => n.value),
-      });
-      payload = redactor.mask(summary.text);
-      redacted = redactor.count() > 0;
-      if (redacted) {
-        onEvent?.({ type: 'redacted', message: `Обезличено значений: ${redactor.count()}.` });
-      }
+    // 3. Обезличивание: внешние провайдеры получают маскированный текст.
+    const { messages, redactor } = composeMessages({
+      question,
+      summary,
+      history,
+      override,
+      external: descriptor.external === true,
+      names: redactionNames(data),
+    });
+    const redacted = Boolean(redactor?.count());
+    if (redacted) {
+      onEvent?.({ type: 'redacted', message: `Обезличено значений: ${redactor.count()}.` });
     }
 
-    const messages = buildMessages(question, payload);
+
     onEvent?.({ type: 'provider', provider: id, model: descriptor.model });
 
     try {
@@ -311,7 +475,9 @@ export async function analyze(prompt, data = {}, options = {}) {
       attempts += 1;
       limiter.record();
       const answer = {
-        text: result.text,
+        // Название приложения возвращается в ответе: наружу ушло обезличенное,
+        // а пользователь должен видеть своё приложение, а не «Приложение_1».
+        text: restoreNames(result.text, redactor),
         provider: id,
         model: descriptor.model,
         truncated: summary.truncated,
