@@ -2,14 +2,20 @@
  * Вкладка «ИИ-чат».
  *
  * Задача вкладки — задать вопрос по результатам анализа. Наружу уходит
- * агрегированная сводка (счётчики, топ правил, динамика), а не сырой анализ:
+ * агрегированная сводка (счётчики, топ правил, конкретные находки,
+ * динамика по прогонам и отклонения от базовой линии), а не сырой анализ:
  * ключи и полный скрипт в интерфейсе не показываются и наружу не уходят.
+ *
+ * Переписка хранится в localStorage отдельно для каждого приложения
+ * (ключ строит chatKey), поэтому не теряется при смене вкладки и при
+ * перезапуске приложения.
  *
  * Настройки провайдера, ключей и лимитов — в блоке «Настройки ИИ».
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { chatKey, loadChat, saveChat } from '../../../src/ai/chat-store.js';
 import type {
-  AiAnswer, AiMessage, AiPromptPreview, AiStatus, AnalysisResult, Finding,
+  AiAnswer, AiMessage, AiPromptPreview, AiStatus, AnalysisResult, Finding, HistoryRun, Comparison,
 } from '../types.js';
 
 type Props = {
@@ -21,6 +27,10 @@ type Props = {
   focus?: Finding | null;
   /** Сбросить фокус после отправки вопроса. */
   onFocusUsed?: () => void;
+  /** Прогоны по приложению: дают динамику в сводке. */
+  runs?: HistoryRun[];
+  /** Сравнение с базовой линией: даёт отклонения в сводке. */
+  comparison?: Comparison | null;
 };
 
 /** Подсказки, с которых начинается разговор. */
@@ -49,10 +59,19 @@ function api(): QaApi {
 }
 
 export default function AiTab(props: Props) {
-  const { analysis, appTitle = '', platform = '', focus, onFocusUsed } = props;
+  const {
+    analysis, appTitle = '', platform = '', focus, onFocusUsed, runs = [], comparison = null,
+  } = props;
 
   const [status, setStatus] = useState<AiStatus | null>(null);
-  const [messages, setMessages] = useState<AiMessage[]>([]);
+  /**
+   * Переписка хранится вместе с ключом приложения, которому она
+   * принадлежит: иначе при смене приложения сохранение старой переписки
+   * успело бы затёрть историю нового приложения.
+   */
+  const [chat, setChat] = useState<{ key: string; messages: AiMessage[] }>({
+    key: '', messages: [],
+  });
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -102,11 +121,6 @@ export default function AiTab(props: Props) {
     return off;
   }, []);
 
-  /** Прокрутка лога к последнему сообщению. */
-  useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, busy]);
-
   /** Краткая сводка находок — именно она уходит к модели. */
   const context = useMemo(() => {
     if (!analysis) return null;
@@ -116,6 +130,43 @@ export default function AiTab(props: Props) {
     };
   }, [analysis]);
 
+  /**
+   * Ключ хранения переписки: отдельный для каждого приложения.
+   * Пустой анализ (до выбора приложения) — общий ключ.
+   */
+  const storeKey = useMemo(() => chatKey(analysis), [analysis]);
+
+  /** Переписка текущего приложения. */
+  const messages = chat.key === storeKey ? chat.messages : [];
+
+  /** Прокрутка лога к последнему сообщению. */
+  useEffect(() => {
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, busy]);
+
+  /** Добавить сообщение в переписку текущего приложения. */
+  const appendMessage = useCallback((message: AiMessage) => {
+    setChat((prev) => ({
+      key: storeKey,
+      messages: [...(prev.key === storeKey ? prev.messages : []), message],
+    }));
+  }, [storeKey]);
+  /**
+   * Переписка переживает переключение вкладки и перезапуск приложения:
+   * при смене приложения загружаем его историю из localStorage.
+   */
+  useEffect(() => {
+    const loaded = loadChat(window.localStorage, storeKey);
+    setChat({ key: storeKey, messages: loaded });
+  }, [storeKey]);
+
+  useEffect(() => {
+    // Сохраняем только когда в состоянии лежит переписка текущего
+    // приложения: иначе при смене приложения записался бы чужой текст.
+    if (chat.key !== storeKey) return;
+    saveChat(window.localStorage, storeKey, chat.messages);
+  }, [chat, storeKey]);
+
   /** Отправить вопрос. */
   async function send(text?: string): Promise<void> {
     const q = (text ?? question).trim();
@@ -123,7 +174,7 @@ export default function AiTab(props: Props) {
     setQuestion('');
     setBusy(true);
     setNote('');
-    setMessages((m) => [...m, { role: 'user', text: q }]);
+    appendMessage({ role: 'user', text: q });
 
     // История диалога: без неё модель каждый раз отвечает как в первый раз.
     const history = messages
@@ -137,6 +188,10 @@ export default function AiTab(props: Props) {
         question: q,
         app: { title: appTitle, platform },
         summary: context,
+        // Динамика по прогонам и отклонения от базовой линии: сводка
+        // отвечает не только по текущему состоянию, но и по истории.
+        runs: runs as never,
+        comparison: comparison as never,
         focus: focus
           ? {
             ruleId: focus.ruleId,
@@ -158,12 +213,12 @@ export default function AiTab(props: Props) {
         if (answer.truncated) notes.push('Сводка обрезана');
         if (answer.redacted) notes.push('Данные обезличены');
         if (answer.cached) notes.push('Ответ из кэша');
-        setMessages((m) => [...m, {
+        appendMessage({
           role: 'assistant',
           text: answer.text ?? '',
           provider: answer.provider,
           note: notes.join(' · ') || undefined,
-        }]);
+        });
         onFocusUsed?.();
       } else {
         // Показываем то, что вернул провайдер: код ошибки и цепочку
@@ -171,16 +226,16 @@ export default function AiTab(props: Props) {
         const parts = [`Не удалось получить ответ: ${answer.error ?? 'неизвестная ошибка'}`];
         if (answer.code) parts.push(`Код: ${answer.code}`);
         if (answer.provider) parts.push(`Провайдер: ${answer.provider}`);
-        setMessages((m) => [...m, {
+        appendMessage({
           role: 'assistant',
           text: parts.join(' · '),
-        }]);
+        });
       }
     } catch (err) {
-      setMessages((m) => [...m, {
+      appendMessage({
         role: 'assistant',
         text: `Ошибка запроса: ${err instanceof Error ? err.message : String(err)}`,
-      }]);
+      });
     } finally {
       setBusy(false);
     }
@@ -195,6 +250,8 @@ export default function AiTab(props: Props) {
         question: question.trim(),
         app: { title: appTitle, platform },
         summary: context,
+        runs: runs as never,
+        comparison: comparison as never,
         focus: focus
           ? {
             ruleId: focus.ruleId,
@@ -296,8 +353,11 @@ export default function AiTab(props: Props) {
         </button>
       </div>
       <p className="muted">
-        Вопросы по результатам анализа. К модели уходит сводка: счётчики, топ правил и
-        динамика по прогонам — полный скрипт и содержимое приложения не передаются.
+        Вопросы по результатам анализа. К модели уходит сводка по одному приложению:
+        счётчики, топ-8 правил, до 12 конкретных находок
+        {runs.length > 0 ? `, динамика по ${runs.length} прогонам` : ''}
+        {comparison ? ' и отклонения от базовой линии' : ''}.
+        Полный скрипт и содержимое приложения не передаются.
       </p>
 
       {showSettings && (status ? (

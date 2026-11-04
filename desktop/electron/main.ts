@@ -388,6 +388,46 @@ async function runSmokeCheck(): Promise<void> {
           throw new Error('Промпт ИИ собран без системной инструкции или без текста запроса');
         }
 
+        // Переписка ИИ-чата должна переживать перезапуск: она лежит в
+        // localStorage отдельно для каждого приложения.
+        const aiChat = await win.webContents.executeJavaScript(`
+          (function () {
+            var key = 'qa.ai.chat.smoke-app';
+            localStorage.setItem(key, JSON.stringify([{ role: 'user', text: 'проверка' }]));
+            var raw = localStorage.getItem(key);
+            var parsed = raw ? JSON.parse(raw) : [];
+            var other = localStorage.getItem('qa.ai.chat.smoke-other');
+            return JSON.stringify({
+              saved: Array.isArray(parsed) && parsed.length === 1 && parsed[0].text === 'проверка',
+              separate: other === null
+            });
+          })()
+        `);
+        const aiChatParsed = JSON.parse(String(aiChat)) as { saved?: boolean; separate?: boolean };
+        if (!aiChatParsed.saved) throw new Error('Переписка ИИ-чата не сохраняется в localStorage');
+        if (!aiChatParsed.separate) throw new Error('Переписка ИИ-чата смешивается между приложениями');
+
+        // Переключатель шрифта должен менять размеры интерфейса: база задана
+        // в rem, а масштаб — на html.
+        const fontScale = await win.webContents.executeJavaScript(`
+          (function () {
+            var root = document.documentElement;
+            var sizeAt = function (v) {
+              root.style.setProperty('--ui-scale', String(v));
+              return parseFloat(getComputedStyle(document.body).fontSize);
+            };
+            var small = sizeAt(1);
+            var mid = sizeAt(1.15);
+            var big = sizeAt(1.3);
+            root.style.setProperty('--ui-scale', '1.15');
+            return JSON.stringify({ small: small, mid: mid, big: big });
+          })()
+        `);
+        const fontParsed = JSON.parse(String(fontScale)) as { small: number; mid: number; big: number };
+        if (!(fontParsed.mid > fontParsed.small && fontParsed.big > fontParsed.mid)) {
+          throw new Error('Переключатель размера шрифта не меняет размеры интерфейса');
+        }
+
         const image = await win.webContents.capturePage();
 
         // В упакованном приложении app.asar доступен только для чтения —
@@ -426,6 +466,8 @@ async function runSmokeCheck(): Promise<void> {
           aiStatus: aiStatusParsed,
           aiSettings: JSON.parse(String(aiSettings)),
           aiPrompt: aiPromptParsed,
+          aiChat: aiChatParsed,
+          fontScale: fontParsed,
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
       } catch (err) {

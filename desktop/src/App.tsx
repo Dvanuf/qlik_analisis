@@ -115,10 +115,19 @@ export default function App() {
   );
   const [info, setInfo] = useState<AppInfo | null>(null);
   // Масштаб интерфейса: пользователь выбирает размер шрифта.
-  // По умолчанию — мелкий, значение хранится в настройках приложения.
+  // Размеры в styles.css заданы в rem, база — html, поэтому --ui-scale
+  // меняет весь интерфейс, а не только унаследованный текст.
   const [uiScale, setUiScale] = useState(() => {
     const saved = localStorage.getItem('qa.ui-scale');
-    return saved ? Number(saved) : 0.9;
+    const value = Number(saved);
+    // Прежняя шкала (0.8 / 0.9 / 1) масштабировала лишь один блок и
+    // на вид почти не влияла. Переносим её по смыслу на новую: мелкий,
+    // средний и крупный.
+    if (value === 0.8) return 1;
+    if (value === 0.9) return 1.15;
+    if (value === 1) return 1.3;
+    if (value >= 1 && value <= 1.4) return value;
+    return 1.15;
   });
   const [ruleInfo, setRuleInfo] = useState<RuleInfo | null>(null);
   const [libraryFunctions, setLibraryFunctions] = useState<LibraryFunction[]>([]);
@@ -167,6 +176,8 @@ export default function App() {
   // История прогонов в локальной базе и сравнение с базовой линией.
   const [history, setHistory] = useState<HistoryRun[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  // Прогоны по анализируемому приложению: из них сводка берёт динамику.
+  const [aiRuns, setAiRuns] = useState<HistoryRun[]>([]);
   const [onlyNew, setOnlyNew] = useState(false);
 
   // Настройки подключения живут между запусками: без этого после перезапуска
@@ -175,6 +186,30 @@ export default function App() {
   useEffect(() => { localStorage.setItem('qa.user', user); }, [user]);
   useEffect(() => { localStorage.setItem('qa.insecure', insecure ? '1' : '0'); }, [insecure]);
   useEffect(() => { localStorage.setItem('qa.platform', platform); }, [platform]);
+
+  /**
+   * Прогоны анализируемого приложения: сводка для ИИ показывает динамику
+   * по ним. Перечитываются при смене приложения.
+   */
+  useEffect(() => {
+    let alive = true;
+    const appId = analysis?.appId ?? '';
+    void (async () => {
+      if (!appId) {
+        if (alive) setAiRuns([]);
+        return;
+      }
+      try {
+        const runs = await window.qa.historyList({ appId, limit: 10 });
+        if (alive) setAiRuns(runs);
+      } catch {
+        if (alive) setAiRuns([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [analysis?.appId]);
 
   /** Базовый URL хаба из URL движка: wss://host/app/... -> https://host */
   const hubUrl = useMemo(() => {
@@ -716,23 +751,23 @@ export default function App() {
         <div className="zoomer" role="group" aria-label="Размер шрифта">
           <span className="lbl">Шрифт</span>
           <button
-            className={uiScale === 0.8 ? 'on' : ''}
-            onClick={() => setUiScale(0.8)}
+            className={uiScale === 1 ? 'on' : ''}
+            onClick={() => setUiScale(1)}
             title="Мелкий"
           >
             А−
           </button>
           <button
-            className={uiScale === 0.9 ? 'on' : ''}
-            onClick={() => setUiScale(0.9)}
+            className={uiScale === 1.15 ? 'on' : ''}
+            onClick={() => setUiScale(1.15)}
             title="Средний"
           >
             А
           </button>
           <button
-            className={uiScale === 1 ? 'on' : ''}
-            onClick={() => setUiScale(1)}
-            title="Обычный"
+            className={uiScale === 1.3 ? 'on' : ''}
+            onClick={() => setUiScale(1.3)}
+            title="Крупный"
           >
             А+
           </button>
@@ -839,6 +874,8 @@ export default function App() {
           platform={platform === 'auto' ? '' : platform}
           focus={aiFocus}
           onFocusUsed={() => setAiFocus(null)}
+          runs={aiRuns}
+          comparison={comparison}
         />
       )}
 

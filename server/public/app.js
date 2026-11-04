@@ -10,11 +10,47 @@ const state = {
   rules: [],
   appSearch: '',
   ruleSearch: '',
-  ai: { status: null, messages: [], busy: false },
+  ai: { status: null, messages: [], busy: false, key: '' },
 };
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
+
+// --- хранение переписки ИИ-чата ---
+// Отдельная история для каждого отчёта: ключ строится по jobId.
+const CHAT_PREFIX = 'qa.ai.chat.';
+const CHAT_MAX_MESSAGES = 100;
+
+function chatKey(reportId) {
+  return `${CHAT_PREFIX}${reportId || 'default'}`;
+}
+
+function loadChat(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((m) => m && typeof m.text === 'string'
+        && (m.role === 'user' || m.role === 'assistant'))
+      .slice(-CHAT_MAX_MESSAGES);
+  } catch {
+    return [];
+  }
+}
+
+function saveChat(key, messages) {
+  try {
+    const payload = messages
+      .filter((m) => m && typeof m.text === 'string'
+        && (m.role === 'user' || m.role === 'assistant'))
+      .slice(-CHAT_MAX_MESSAGES);
+    localStorage.setItem(key, JSON.stringify(payload));
+  } catch {
+    // Переполнение хранилища или запрет: чат продолжает работать.
+  }
+}
 
 function showAlert(message, kind = 'error') {
   const el = $('#alert');
@@ -198,6 +234,19 @@ function renderAiReports() {
   select.innerHTML = state.reports.map((r) =>
     `<option value="${esc(r.jobId)}">${esc(r.title)} — ${esc(r.jobId)}</option>`).join('');
   if (current) select.value = current;
+  loadAiChat();
+}
+
+/**
+ * Переписка ИИ-чата: отдельная история для каждого отчёта.
+ * Хранится в браузере, поэтому переживает перезагрузку страницы.
+ */
+function loadAiChat() {
+  const key = chatKey($('#ai-report').value);
+  if (state.ai.key === key) return;
+  state.ai.key = key;
+  state.ai.messages = loadChat(key);
+  renderAiLog();
 }
 
 function renderAiLog() {
@@ -218,7 +267,10 @@ async function sendAiQuestion() {
   const question = input.value.trim();
   if (!question || state.ai.busy) return;
   input.value = '';
+  const key = chatKey($('#ai-report').value);
+  state.ai.key = key;
   state.ai.messages.push({ role: 'user', text: question });
+  saveChat(key, state.ai.messages);
   state.ai.busy = true;
   renderAiLog();
   renderAiStatus();
@@ -241,6 +293,7 @@ async function sendAiQuestion() {
   } catch (err) {
     state.ai.messages.push({ role: 'assistant', text: `Ошибка: ${err.message}` });
   } finally {
+    saveChat(key, state.ai.messages);
     state.ai.busy = false;
     renderAiLog();
     renderAiStatus();
@@ -278,6 +331,8 @@ $('#rule-search').addEventListener('input', (e) => {
 });
 $('#btn-reload-apps').addEventListener('click', () => void loadApps());
 $('#ai-send').addEventListener('click', () => void sendAiQuestion());
+// Смена отчёта меняет контекст и переписку: показываем историю нового отчёта.
+$('#ai-report').addEventListener('change', () => loadAiChat());
 $('#ai-question').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
