@@ -12,8 +12,8 @@ import ScriptTab from './tabs/ScriptTab.js';
 import AiTab from './tabs/AiTab.js';
 import type {
   AnalysisResult, AnalyzeProgress, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
-  Comparison, DoctorStep, Finding, HistoryRun, LibraryFunction, Platform, RuleInfo,
-  RulesConfig, Severity, Tab,
+  Comparison, DoctorStep, Finding, HistoryRun, LibraryFunction, Platform, QrsStatus,
+  RuleInfo, RulesConfig, Severity, Tab,
 } from './types.js';
 
 
@@ -86,6 +86,10 @@ declare global {
       exportFindingsXlsx(payload: {
         rows: Record<string, string | number>[]; fileName?: string;
       }): Promise<{ path: string }>;
+      qrsStatus: () => Promise<QrsStatus>;
+      qrsSaveSettings: (settings: {
+        host?: string; port?: number; certPath?: string; keyPath?: string; enabled?: boolean;
+      }) => Promise<boolean>;
       exportDataModel(payload: {
         sheets: { name: string; headers: string[]; rows: (string | number)[][] }[];
         fileName?: string;

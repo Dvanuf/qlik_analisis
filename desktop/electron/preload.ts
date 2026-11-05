@@ -12,6 +12,10 @@ const api = {
   importRulesConfig: () => ipcRenderer.invoke('core:rules-config-import'),
   exportScript: (payload: { appName?: string; script: string; patch?: { script?: string } }) => ipcRenderer.invoke('core:export-script', payload),
   /** История прогонов в локальной базе SQLite. */
+  qrsStatus: () => ipcRenderer.invoke('core:qrs-status'),
+  qrsSaveSettings: (settings: {
+    host?: string; port?: number; certPath?: string; keyPath?: string; enabled?: boolean;
+  }) => ipcRenderer.invoke('core:qrs-settings-save', settings),
   historySave: (payload: {
     appId: string; appName?: string; at?: string; score?: number;
     summary?: unknown; findings?: unknown[];

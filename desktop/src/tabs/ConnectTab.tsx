@@ -108,7 +108,67 @@ export default function ConnectTab(props: Props) {
   const [scopeFilter, setScopeFilter] = useState('all');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [howtoOpen, setHowtoOpen] = useState(() => localStorage.getItem('qa.howto.open') !== '0');
+  // Настройки репозитория QRS: подгружаются из файла приложения.
+  const [qrsHost, setQrsHost] = useState('');
+  const [qrsPort, setQrsPort] = useState('4242');
+  const [qrsCert, setQrsCert] = useState('');
+  const [qrsKey, setQrsKey] = useState('');
+  const [qrsEnabled, setQrsEnabled] = useState(false);
+  const [qrsBusy, setQrsBusy] = useState(false);
+  const [qrsNote, setQrsNote] = useState('');
   const comboRef = useRef<HTMLDivElement | null>(null);
+
+  /** Загрузить сохранённые настройки репозитория. */
+  useEffect(() => {
+    let alive = true;
+    void window.qa.qrsStatus().then((s) => {
+      if (!alive) return;
+      setQrsHost(s.host ?? '');
+      setQrsPort(String(s.port ?? 4242));
+      setQrsCert(s.certPath ?? '');
+      setQrsKey(s.keyPath ?? '');
+      setQrsEnabled(Boolean(s.enabled));
+    }).catch(() => { /* настройки необязательны */ });
+    return () => { alive = false; };
+  }, []);
+
+  /** Сохранить настройки репозитория. */
+  async function saveQrs(): Promise<void> {
+    setQrsBusy(true);
+    setQrsNote('');
+    try {
+      await window.qa.qrsSaveSettings({
+        host: qrsHost.trim(),
+        port: Number(qrsPort) || 4242,
+        certPath: qrsCert.trim(),
+        keyPath: qrsKey.trim(),
+        enabled: qrsEnabled,
+      });
+      setQrsNote('Настройки репозитория сохранены.');
+    } catch (err) {
+      setQrsNote(`Не удалось сохранить: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setQrsBusy(false);
+    }
+  }
+
+  /** Проверить связь с репозиторием. */
+  async function checkQrs(): Promise<void> {
+    setQrsBusy(true);
+    setQrsNote('Проверяем соединение…');
+    try {
+      const res = await window.qa.qrsStatus();
+      if (!res.ok) {
+        setQrsNote(res.note ?? 'Репозиторий недоступен.');
+      } else {
+        setQrsNote(`Репозиторий доступен: ${res.note ?? ''}${res.version ? `, версия ${res.version}` : ''}`);
+      }
+    } catch (err) {
+      setQrsNote(`Проверка не удалась: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setQrsBusy(false);
+    }
+  }
 
   const signedIn = Boolean(cookie);
   const appsLoaded = apps.length > 0;
@@ -607,6 +667,72 @@ export default function ConnectTab(props: Props) {
               placeholder="qlik-csrf-token=…"
             />
           </label>
+        </div>
+
+        {/*
+          Репозиторий QRS (Qlik Sense Enterprise, порт 4242). Видит и
+          неопубликованные приложения, поэтому метаданные из него дополняют
+          хаб. Доступ — по клиентскому сертификату: путь задаётся здесь,
+          пароль — в переменной окружения QLIK_QRS_CERT_PASSWORD.
+        */}
+        <div className="ai-settings" style={{ marginTop: 12 }}>
+          <h3>Репозиторий QRS (список приложений)</h3>
+          <p className="muted small">
+            Хаб отдаёт только опубликованные приложения. Репозиторий QRS
+            показывает все — включая неопубликованные — и дополняет владельца,
+            поток и тэги. Нужен клиентский сертификат (.pfx или .crt с ключом).
+          </p>
+          <div className="form">
+            <label>
+              Хост репозитория
+              <input
+                value={qrsHost}
+                onChange={(e) => setQrsHost(e.target.value)}
+                placeholder="qlik-sense.corp.local"
+              />
+            </label>
+            <label>
+              Порт
+              <input
+                value={qrsPort}
+                onChange={(e) => setQrsPort(e.target.value)}
+                placeholder="4242"
+              />
+            </label>
+            <label>
+              Сертификат (.pfx или .crt)
+              <input
+                value={qrsCert}
+                onChange={(e) => setQrsCert(e.target.value)}
+                placeholder="/путь/к/client.pfx"
+              />
+            </label>
+            <label>
+              Ключ сертификата (.key, если отдельно)
+              <input
+                value={qrsKey}
+                onChange={(e) => setQrsKey(e.target.value)}
+                placeholder="/путь/к/client.key"
+              />
+            </label>
+          </div>
+          <div className="row-actions">
+            <label className="muted small" style={{ flexDirection: 'row', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={qrsEnabled}
+                onChange={(e) => setQrsEnabled(e.target.checked)}
+              />
+              Брать метаданные из репозитория
+            </label>
+            <button className="btn" onClick={() => void saveQrs()} disabled={qrsBusy}>
+              {qrsBusy ? 'Сохранение…' : 'Сохранить'}
+            </button>
+            <button className="btn" onClick={() => void checkQrs()} disabled={qrsBusy}>
+              Проверить связь
+            </button>
+          </div>
+          {qrsNote && <p className="muted small">{qrsNote}</p>}
         </div>
       </details>
     </section>

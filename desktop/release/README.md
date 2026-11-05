@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.8.6 | [v0.8.6 — модуль репозитория QRS](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.6) |
 | 0.8.5 | [v0.8.5 — ИИ-чат помнит переписку, шрифт регулируемый](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.5) |
 | 0.8.4 | [v0.8.4 — настоящая ошибка провайдера и рабочие запросы к Z.ai](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.4) |
 | 0.8.3 | [v0.8.3 — ИИ-чат и правка промпта](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.3) |

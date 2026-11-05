@@ -24,12 +24,13 @@ import { maskSecrets, maskUrl } from '../../src/logging/mask.js';
 import { readRulesConfig, writeRulesConfig, sanitizeRulesConfig, RULES_CONFIG_FILE } from '../../src/rules/config.js';
 import { applyPatchToScript } from '../../src/report/fixes.js';
 import { openHistory, saveRun, listRuns, compareRuns, latestRunForApp, RULES_VERSION } from '../../src/history.js';
+import { fetchQrsApps, fetchQrsVersion } from '../../src/extract/qrs.js';
 import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
 import { buildXlsx } from '../../src/report/xlsx.js';
 import { normalizeCredentials, isSessionUsable, parseCredentials } from '../../src/session/credentials.js';
 import { analyze as aiAnalyze, buildPromptPreview, providerChain, PROVIDERS } from '../../src/ai/index.js';
 import { AiError } from '../../src/ai/errors.js';
-import { resolveAi } from '../../src/config.js';
+import { resolveAi, resolveQrs } from '../../src/config.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -143,15 +144,38 @@ async function runSmokeCheck(): Promise<void> {
         await new Promise((r) => setTimeout(r, 600));
         const connect = await win.webContents.executeJavaScript(`
           (function () {
+            // Блок репозитория QRS лежит в разделе «Дополнительно» —
+            // раскрываем, чтобы проверить, что он рисуется.
+            var adv = document.querySelector('details.advanced');
+            if (adv && !adv.open) {
+              adv.open = true;
+              adv.dispatchEvent(new Event('toggle'));
+            }
             return JSON.stringify({
               steps: document.querySelectorAll('.wizard .step').length,
               current: document.querySelectorAll('.wizard .step.current').length,
               stepDescs: document.querySelectorAll('.wizard .step .tx i').length,
               mainButtons: document.querySelectorAll('.actions button.primary').length,
-              zoomButtons: document.querySelectorAll('.zoomer button').length
+              zoomButtons: document.querySelectorAll('.zoomer button').length,
+              qrsBlock: document.querySelectorAll('.ai-settings').length,
+              qrsInputs: document.querySelectorAll('.ai-settings .form input').length
             });
           })()
         `);
+        const connectParsed = JSON.parse(String(connect)) as {
+          steps?: number; current?: number; stepDescs?: number;
+          mainButtons?: number; zoomButtons?: number;
+          qrsBlock?: number; qrsInputs?: number;
+        };
+        // Блок репозитория QRS должен быть на месте: без него нет доступа
+        // к неопубликованным приложениям.
+        if (!connectParsed.qrsBlock) {
+          throw new Error('Блок настроек репозитория QRS не отрисовался');
+        }
+        if (!connectParsed.qrsInputs) {
+          throw new Error('В блоке репозитория QRS нет полей ввода');
+        }
+
 
         // Вкладка «Анализ»: поиск по выражению и сворачиваемые правки.
         // Сначала запускаем анализ файла-скрипта — иначе вкладка пустая.
@@ -1141,11 +1165,71 @@ ipcMain.handle('core:list-apps', async (_e, opts: {
     // с каким покрытием (поток/владелец/тэги). Без неё пустой фильтр
     // выглядит как «сервер не отдал», хотя причина может быть в другом.
     const notes: string[] = [];
-    const apps = await listApps({ ...opts, notes });
+    const apps = await listApps({ ...opts, notes, qrs: qrsSettings() });
     return { apps, notes };
   } catch (err) {
     return { error: maskSecrets(String((err as Error)?.message ?? err)) };
   }
+});
+
+/**
+ * Настройки репозитория QRS и проверка связи с ним.
+ *
+ * Без клиентского сертификата сервис отвечает 403 — поэтому в ответе
+ * говорится прямо, чего не хватает.
+ */
+ipcMain.handle('core:qrs-status', async () => {
+  const settings = qrsSettings();
+  const base = {
+    host: settings.host,
+    port: settings.port,
+    certPath: settings.certPath,
+    keyPath: settings.keyPath,
+    enabled: settings.enabled,
+  };
+  if (!settings.host) return { ...base, ok: false, note: 'хост репозитория не задан' };
+  if (!settings.certPath) {
+    return { ...base, ok: false, note: 'не задан путь к клиентскому сертификату' };
+  }
+  const version = await fetchQrsVersion({
+    host: settings.host,
+    port: settings.port,
+    certPath: settings.certPath,
+    keyPath: settings.keyPath,
+    certPassword: settings.certPassword,
+    insecure: settings.insecure,
+  });
+  if (!version.ok) return { ...base, ok: false, note: version.note };
+  const apps = await fetchQrsApps({
+    host: settings.host,
+    port: settings.port,
+    certPath: settings.certPath,
+    keyPath: settings.keyPath,
+    certPassword: settings.certPassword,
+    insecure: settings.insecure,
+  });
+  return {
+    ...base,
+    ok: apps.ok,
+    note: apps.ok ? `приложений ${apps.apps?.length ?? 0}` : apps.note,
+    version: version.version ?? null,
+  };
+});
+
+/** Сохраняет настройки репозитория QRS. */
+ipcMain.handle('core:qrs-settings-save', (_e, settings: {
+  host?: string; port?: number; certPath?: string; keyPath?: string; enabled?: boolean;
+}) => {
+  const current = readQrsConfig();
+  writeQrsConfig({
+    ...current,
+    host: String(settings?.host ?? '').trim(),
+    port: Number(settings?.port) || 4242,
+    certPath: String(settings?.certPath ?? '').trim(),
+    keyPath: String(settings?.keyPath ?? '').trim(),
+    enabled: Boolean(settings?.enabled),
+  });
+  return true;
 });
 
 /** Полный анализ приложения на сервере. */
@@ -1217,6 +1301,8 @@ function looksLikeText(filePath: string): boolean {
 const AI_KEYS_FILE = 'ai-keys.bin';
 /** Настройки ИИ (провайдер, лимиты, режим конфиденциальности) — обычный JSON. */
 const AI_CONFIG_FILE = 'ai-config.json';
+/** Настройки репозитория QRS: путь к сертификату — на этой машине. */
+const QRS_CONFIG_FILE = 'qrs-config.json';
 
 function aiKeysPath(): string {
   return resolve(app.getPath('userData'), AI_KEYS_FILE);
@@ -1224,6 +1310,32 @@ function aiKeysPath(): string {
 
 function aiConfigPath(): string {
   return resolve(app.getPath('userData'), AI_CONFIG_FILE);
+}
+
+function qrsConfigPath(): string {
+  return resolve(app.getPath('userData'), QRS_CONFIG_FILE);
+}
+
+/** Читает настройки репозитория QRS (битый файл — пустые настройки). */
+function readQrsConfig(): Record<string, unknown> {
+  const file = qrsConfigPath();
+  if (!existsSync(file)) return {};
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** Сохраняет настройки репозитория QRS. */
+function writeQrsConfig(config: Record<string, unknown>): void {
+  const file = qrsConfigPath();
+  writeFileSync(file, `${JSON.stringify(config ?? {}, null, 2)}\n`, 'utf8');
+}
+
+/** Итоговые настройки репозитория: файл приложения + переменные окружения. */
+function qrsSettings(): ReturnType<typeof resolveQrs> {
+  return resolveQrs({}, { qrs: readQrsConfig() });
 }
 
 /** Читает ключи провайдеров из зашифрованного файла. */

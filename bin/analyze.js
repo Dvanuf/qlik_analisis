@@ -15,8 +15,10 @@ import { analyze } from '../src/analyzer.js';
 import { renderHtml } from '../src/report/html.js';
 import { runDoctor } from '../src/cli/doctor.js';
 import {
-  loadConfig, loadDotEnv, resolveTarget, resolveRules, resolvePaths, DEFAULT_CONFIG_NAME,
+  loadConfig, loadDotEnv, resolveTarget, resolveRules, resolvePaths, resolveQrs,
+  DEFAULT_CONFIG_NAME,
 } from '../src/config.js';
+import { fetchQrsApps, fetchQrsVersion } from '../src/extract/qrs.js';
 
 function writeOut(path, content) {
   const full = resolve(path);
@@ -37,6 +39,9 @@ const FLAGS = {
   '--enable': 'enable', '--platform': 'platform', '--disable': 'disable',
   '--max-expression-length': 'maxExpressionLength', '--name-prefixes': 'namePrefixes',
   '--perf': 'perf', '--quiet': 'quiet',
+  '--qrs-host': 'qrsHost', '--qrs-port': 'qrsPort', '--qrs-cert': 'qrsCert',
+  '--qrs-key': 'qrsKey',
+  '--qrs-enabled': 'qrsEnabled',
 };
 
 function parseArgs(argv) {
@@ -69,6 +74,7 @@ qlik-analyzer — анализ качества приложений Qlik Sense 
   analyze                 анализ приложения (по умолчанию)
   doctor                  проверка подключения к серверу
   envs                    список окружений и приложений из конфигурации
+  qrs-apps                список приложений из репозитория QRS (Qlik Sense)
 
 Подключение (приоритет: флаг > переменная окружения > ${DEFAULT_CONFIG_NAME} > умолчание):
   --env <name>            имя окружения из конфигурации
@@ -80,6 +86,13 @@ qlik-analyzer — анализ качества приложений Qlik Sense 
   --api-key <key>         API-токен (Qlik Cloud)
   --qlik-user <user>      заголовок X-Qlik-User (имперсонация на QSS)
   --insecure              принимать самоподписанный сертификат (обычно нужен на QSS)
+
+Репозиторий QRS (список приложений, включая неопубликованные):
+  --qrs-host <host>       хост сервиса репозитория (порт по умолчанию 4242)
+  --qrs-port <port>       порт QRS (по умолчанию 4242)
+  --qrs-cert <file.pfx>   клиентский сертификат (без него QRS отвечает 403)
+  --qrs-key <file.key>    ключ сертификата, если он отдельным файлом (PEM)
+  --qrs-enabled           брать метаданные из репозитория при анализе
 
 Файлы (оффлайн, сервер не нужен):
   --script <file>         скрипт загрузки (экспорт .qvs / .txt из Qlik Sense или QlikView)
@@ -131,6 +144,61 @@ function runEnvs(config, configPath) {
   console.log('');
 }
 
+/**
+ * Команда qrs-apps: список приложений из репозитория Qlik Sense.
+ *
+ * Репозиторий отдаёт и неопубликованные приложения — в отличие от хаба.
+ * Нужен клиентский сертификат: без него сервис отвечает 403.
+ */
+async function runQrsApps(args, config) {
+  const qrs = resolveQrs(args, config);
+  if (!qrs.host) {
+    console.log('Не задан хост репозитория: укажите --qrs-host или раздел "qrs" в конфигурации.');
+    return;
+  }
+  console.log(`\nРепозиторий QRS: https://${qrs.host}:${qrs.port}`);
+  console.log(`Сертификат: ${qrs.certPath || 'не задан'}`);
+  console.log(`Пароль сертификата: ${qrs.certPasswordEnv} ${qrs.certPassword ? '(задан)' : '(не задан)'}\n`);
+
+  const version = await fetchQrsVersion({
+    host: qrs.host,
+    port: qrs.port,
+    certPath: qrs.certPath,
+    keyPath: qrs.keyPath,
+    certPassword: qrs.certPassword,
+    insecure: qrs.insecure,
+  });
+  console.log(`${version.ok ? '\u2713' : '\u2717'} соединение: ${version.note}`);
+  if (!version.ok) {
+    console.log('');
+    return;
+  }
+  if (version.version) console.log(`  версия QRS: ${version.version}`);
+
+  const res = await fetchQrsApps({
+    host: qrs.host,
+    port: qrs.port,
+    certPath: qrs.certPath,
+    keyPath: qrs.keyPath,
+    certPassword: qrs.certPassword,
+    insecure: qrs.insecure,
+  });
+  console.log(`${res.ok ? '\u2713' : '\u2717'} приложения: ${res.note}`);
+  if (!res.ok) {
+    console.log('');
+    return;
+  }
+  const apps = res.apps ?? [];
+  const withMeta = apps.filter((a) => a.owner || a.stream || (a.tags ?? []).length).length;
+  console.log(`  всего: ${apps.length}, с метаданными: ${withMeta}`);
+  for (const a of apps.slice(0, 200)) {
+    const meta = [a.owner, a.stream, (a.tags ?? []).join(',')].filter(Boolean).join(' \u00b7 ');
+    console.log(`  ${a.published === false ? '[не опубликовано] ' : ''}${a.title || '(без названия)'} \u2014 ${meta || 'без метаданных'}`);
+  }
+  if (apps.length > 200) console.log(`  \u2026 ещё ${apps.length - 200}`);
+  console.log('');
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const command = argv[0] && !argv[0].startsWith('-') ? argv[0] : 'analyze';
@@ -142,6 +210,8 @@ async function main() {
   const { config, path: configPath } = loadConfig(args.config);
 
   if (command === 'envs') { runEnvs(config, configPath); return; }
+
+  if (command === 'qrs-apps') { await runQrsApps(args, config); return; }
 
   const target = resolveTarget(args, config);
   const rules = resolveRules(args, config);

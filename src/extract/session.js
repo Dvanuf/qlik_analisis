@@ -4,6 +4,7 @@
  */
 import { httpGetJson } from './http.js';
 import { fetchHubApps } from './hub-api.js';
+import { fetchQrsApps } from './qrs.js';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { buildEngineUrl, ENIGMA_SCHEMA } from './engine.js';
@@ -262,6 +263,70 @@ export async function enrichAppsWithHubMeta(apps, options = {}) {
   options.log?.(`хаб: метаданные ${enriched} из ${list.length} приложений`);
   return out;
 }
+/**
+ * Дополняет список приложений метаданными репозитория QRS.
+ *
+ * Хаб отдаёт только опубликованные приложения, а репозиторий Qlik Sense
+ * видит все — включая неопубликованные и личные. Поэтому метаданные
+ * берутся из обоих источников: сначала хаб, недостающее — из репозитория.
+ *
+ * Приложения, которых нет ни в хабе, ни в репозитории, остаются без
+ * метаданных: так честнее, чем подставлять выдуманные значения.
+ *
+ * @param {object[]} apps — список приложений
+ * @param {object} options — параметры подключения к репозиторию
+ *   (enabled, host, port, certPath, keyPath, certPassword, insecure, log)
+ * @returns {Promise<object[]>} тот же список с заполненными метаданными
+ */
+export async function enrichAppsWithQrsMeta(apps, options = {}) {
+  const list = apps ?? [];
+  if (!list.length) return list;
+  if (!options.enabled) return list;
+
+  const res = await fetchQrsApps({
+    host: options.host,
+    port: options.port,
+    certPath: options.certPath,
+    keyPath: options.keyPath,
+    certPassword: options.certPassword,
+    insecure: options.insecure,
+    log: options.log,
+  });
+  if (!res.ok) {
+    options.log?.(`репозиторий QRS: ${res.note}`);
+    return list;
+  }
+  options.log?.(`репозиторий QRS: ${res.note}`);
+
+  const byId = new Map();
+  const byTitle = new Map();
+  for (const a of res.apps) {
+    if (a.id) byId.set(String(a.id), a);
+    const title = String(a.title ?? '').trim().toLowerCase();
+    if (title) byTitle.set(title, a);
+  }
+
+  let enriched = 0;
+  const out = list.map((app) => {
+    const meta = byId.get(String(app.id)) ?? byTitle.get(String(app.title ?? '').trim().toLowerCase());
+    if (!meta) return { ...app, tags: app.tags ?? [] };
+    enriched += 1;
+    return {
+      ...app,
+      stream: app.stream ?? meta.stream ?? null,
+      owner: app.owner ?? meta.owner ?? null,
+      tags: (app.tags?.length ? app.tags : (meta.tags ?? [])),
+      published: app.published ?? meta.published ?? null,
+      lastReload: app.lastReload ?? meta.lastReload ?? null,
+    };
+  });
+  options.log?.(`репозиторий QRS: метаданные ${enriched} из ${list.length} приложений`);
+  return out;
+}
+
+/**
+ * Покрытие метаданных по списку приложений — строка для диагностики.
+}
 
 /**
  * Покрытие метаданных по списку приложений — строка для диагностики.
@@ -296,6 +361,8 @@ export function metaCoverage(apps) {
  *   user?: string, password?: string, insecure?: boolean,
  *   log?: ((m: string) => void)|null, notes?: string[],
  *   getDocList?: () => Promise<object[]>,
+ *   qrs?: {enabled?: boolean, host?: string, port?: number|string, certPath?: string,
+ *     keyPath?: string, certPassword?: string, insecure?: boolean},
  * }} options
  * @returns {Promise<object[]>}
  */
@@ -319,6 +386,17 @@ export async function listApps(options = {}) {
   } = options;
   // Дополнение метаданными (поток, владелец, тэги) — отдельным запросом к хабу.
   const hubOptions = { url, cookie, xrfKey, insecure, log };
+  // Дополнение из репозитория QRS: он видит и неопубликованные приложения.
+  const qrsOptions = {
+    enabled: options.qrs?.enabled ?? false,
+    host: options.qrs?.host ?? '',
+    port: options.qrs?.port ?? 4242,
+    certPath: options.qrs?.certPath ?? '',
+    keyPath: options.qrs?.keyPath ?? '',
+    certPassword: options.qrs?.certPassword ?? '',
+    insecure: options.qrs?.insecure ?? true,
+    log,
+  };
   // Что именно пробовали — попадёт в текст ошибки, чтобы не гадать.
   // Адреса маскируются: в URL может быть CSRF-токен.
   const notes = [];
@@ -359,10 +437,12 @@ export async function listApps(options = {}) {
         lastReload: d.qLastReloadTime ?? null,
         ...appMeta(d),
       }));
-      // Список из движка не содержит потока, владельца и тэгов — берём их у хаба.
+      // Список из движка не содержит потока, владельца и тэгов — берём их у хаба,
+      // а недостающее — у репозитория QRS (он видит и неопубликованные).
       const enriched = await enrichAppsWithHubMeta(apps, hubOptions);
-      note(metaCoverage(enriched));
-      return enriched;
+      const withQrs = await enrichAppsWithQrsMeta(enriched, qrsOptions);
+      note(metaCoverage(withQrs));
+      return withQrs;
     } catch (err) {
       lastError = err;
       note(`движок ${candidate}: ${err?.message ?? err}`);

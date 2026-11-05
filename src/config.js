@@ -292,6 +292,40 @@ export function aiKeyEnvNames(aiConfig = {}) {
 }
 
 /**
+ * Итоговые параметры репозитория QRS (Qlik Repository Service).
+ *
+ * Репозиторий доступен по клиентскому сертификату: путь к файлу задаётся
+ * в настройках, пароль — в переменной окружения (в репозиторий секреты
+ * не кладутся).
+ *
+ * @param {object} cli — разобранные аргументы CLI
+ * @param {object} config — содержимое config-файла
+ * @returns {{
+ *   enabled: boolean, host: string, port: number, certPath: string, keyPath: string,
+ *   certPassword: string|undefined, insecure: boolean, certPasswordEnv: string,
+ * }}
+ */
+export function resolveQrs(cli = {}, config = {}) {
+  const cfg = config.qrs ?? {};
+  const enabledEnv = envValue(['QLIK_QRS_ENABLED']);
+  const enabled = cli.qrsEnabled
+    ?? (enabledEnv === undefined ? undefined : enabledEnv === '1')
+    ?? cfg.enabled
+    ?? false;
+  const certPasswordEnv = cfg.certPasswordEnv ?? 'QLIK_QRS_CERT_PASSWORD';
+  return {
+    enabled: Boolean(enabled),
+    host: String(cli.qrsHost ?? envValue(['QLIK_QRS_HOST']) ?? cfg.host ?? '').trim(),
+    port: Number(cli.qrsPort ?? envValue(['QLIK_QRS_PORT']) ?? cfg.port ?? 4242),
+    certPath: String(cli.qrsCert ?? envValue(['QLIK_QRS_CERT']) ?? cfg.certPath ?? '').trim(),
+    keyPath: String(cli.qrsKey ?? envValue(['QLIK_QRS_KEY']) ?? cfg.keyPath ?? '').trim(),
+    certPassword: envValue([certPasswordEnv]),
+    certPasswordEnv,
+    insecure: cfg.insecure === undefined ? true : Boolean(cfg.insecure),
+  };
+}
+
+/**
  * Пути вывода из config-файла + CLI (поддерживает {env} и {app}).
  * @param {object} cli — разобранные аргументы CLI
  * @param {object} config — содержимое config-файла

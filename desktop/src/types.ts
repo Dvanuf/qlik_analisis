@@ -13,7 +13,18 @@ export type AiProviderInfo = {
   external: boolean; needsKey: boolean; hasKey: boolean; keyRequired: boolean;
 };
 
-/** Состояние ИИ-слоя. */
+/** Настройки и состояние репозитория QRS (Qlik Sense Enterprise, порт 4242). */
+export type QrsStatus = {
+  ok: boolean;
+  note: string;
+  version?: string | null;
+  host: string;
+  port: number;
+  certPath: string;
+  keyPath: string;
+  enabled: boolean;
+};
+
 export type AiStatus = {
   providers: AiProviderInfo[];
   provider: string;
