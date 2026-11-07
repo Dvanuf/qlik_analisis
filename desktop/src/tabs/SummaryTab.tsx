@@ -22,7 +22,6 @@ const DOMAIN_LABELS: Record<DomainId, string> = {
 
 type Props = {
   batch: { results: BatchItem[]; totals: BatchTotals } | null;
-  exportNote: string;
   onExport: () => void;
   onExportCsv: () => void;
   onExportXlsx: () => void;
@@ -49,7 +48,7 @@ function domainHeatLevel(value: number, total: number): number {
 
 export default function SummaryTab(props: Props) {
   const {
-    batch, exportNote, onExport, onExportCsv, onExportXlsx,
+    batch, onExport, onExportCsv, onExportXlsx,
     history, comparison, onlyNew, onOnlyNew, onSaveHistory, onCompare, onLoadHistory,
     onAnalyzeApp,
   } = props;
@@ -166,7 +165,6 @@ export default function SummaryTab(props: Props) {
         <button onClick={onSaveHistory}>Сохранить в историю</button>
         <button onClick={onLoadHistory}>Обновить историю</button>
       </div>
-      {exportNote && <p className="muted small">{exportNote}</p>}
 
       {/* --- Тепловая карта --- */}
       <h3>Тепловая карта: приложения × категории</h3>

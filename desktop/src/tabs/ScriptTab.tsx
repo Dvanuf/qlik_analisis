@@ -26,8 +26,26 @@ export default function ScriptTab(props: Props) {
   const [line, setLine] = useState('');
   const codeRef = useRef<HTMLDivElement | null>(null);
 
+  // Поиск по тексту скрипта: подстрока без учёта регистра.
+  const [query, setQuery] = useState('');
+  // Текущее совпадение — индекс в matches, ходит кнопками ‹ › и Enter.
+  const [mIdx, setMIdx] = useState(0);
+
   const findings = useMemo(() => scriptFindings(analysis?.findings ?? []), [analysis]);
   const [highlight, setHighlight] = useState<Set<number>>(new Set());
+
+  /** Номера строк (с единицы), содержащих искомую подстроку. */
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [] as number[];
+    const out: number[] = [];
+    lines.forEach((text, i) => {
+      if (text.toLowerCase().includes(q)) out.push(i + 1);
+    });
+    return out;
+  }, [query, lines]);
+
+  const matchSet = useMemo(() => new Set(matches), [matches]);
 
   // Подсветка строк выбранной находки.
   useEffect(() => {
@@ -52,6 +70,14 @@ export default function ScriptTab(props: Props) {
   const jump = () => {
     const n = parseInt(line, 10);
     if (!Number.isNaN(n)) gotoLine(n);
+  };
+
+  /** Перейти к совпадению по индексу с закольцовыванием. */
+  const gotoMatch = (idx: number) => {
+    if (!matches.length) return;
+    const wrapped = ((idx % matches.length) + matches.length) % matches.length;
+    setMIdx(wrapped);
+    gotoLine(matches[wrapped]);
   };
 
   if (!analysis || !script.trim()) {
@@ -115,18 +141,53 @@ export default function ScriptTab(props: Props) {
             {active ? 'подсвечены строки выбранной находки' : `${lines.length} строк`}
           </span>
         </h3>
+
+        {/* Поиск по скрипту: Enter — следующее, Shift+Enter — предыдущее, Esc — очистить. */}
+        <div className="lnfind">
+          <input
+            id="script-find"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setMIdx(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                gotoMatch(mIdx + (e.shiftKey ? -1 : 1));
+              } else if (e.key === 'Escape') {
+                setQuery('');
+                setMIdx(0);
+              }
+            }}
+            placeholder="Найти в скрипте… (Ctrl+F)"
+            aria-label="Поиск по скрипту"
+          />
+          <span className="hint">
+            {matches.length ? `${mIdx + 1} из ${matches.length}` : (query.trim() ? 'нет совпадений' : '')}
+          </span>
+          <button className="small" onClick={() => gotoMatch(mIdx - 1)} disabled={!matches.length} aria-label="Предыдущее совпадение">‹</button>
+          <button className="small" onClick={() => gotoMatch(mIdx + 1)} disabled={!matches.length} aria-label="Следующее совпадение">›</button>
+        </div>
+
         <div className="codeview" ref={codeRef}>
-          {lines.map((text, i) => (
-            <div
-              key={i}
-              id={`sl-${i + 1}`}
-              className={`l${highlight.has(i + 1) ? ' hit' : ''}`}
-              onClick={() => gotoLine(i + 1)}
-            >
-              <span className="n">{i + 1}</span>
-              <span className="c">{text}</span>
-            </div>
-          ))}
+          {lines.map((text, i) => {
+            const n = i + 1;
+            const cls = [
+              'l',
+              highlight.has(n) ? ' hit' : '',
+              matchSet.has(n) ? ' mhit' : '',
+              matches.length && matches[mIdx] === n ? ' mcur' : '',
+            ].join('');
+            return (
+              <div
+                key={i}
+                id={`sl-${n}`}
+                className={cls}
+                onClick={() => gotoLine(n)}
+              >
+                <span className="n">{n}</span>
+                <span className="c">{text}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

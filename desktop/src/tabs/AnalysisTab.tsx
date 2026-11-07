@@ -56,7 +56,8 @@ type SortKey = 'severity' | 'ruleId' | 'category' | 'object' | 'table' | 'line';
 type Props = {
   analysis: AnalysisResult | null;
   categories: string[];
-  exportNote: string;
+  /** Заметка о действии (подавление находки) — показывается тостом. */
+  onNote: (text: string) => void;
   onExport: () => void;
   onExportScript: () => void;
   onExportDataModel: () => void;
@@ -165,7 +166,7 @@ function PatternRows(props: {
 
 export default function AnalysisTab(props: Props) {
   const {
-    analysis, categories, exportNote, onExport, onExportScript, onExportDataModel,
+    analysis, categories, onNote, onExport, onExportScript, onExportDataModel,
     rulesConfig, onSaveRulesConfig, onOpenScript, onOpenRefactor, onOpenModel, onAskAi,
   } = props;
 
@@ -182,10 +183,19 @@ export default function AnalysisTab(props: Props) {
   const [selected, setSelected] = useState<Finding | null>(null);
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [note, setNote] = useState('');
 
   // Поиск по произвольному выражению (QSME: search any expression).
   const [exprQuery, setExprQuery] = useState('');
+
+  // Esc закрывает панель паттерна — иначе её можно закрыть только мышью.
+  useEffect(() => {
+    if (!openPattern) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenPattern(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openPattern]);
 
   const findings = analysis?.findings ?? [];
   const suppressed = analysis?.suppressed ?? [];
@@ -351,7 +361,7 @@ export default function AnalysisTab(props: Props) {
       },
     };
     onSaveRulesConfig(next);
-    setNote(`Подавлено: ${f.ruleId}${table ? ` (${table})` : ''}. Перезапустите анализ, чтобы применить.`);
+    onNote(`Подавлено: ${f.ruleId}${table ? ` (${table})` : ''}. Перезапустите анализ, чтобы применить.`);
   };
 
   const unsuppress = (ruleId: string, table?: string) => {
@@ -460,8 +470,6 @@ export default function AnalysisTab(props: Props) {
           <button onClick={onExportScript}>Применить правки к копии скрипта (.qvs)</button>
         )}
       </div>
-      {(exportNote || note) && <p className="muted small">{note || exportNote}</p>}
-
       {/* --- Чек-лист проверок и находки по паттернам --- */}
       <div className="split">
         <div className="card">
@@ -869,7 +877,7 @@ export default function AnalysisTab(props: Props) {
               <p className="muted">{openPattern.recommendation}</p>
             </div>
             <div className="df">
-              <button className="btn pri" onClick={() => setOpenPattern(null)}>Закрыть</button>
+              <button className="btn pri" autoFocus onClick={() => setOpenPattern(null)}>Закрыть</button>
               {onOpenScript ? (
                 <button className="btn" onClick={() => { setOpenPattern(null); onOpenScript(); }}>
                   → Скрипт загрузки

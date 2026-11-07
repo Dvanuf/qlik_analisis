@@ -10,14 +10,13 @@ import type { AnalysisResult } from '../types.js';
 
 type Props = {
   analysis: AnalysisResult | null;
-  exportNote: string;
   onExport: () => void;
 };
 
 type Sheet = { name: string; headers: string[]; rows: (string | number)[][] };
 
 export default function ModelTab(props: Props) {
-  const { analysis, exportNote, onExport } = props;
+  const { analysis, onExport } = props;
 
   const [active, setActive] = useState<string>('');
   const [search, setSearch] = useState('');
@@ -65,7 +64,6 @@ export default function ModelTab(props: Props) {
       <div className="actions">
         <button className="primary" onClick={onExport}>Экспорт модели данных (Excel)</button>
       </div>
-      {exportNote && <p className="muted small">{exportNote}</p>}
 
       <div className="toolbar">
         {sheets.map((s) => (

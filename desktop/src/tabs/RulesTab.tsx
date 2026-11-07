@@ -47,14 +47,13 @@ type Props = {
   ruleInfo: RuleInfo | null;
   rulesConfig: RulesConfig | null;
   countsByRule: Record<string, number>;
-  note: string;
   onSave: (config: RulesConfig) => void;
   onExport: () => void;
   onImport: () => void;
 };
 
 export default function RulesTab(props: Props) {
-  const { ruleInfo, rulesConfig, countsByRule, note, onSave, onExport, onImport } = props;
+  const { ruleInfo, rulesConfig, countsByRule, onSave, onExport, onImport } = props;
   const [cat, setCat] = useState('all');
   // Фильтр по домену — «какая забота», а не «в каком файле лежит правило».
   const [domain, setDomain] = useState<'all' | DomainId>('all');
@@ -158,7 +157,6 @@ export default function RulesTab(props: Props) {
           Настройки применяются к следующему анализу и хранятся в файле rules.json рядом с данными приложения.
         </span>
       </div>
-      {note && <p className="muted small">{note}</p>}
 
       <table className="rules">
         <thead>

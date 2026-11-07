@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
 import { stageLabel } from '../../src/extract/progress.js';
 import { SCOPE_LABELS } from '../../src/rules/scopes.js';
@@ -113,6 +113,23 @@ const SEVERITIES: { id: Severity; label: string }[] = [
   { id: 'info', label: 'Замечание' },
 ];
 
+/** Вкладки в порядке панели: индекс + 1 = номер горячей клавиши. */
+const TAB_ORDER: Tab[] = [
+  'connect', 'analysis', 'script', 'refactor', 'model', 'summary', 'rules', 'library', 'ai',
+];
+
+const TAB_LABELS: Record<Tab, string> = {
+  connect: 'Подключение',
+  analysis: 'Анализ',
+  script: 'Скрипт загрузки',
+  refactor: 'Улучшенный скрипт',
+  model: 'Модель данных',
+  summary: 'Сводный отчёт',
+  rules: 'Правила',
+  library: 'Каталог функций',
+  ai: 'ИИ-чат',
+};
+
 const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
   { id: 'auto', label: 'Определить автоматически', hint: 'По типам объектов приложения — так надёжнее' },
   { id: 'qlik-sense', label: 'Qlik Sense', hint: 'QIX App API: объекты, master items, закладки' },
@@ -121,6 +138,7 @@ const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('connect');
+
   const [platform, setPlatform] = useState<Platform>(
     // По умолчанию платформу определяет сервер: тот же Sense-сервер бывает
     // доступен через Doc API, и по способу подключения судить нельзя.
@@ -183,7 +201,9 @@ export default function App() {
   const [analyzeStage, setAnalyzeStage] = useState<AnalyzeProgress | null>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
-  const [exportNote, setExportNote] = useState('');
+  // Всплывающее уведомление: результат экспорта, сохранения, копирования.
+  const [toast, setToast] = useState<{ text: string; kind: string; at: number } | null>(null);
+  const toastTimer = useRef<number | null>(null);
   // Настройки правил: отключения, важность, пороги, исключения, подавления.
   const [rulesConfig, setRulesConfig] = useState<RulesConfig | null>(null);
   // История прогонов в локальной базе и сравнение с базовой линией.
@@ -199,6 +219,50 @@ export default function App() {
   useEffect(() => { localStorage.setItem('qa.user', user); }, [user]);
   useEffect(() => { localStorage.setItem('qa.insecure', insecure ? '1' : '0'); }, [insecure]);
   useEffect(() => { localStorage.setItem('qa.platform', platform); }, [platform]);
+
+  /**
+   * Всплывающее уведомление вместо тихой строки в глубине вкладки:
+   * результат операции видно сразу, из любой вкладки.
+   *
+   * Вид сообщения определяется автоматически: «Не удалось …» — ошибка,
+   * остальное — успех; точный вид можно задать вторым аргументом.
+   */
+  function showToast(text: string, kind?: 'ok' | 'err' | 'info') {
+    const k = kind ?? (/^Не удалось/.test(text) ? 'err' : 'ok');
+    setToast({ text, kind: k, at: Date.now() });
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 5500);
+  }
+
+  /**
+   * Горячие клавиши: Ctrl/Cmd+1…9 — вкладка по номеру, Ctrl/Cmd+F на
+   * «Скрипте загрузки» — фокус в поиск. По e.code: работает в любой
+   * раскладке (e.key на русской раскладке даёт «а» вместо «f»).
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const digit = /^Digit([1-9])$/.exec(e.code);
+      if (digit) {
+        const target = TAB_ORDER[Number(digit[1]) - 1];
+        if (target) {
+          e.preventDefault();
+          setTab(target);
+        }
+        return;
+      }
+      if (e.code === 'KeyF' && tab === 'script') {
+        const el = document.getElementById('script-find');
+        if (el) {
+          e.preventDefault();
+          (el as HTMLInputElement).focus();
+          (el as HTMLInputElement).select();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tab]);
 
   /**
    * Прогоны анализируемого приложения: сводка для ИИ показывает динамику
@@ -428,7 +492,7 @@ export default function App() {
       setAnalysis(res);
       setTab('analysis');
     } catch (err) {
-      setExportNote(`Не удалось проанализировать приложение: ${String(err)}`);
+      showToast(`Не удалось проанализировать приложение: ${String(err)}`);
       setTab('summary');
     }
     setBusy('');
@@ -468,9 +532,9 @@ export default function App() {
         patch: analysis.patch,
         ruleStats: analysis.ruleStats,
       });
-      setExportNote(`Отчёт сохранён: ${res.htmlPath}`);
+      showToast(`Отчёт сохранён: ${res.htmlPath}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить отчёт: ${String(err)}`);
+      showToast(`Не удалось сохранить отчёт: ${String(err)}`);
     }
   }
 
@@ -479,9 +543,9 @@ export default function App() {
     try {
       const res = await window.qa.saveRulesConfig(config);
       setRulesConfig(res.config as RulesConfig);
-      setExportNote(`Настройки правил сохранены: ${res.path}`);
+      showToast(`Настройки правил сохранены: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить настройки правил: ${String(err)}`);
+      showToast(`Не удалось сохранить настройки правил: ${String(err)}`);
     }
   }
 
@@ -494,9 +558,9 @@ export default function App() {
         script: analysis.script ?? '',
         patch: analysis.patch,
       });
-      setExportNote(`Изменённый скрипт сохранён: ${res.path}`);
+      showToast(`Изменённый скрипт сохранён: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить скрипт: ${String(err)}`);
+      showToast(`Не удалось сохранить скрипт: ${String(err)}`);
     }
   }
 
@@ -508,9 +572,9 @@ export default function App() {
         sheets: analysis.dataModel,
         fileName: `${analysis.appName ?? 'Модель данных'}`.slice(0, 60),
       });
-      setExportNote(`Модель данных сохранена: ${res.path}`);
+      showToast(`Модель данных сохранена: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить модель данных: ${String(err)}`);
+      showToast(`Не удалось сохранить модель данных: ${String(err)}`);
     }
   }
 
@@ -519,9 +583,9 @@ export default function App() {
     try {
       const res = await window.qa.exportRulesConfig();
       if (res.canceled) return;
-      setExportNote(`Настройки правил выгружены: ${res.path}`);
+      showToast(`Настройки правил выгружены: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось выгрузить настройки правил: ${String(err)}`);
+      showToast(`Не удалось выгрузить настройки правил: ${String(err)}`);
     }
   }
 
@@ -531,9 +595,9 @@ export default function App() {
       const res = await window.qa.importRulesConfig();
       if (res.canceled) return;
       if (res.config) setRulesConfig(res.config as RulesConfig);
-      setExportNote(`Настройки правил загружены: ${res.path}`);
+      showToast(`Настройки правил загружены: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось загрузить настройки правил: ${String(err)}`);
+      showToast(`Не удалось загрузить настройки правил: ${String(err)}`);
     }
   }
 
@@ -587,10 +651,10 @@ export default function App() {
         });
         saved += 1;
       }
-      setExportNote(`В историю сохранено прогонов: ${saved}`);
+      showToast(`В историю сохранено прогонов: ${saved}`);
       await loadHistory();
     } catch (err) {
-      setExportNote(`Не удалось сохранить историю: ${String(err)}`);
+      showToast(`Не удалось сохранить историю: ${String(err)}`);
     }
   }
 
@@ -600,7 +664,7 @@ export default function App() {
       const runs = await window.qa.historyList({ limit: 100 });
       setHistory(runs);
     } catch (err) {
-      setExportNote(`История недоступна: ${String(err)}`);
+      showToast(`История недоступна: ${String(err)}`);
     }
   }
 
@@ -611,14 +675,14 @@ export default function App() {
       if (!baseline) return;
       const current = await window.qa.historyLatest({ appId: baseline.appId });
       if (!current || current.id === baselineId) {
-        setExportNote('Нет более нового прогона для сравнения.');
+        showToast('Нет более нового прогона для сравнения.');
         return;
       }
       const cmp = await window.qa.historyCompare({ baselineId, currentId: current.id });
       setComparison(cmp);
-      setExportNote(`Сравнение: база ${baselineId} → ${current.id}`);
+      showToast(`Сравнение: база ${baselineId} → ${current.id}`);
     } catch (err) {
-      setExportNote(`Не удалось сравнить прогоны: ${String(err)}`);
+      showToast(`Не удалось сравнить прогоны: ${String(err)}`);
     }
   }
 
@@ -626,9 +690,9 @@ export default function App() {
   async function exportCsv() {
     try {
       const res = await window.qa.exportFindingsCsv({ rows: flatRows(), fileName: 'Находки' });
-      setExportNote(`CSV сохранён: ${res.path}`);
+      showToast(`CSV сохранён: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить CSV: ${String(err)}`);
+      showToast(`Не удалось сохранить CSV: ${String(err)}`);
     }
   }
 
@@ -636,9 +700,9 @@ export default function App() {
   async function exportXlsx() {
     try {
       const res = await window.qa.exportFindingsXlsx({ rows: flatRows(), fileName: 'Находки' });
-      setExportNote(`Excel сохранён: ${res.path}`);
+      showToast(`Excel сохранён: ${res.path}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить Excel: ${String(err)}`);
+      showToast(`Не удалось сохранить Excel: ${String(err)}`);
     }
   }
 
@@ -651,9 +715,9 @@ export default function App() {
         results: batch.results,
         platform,
       });
-      setExportNote(`Сводный отчёт сохранён: ${res.htmlPath}`);
+      showToast(`Сводный отчёт сохранён: ${res.htmlPath}`);
     } catch (err) {
-      setExportNote(`Не удалось сохранить сводный отчёт: ${String(err)}`);
+      showToast(`Не удалось сохранить сводный отчёт: ${String(err)}`);
     }
   }
 
@@ -793,24 +857,25 @@ export default function App() {
             А+
           </button>
         </div>
-        <div className="icon-btn" title="Обновить">⟳</div>
+        <button
+          className="icon-btn"
+          title="Обновить список приложений"
+          onClick={() => void loadApps()}
+        >
+          ⟳
+        </button>
         <div className="avatar" title="Пользователь">АВ</div>
       </div>
 
       <nav className="sheetbar">
-        {([
-          ['connect', 'Подключение'],
-          ['analysis', 'Анализ'],
-          ['script', 'Скрипт загрузки'],
-          ['refactor', 'Улучшенный скрипт'],
-          ['model', 'Модель данных'],
-          ['summary', 'Сводный отчёт'],
-          ['rules', 'Правила'],
-          ['library', 'Каталог функций'],
-          ['ai', 'ИИ-чат'],
-        ] as [Tab, string][]).map(([id, label]) => (
-          <button key={id} className={`tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)}>
-            {label}
+        {TAB_ORDER.map((id, i) => (
+          <button
+            key={id}
+            className={`tab${tab === id ? ' on' : ''}`}
+            onClick={() => setTab(id)}
+            title={`Ctrl+${i + 1} — ${TAB_LABELS[id]}`}
+          >
+            {TAB_LABELS[id]}
             {id === 'analysis' && analysis ? (
               <span className="cnt">{analysis.summary.findings.total}</span>
             ) : null}
@@ -831,6 +896,12 @@ export default function App() {
 
       <div className="wrap">
       {busy && <div className="busy">{busy}</div>}
+      {/* Всплывающее уведомление: результат экспорта, копирования, ошибки. */}
+      {toast && (
+        <div key={toast.at} className={`toast on ${toast.kind}`} role="status">
+          {toast.text}
+        </div>
+      )}
 
       {/* Ход анализа: видно, на каком этапе идёт процесс. */}
       {analyzeStage && (
@@ -877,7 +948,7 @@ export default function App() {
         <AnalysisTab
           analysis={analysis}
           categories={categories}
-          exportNote={exportNote}
+          onNote={showToast}
           onExport={() => void exportCurrent()}
           onExportScript={() => void exportScript()}
           onExportDataModel={() => void exportDataModel()}
@@ -908,7 +979,6 @@ export default function App() {
       {tab === 'model' && (
         <ModelTab
           analysis={analysis}
-          exportNote={exportNote}
           onExport={() => void exportDataModel()}
         />
       )}
@@ -916,7 +986,6 @@ export default function App() {
       {tab === 'summary' && (
         <SummaryTab
           batch={batch}
-          exportNote={exportNote}
           onExport={() => void exportBatch()}
           onExportCsv={() => void exportCsv()}
           onExportXlsx={() => void exportXlsx()}
@@ -936,7 +1005,6 @@ export default function App() {
           ruleInfo={ruleInfo}
           rulesConfig={rulesConfig}
           countsByRule={Object.fromEntries(countsByRule)}
-          note={exportNote}
           onSave={(c) => void saveRulesConfig(c)}
           onExport={() => void exportRulesConfig()}
           onImport={() => void importRulesConfig()}
@@ -957,7 +1025,7 @@ export default function App() {
       )}
 
       {tab === 'refactor' && (
-        <RefactorTab analysis={analysis} onNote={setExportNote} />
+        <RefactorTab analysis={analysis} onNote={showToast} />
       )}
       </div>
     </div>
