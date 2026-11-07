@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.12.0 | [v0.12.0 — оценка v2 и согласованность цифр](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.12.0) |
 | 0.11.0 | [v0.11.0 — UI-фиксы: тёмная тема, вкладки, шапка](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.11.0) |
 | 0.10.0 | [v0.10.0 — UX: тосты, горячие клавиши, поиск в скрипте](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.10.0) |
 | 0.9.0 | [v0.9.0 — вкладка «Улучшенный скрипт»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.9.0) |
@@ -23,6 +24,9 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.12.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.12.0 |
+| `Qlik Analyzer-0.12.0-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.12.0 |
+| `Qlik Analyzer-0.12.0-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.12.0 |
 | `Qlik Analyzer-0.11.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.11.0 |
 | `Qlik Analyzer-0.11.0-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.11.0 |
 | `Qlik Analyzer-0.11.0-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.11.0 |
