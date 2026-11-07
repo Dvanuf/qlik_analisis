@@ -855,3 +855,18 @@ table.rq tr.pat { cursor: pointer; }
 .scorecfg { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .scorecfg label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--fw); }
 .scorecfg input { padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r1); background: var(--panel); color: var(--text); }
+
+/* --- Сводный отчёт (v0.15.0): вывод, зоны, динамика ------------------- */
+/* Вывод одной фразой — карточка с цветной полосой слева, как в макете. */
+.verdictcard { border-left: 4px solid var(--warning); }
+.cols { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+/* Полоса распределения по зонам. */
+.zoneline { display: flex; height: 26px; border-radius: var(--r1, 8px); overflow: hidden; margin-bottom: 6px; }
+.zoneline > div {
+  display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 0.8125rem;
+}
+.zoneline .zr { background: var(--danger); }
+.zoneline .zy { background: var(--warning); }
+.zoneline .zg { background: var(--brand); }
+.zoneline .zn { background: var(--panel-3); color: var(--fw); }
+.zonelegend { display: flex; gap: 14px; flex-wrap: wrap; }

@@ -142,3 +142,36 @@ test('aggregateGroup: средняя, медиана, зоны, слабейши
   const mixed = aggregateGroup([app('a', 50), { appId: 'b', summary: { score: 60, scoreVersion: 1 } }]);
   assert.equal(mixed.scoreVersion, null);
 });
+
+test('aggregateGroup: главные проблемы, потоки, лишние данные (этап 5)', () => {
+  const mk = (id, score, stream, findings, removable) => ({
+    appId: id, title: id, stream,
+    summary: {
+      score, scoreVersion: 2,
+      findings: { total: findings.length, bySeverity: {} },
+      savings: { removableRows: removable, removableFields: 0 },
+      domains: {},
+    },
+    findings,
+  });
+  const field = (ruleId, title, count) => ({ ruleId, title, severity: 'warning', count, domain: 'model' });
+  const results = [
+    mk('a', 50, 'Продажи', [field('R001', 'Поле не используется', 5), field('R003', 'Таблица не используется', 1)], 1000000),
+    mk('b', 70, 'Продажи', [field('R001', 'Поле не используется', 2)], 200000),
+    mk('c', 90, 'HR', [], 0),
+  ];
+  const g = aggregateGroup(results);
+  // Проблема №1: R001 в двух приложениях; прирост в каждом — весь штраф
+  // важности этого приложения (10 при 5 местах, 6 при 2), делённый на 3.
+  assert.equal(g.topIssues[0].ruleId, 'R001');
+  assert.equal(g.topIssues[0].apps, 2);
+  assert.equal(g.topIssues[0].places, 7);
+  assert.equal(g.topIssues[0].gainAvg, 5);
+  // Потоки: Продажи хуже HR.
+  assert.equal(g.byStream[0].stream, 'Продажи');
+  assert.equal(g.byStream[0].apps, 2);
+  assert.equal(g.byStream[1].stream, 'HR');
+  // Лишние данные: рейтинг по убыванию строк.
+  assert.equal(g.wastedRating[0].appId, 'a');
+  assert.equal(g.wastedRating.length, 2);
+});

@@ -123,7 +123,7 @@ function wastedPenalty(findings, scoring, totalRows) {
 }
 
 /** Прирост балла от устранения одной находки (без пересчёта остальных). */
-function gainOf(finding, scoring, totalRows) {
+export function gainOf(finding, scoring, totalRows) {
   if (scoring.wastedRules.includes(finding?.ruleId) && totalRows > 0) {
     const before = wastedPenalty([finding], scoring, totalRows).penalty;
     return Math.round(before);
@@ -236,11 +236,13 @@ export function computeScore(findings, options = {}) {
  * Групповая оценка по нескольким приложениям — единый источник цифр
  * для «Сводного отчёта», экспортов и вкладки «Оценка» (этап 5).
  *
- * @param {Array<{summary?: object, appId: string, title?: string, stream?: string|null,
+ * @param {Array<{summary?: object|null, appId: string, title?: string, stream?: string|null,
  *   owner?: string|null, tags?: string[]}>} results — результаты batch-прогона
- * @param {{history?: Array<object>, filters?: object}} [options]
+ * @param {{history?: Array<object>, filters?: object,
+ *   scoring?: object, totalRows?: number}} [options]
  * @returns {{apps: number, avg: number|null, median: number|null, zones: object,
- *   weakestDomain: string|null, scoreVersion: number|null}}
+ *   weakestDomain: string|null, scoreVersion: number|null,
+ *   topIssues: Array<object>, byStream: Array<object>, wastedRating: Array<object>}}
  */
 export function aggregateGroup(results, options = {}) {
   const rows = (Array.isArray(results) ? results : []).filter((r) => r?.summary?.score != null);
@@ -279,6 +281,76 @@ export function aggregateGroup(results, options = {}) {
   // Версия формулы: группа смешанных версий тренд не имеет.
   const versions = [...new Set(rows.map((r) => Number(r.summary.scoreVersion) || 1))];
 
+  // Главные проблемы группы: паттерны (правило + человекочитаемый текст),
+  // отсортированные по приросту средней оценки группы от их устранения.
+  const issueAgg = new Map();
+  for (const r of rows) {
+    for (const f of r.findings ?? []) {
+      const key = `${f.ruleId}|${f.title}`;
+      const entry = issueAgg.get(key) ?? {
+        ruleId: String(f.ruleId ?? ''),
+        title: String(f.title ?? ''),
+        severity: String(f.severity ?? 'info'),
+        domain: f.domain ?? null,
+        places: 0,
+        apps: new Set(),
+        gains: [],
+      };
+      entry.places += Math.max(1, Number(f.count) || 1);
+      entry.apps.add(r.appId);
+      // Прирост в этом приложении; знаменатель — все приложения группы.
+      entry.gains.push(gainOf(f, normalizeScoring(options.scoring), Number(options.totalRows) || 0));
+      issueAgg.set(key, entry);
+    }
+  }
+  const topIssues = [...issueAgg.values()]
+    .map((e) => ({
+      ruleId: e.ruleId,
+      title: e.title,
+      severity: e.severity,
+      domain: e.domain,
+      places: e.places,
+      apps: e.apps.size,
+      gainAvg: Math.round(e.gains.reduce((s, v) => s + v, 0) / Math.max(1, rows.length)),
+    }))
+    .sort((a, b) => b.gainAvg - a.gainAvg)
+    .slice(0, 8);
+
+  // Разрез по потокам: приложения, средняя, ошибки, слабейший домен потока.
+  const streamsMap = new Map();
+  for (const r of rows) {
+    const key = r.stream ?? '—';
+    const entry = streamsMap.get(key) ?? { stream: key, apps: 0, scores: [], errors: 0, domScores: {} };
+    entry.apps += 1;
+    entry.scores.push(Number(r.summary.score));
+    entry.errors += r.summary.findings?.bySeverity?.error ?? 0;
+    for (const [id, d] of Object.entries(r.summary.domains ?? {})) {
+      (entry.domScores[id] ??= []).push(d.score);
+    }
+    streamsMap.set(key, entry);
+  }
+  const byStream = [...streamsMap.values()]
+    .map((e) => {
+      const doms = Object.entries(e.domScores)
+        .map(([id, arr]) => ({ id, avg: arr.reduce((s, v) => s + v, 0) / arr.length }))
+        .sort((a, b) => a.avg - b.avg);
+      return {
+        stream: e.stream,
+        apps: e.apps,
+        avg: Math.round(e.scores.reduce((s, v) => s + v, 0) / e.scores.length),
+        errors: e.errors,
+        weakestDomain: doms.length ? doms[0].id : null,
+      };
+    })
+    .sort((a, b) => a.avg - b.avg);
+
+  // Рейтинг лишних данных: строки, которые можно убрать, по приложениям.
+  const wastedRating = rows
+    .map((r) => ({ appId: r.appId, title: r.title ?? r.appId, rows: r.summary.savings?.removableRows ?? 0 }))
+    .filter((r) => r.rows > 0)
+    .sort((a, b) => b.rows - a.rows)
+    .slice(0, 5);
+
   return {
     apps: rows.length,
     avg: avg == null ? null : Math.round(avg),
@@ -286,5 +358,8 @@ export function aggregateGroup(results, options = {}) {
     zones,
     weakestDomain,
     scoreVersion: versions.length === 1 ? versions[0] : null,
+    topIssues,
+    byStream,
+    wastedRating,
   };
 }

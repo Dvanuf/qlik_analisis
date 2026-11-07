@@ -1073,9 +1073,10 @@ export default function App() {
       {tab === 'summary' && (
         <SummaryTab
           batch={batch}
-          onExport={() => void exportBatch()}
+          appsCount={apps.length}
           onExportCsv={() => void exportCsv()}
           onExportXlsx={() => void exportXlsx()}
+          onPrintReport={(html) => void printScoreReport(html)}
           history={history}
           comparison={comparison}
           onlyNew={onlyNew}
