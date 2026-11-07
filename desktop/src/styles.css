@@ -804,7 +804,7 @@ table.rq tr.pat { cursor: pointer; }
 /* Шапка оценки: кольцо с баллом, вывод, счётчики. */
 .scorehero { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
 .scorehero-main { flex: 1; min-width: 260px; }
-.scorehero-main h2 { margin: 0 0 4px; }
+.scorehero-main h2.verdict { margin: 0 0 4px; font-size: 20px; color: var(--text); }
 .scorehero-counts { display: flex; gap: 20px; text-align: center; }
 .scorehero-counts .num { font-size: 24px; font-weight: 700; }
 .scorehero-counts .num.err { color: var(--danger); }

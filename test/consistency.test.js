@@ -13,6 +13,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { analyzeAll, totalsOf, settingsHash } from '../src/batch.js';
+import { analyze } from '../src/analyzer.js';
 import { openHistory, saveRun, listRuns } from '../src/history.js';
 
 /** Фикстура приложения: находки с местами, чтобы видеть разницу находки/места. */
@@ -148,4 +149,28 @@ test('история: миграция проставляет score_version=1 с
   const after = listRuns(db, {});
   assert.equal(after[0].scoreVersion, 2);
   assert.equal(after[1].scoreVersion, 1);
+});
+
+test('score v2: домены, топ и прогноз доходят до summary анализа', () => {
+  const graph = {
+    appName: 'Тест', appId: 't-score', platform: 'qlik-sense',
+    script: 'Sales:\nLOAD ID, Amount, Tmp FROM [data.qvd] (qvd);\n',
+    tables: [{ name: 'Sales', rows: 1000 }],
+    fields: [
+      { name: 'ID', table: 'Sales', rows: 1000 },
+      { name: 'Amount', table: 'Sales', rows: 1000 },
+      { name: 'Tmp', table: 'Sales', rows: 1000 },
+    ],
+    objects: [
+      { id: 'o1', name: 'KPI', type: 'kpi', expressions: [{ kind: 'measure', expr: 'Sum(Amount)' }] },
+    ],
+    variables: [], sheets: [], bookmarks: [], connections: [], masterObjects: [], stories: [],
+  };
+  const { summary } = analyze(graph, {});
+  // Регрессия 0.15.2: домены и топ жили только внутри scoreDetails, вкладка
+  // «Оценка» получала пустоту.
+  assert.ok(Object.keys(summary.domains ?? {}).length > 0, 'summary.domains пуст');
+  assert.ok((summary.top ?? []).length > 0, 'summary.top пуст');
+  assert.ok(summary.forecast != null, 'summary.forecast отсутствует');
+  assert.equal(summary.scoreVersion, 2);
 });

@@ -176,6 +176,13 @@ export function analyze(graph, config = {}) {
     // одной версии (v2 — расчёт по паттернам с потолками).
     scoreVersion: score.scoreVersion,
     verdict: score.verdict,
+    // Домены, топ-исправления, прогноз — на верхнем уровне: их читают
+    // вкладки «Оценка» и «Сводный отчёт» (scoreDetails — для формулы).
+    domains: score.domains,
+    top: score.top,
+    candidates: score.candidates,
+    forecast: score.forecast,
+    wasted: score.wasted,
     scoreDetails: score,
     savings: {
       removableFields: removable.length,

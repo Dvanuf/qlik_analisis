@@ -201,10 +201,10 @@ export default function ScoreTab(props: Props) {
           <span className="muted">из 100</span>
         </div>
         <div className="scorehero-main">
-          <h2>{summary.verdict ?? ''}</h2>
+          <h2 className="verdict">{summary.verdict ?? ''}</h2>
           <p className="muted">
             {weakest
-              ? `Слабее всего «${DL[weakest[0]] ?? weakest[0]}» — балл ${weakest[1].score}. `
+              ? `Слабее всего «${DL[weakest[0]] ?? weakest[0]}»: ${weakest[1].findings} ${weakest[1].findings === 1 ? 'находка' : weakest[1].findings < 5 ? 'находки' : 'находок'}, балл домена ${weakest[1].score}. `
               : 'Существенных слабых мест не найдено. '}
             {summary.forecast != null && summary.forecast > score
               ? `Если исправить первые три пункта, оценка вырастет примерно до ${summary.forecast}.`
