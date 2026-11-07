@@ -35,14 +35,17 @@ test('App: тосты — showToast есть, тихие exportNote-строки
 });
 
 test('App: горячие клавиши — Ctrl/Cmd+1..9 и Ctrl+F на скрипте', () => {
-  assert.ok(APP.includes('const TAB_ORDER: Tab[]'), 'нет константы TAB_ORDER');
+  assert.ok(APP.includes('const TAB_GROUPS'), 'нет групп вкладок (Обзор/Работа/Помощь/Настройки)');
+  assert.ok(APP.includes('const TAB_ORDER: Tab[] = TAB_GROUPS.flatMap'), 'TAB_ORDER не из групп');
+  // 0 — десятая вкладка.
+  assert.ok(APP.includes("digit[1] === '0' ? 10 :"), 'нет Ctrl+0 для десятой вкладки');
   assert.ok(APP.includes("addEventListener('keydown', onKey)"), 'нет keydown-обработчика');
   // По e.code — работает в любой раскладке.
-  assert.ok(APP.includes('/^Digit([1-9])$/.exec(e.code)'), 'вкладки переключаются не по e.code');
+  assert.ok(APP.includes('/^Digit([0-9])$/.exec(e.code)'), 'вкладки переключаются не по e.code');
   assert.ok(APP.includes("e.code === 'KeyF'"), 'Ctrl+F не по e.code');
   assert.ok(APP.includes("'script-find'"), 'Ctrl+F не ищет поле поиска');
   // Подсказка с номером на кнопках вкладок.
-  assert.ok(APP.includes('Ctrl+${i + 1}'), 'на вкладках нет подсказки горячих клавиш');
+  assert.ok(APP.includes('Ctrl+${i === 9 ? 0 : i + 1}'), 'на вкладках нет подсказки горячих клавиш');
 });
 
 test('ScriptTab: поиск по тексту скрипта', () => {

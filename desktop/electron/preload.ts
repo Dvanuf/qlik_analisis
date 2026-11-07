@@ -107,6 +107,8 @@ const api = {
   aiClearKeys: () => ipcRenderer.invoke('core:ai-keys-clear'),
   /** ИИ-слой: вопрос по результатам анализа. */
   aiAsk: (payload: unknown) => ipcRenderer.invoke('core:ai-ask', payload),
+  /** «Отчёт для руководителя»: HTML печатается в PDF и сохраняется в Документы. */
+  printReport: (payload: { html: string; appName?: string }) => ipcRenderer.invoke('core:print-report', payload),
   /** ИИ-слой: предложенная версия скрипта загрузки (опционально, уходит к провайдеру). */
   aiRefactor: (payload: unknown) => ipcRenderer.invoke('core:ai-refactor', payload),
   /** ИИ-слой: фактический промпт, который уйдёт модели (для просмотра и правки). */

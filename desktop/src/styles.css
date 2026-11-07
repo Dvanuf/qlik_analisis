@@ -793,3 +793,54 @@ table.rq tr.pat { cursor: pointer; }
   border-radius: 6px; font-size: 0.8125rem; background: var(--panel); color: var(--text);
 }
 .row-actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
+
+/* --- Оценка (v0.13.0) и группы вкладок -------------------------------- */
+/* Заголовки групп в панели вкладок. */
+.sheetbar .grouplabel {
+  align-self: center; padding: 0 10px; color: var(--fo);
+  font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+/* Шапка оценки: кольцо с баллом, вывод, счётчики. */
+.scorehero { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.scorehero-main { flex: 1; min-width: 260px; }
+.scorehero-main h2 { margin: 0 0 4px; }
+.scorehero-counts { display: grid; grid-template-columns: auto auto; gap: 2px 12px; text-align: center; }
+.scorehero-counts .num { font-size: 22px; font-weight: 600; }
+.scorehero-counts .num.err { color: var(--danger); }
+.scorehero-counts .num.warn { color: var(--warning); }
+.howformula { margin: 8px 0 0; }
+/* Кольцо с баллом. */
+.ring {
+  width: 112px; height: 112px; border-radius: 50%;
+  display: grid; place-content: center; text-align: center; flex: none;
+}
+.ring b { font-size: 34px; line-height: 1.1; }
+.ring .muted { font-size: 0.6875rem; }
+.ring.r { border: 9px solid var(--danger); }
+.ring.y { border: 9px solid var(--warning); }
+.ring.g { border: 9px solid var(--brand); }
+/* Карточки доменов. */
+.domgrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 14px 0; }
+.domcard { margin: 0; }
+.domcard .num { font-size: 20px; }
+/* Полоса балла: цвет по зоне. */
+.pbar i.r { background: var(--danger); }
+.pbar i.y { background: var(--warning); }
+.pbar i.g { background: var(--brand); }
+/* Пункт «Исправьте в первую очередь». */
+.scoreitem {
+  display: flex; gap: 12px; align-items: center; padding: 10px 0;
+  border-top: 1px solid var(--line-soft); flex-wrap: wrap;
+}
+.scoreitem:first-of-type { border-top: 0; }
+.scoreitem .gain { color: var(--success); min-width: 40px; text-align: right; }
+/* Квадраты доменов в таблице группы. */
+.dots { display: flex; gap: 3px; }
+.dots i { width: 13px; height: 13px; border-radius: 3px; display: block; }
+.dots i.r { background: var(--danger); }
+.dots i.y { background: var(--warning); }
+.dots i.g { background: var(--brand); }
+.dots i.n { background: var(--panel-3); }
+/* Таблица группы с горизонтальным скроллом. */
+.scrolltbl { overflow-x: auto; }

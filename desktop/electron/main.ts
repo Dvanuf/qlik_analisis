@@ -897,6 +897,32 @@ ipcMain.handle('core:rules-config-import', async () => {
 });
 
 /**
+ * «Отчёт для руководителя»: готовый HTML печатается в PDF скрытым окном
+ * и сохраняется в «Документы/QlikAnalyzer». Новых зависимостей нет —
+ * printToPDF встроен в Electron.
+ */
+ipcMain.handle('core:print-report', async (_e, payload: { html: string; appName?: string }) => {
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  try {
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(String(payload?.html ?? ''))}`);
+    const pdf = await win.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+    });
+    const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const safeName = String(payload?.appName || 'app').replace(/[^\wа-яА-Я ._-]/g, '_').slice(0, 60);
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const file = resolve(dir, `${safeName} ${stamp}-отчёт.pdf`);
+    writeFileSync(file, pdf);
+    return { path: file };
+  } finally {
+    win.destroy();
+  }
+});
+
+/**
  * Экспорт изменённого скрипта в файл .qvs (обычный текстовый скрипт —
  * именно так его выгружает сам Qlik Sense Desktop).
  */

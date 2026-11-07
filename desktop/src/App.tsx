@@ -10,6 +10,7 @@ import SummaryTab from './tabs/SummaryTab.js';
 import ModelTab from './tabs/ModelTab.js';
 import ScriptTab from './tabs/ScriptTab.js';
 import RefactorTab from './tabs/RefactorTab.js';
+import ScoreTab from './tabs/ScoreTab.js';
 import AiTab from './tabs/AiTab.js';
 import { buildRefactoredScript } from '../../src/script/refactor.js';
 import type {
@@ -75,6 +76,8 @@ declare global {
       exportScript(payload: {
         appName?: string; script: string; patch?: { script?: string }; finalScript?: string;
       }): Promise<{ path: string }>;
+      /** «Отчёт для руководителя»: HTML -> PDF через скрытое окно. */
+      printReport(payload: { html: string; appName?: string }): Promise<{ path: string }>;
       /** ИИ-рефакторинг скрипта (opt-in): уходит к провайдеру целиком. */
       aiRefactor(payload: {
         script: string; findings?: unknown[]; appName?: string;
@@ -114,11 +117,20 @@ const SEVERITIES: { id: Severity; label: string }[] = [
 ];
 
 /** Вкладки в порядке панели: индекс + 1 = номер горячей клавиши. */
-const TAB_ORDER: Tab[] = [
-  'connect', 'analysis', 'script', 'refactor', 'model', 'summary', 'rules', 'library', 'ai',
+/**
+ * Вкладки по группам — порядок в панели и номера горячих клавиш:
+ * Ctrl/Cmd+1…9 слева направо, Ctrl/Cmd+0 — десятая (последняя).
+ */
+const TAB_GROUPS: { label: string; tabs: Tab[] }[] = [
+  { label: 'Обзор', tabs: ['score', 'summary'] },
+  { label: 'Работа', tabs: ['analysis', 'script', 'refactor', 'model'] },
+  { label: 'Помощь', tabs: ['ai', 'library'] },
+  { label: 'Настройки', tabs: ['connect', 'rules'] },
 ];
+const TAB_ORDER: Tab[] = TAB_GROUPS.flatMap((g) => g.tabs);
 
 const TAB_LABELS: Record<Tab, string> = {
+  score: 'Оценка',
   connect: 'Подключение',
   analysis: 'Анализ',
   script: 'Скрипт загрузки',
@@ -242,9 +254,11 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-      const digit = /^Digit([1-9])$/.exec(e.code);
+      const digit = /^Digit([0-9])$/.exec(e.code);
       if (digit) {
-        const target = TAB_ORDER[Number(digit[1]) - 1];
+        // 0 — десятая вкладка (как в макете: Правила = Ctrl+0).
+        const n = digit[1] === '0' ? 10 : Number(digit[1]);
+        const target = TAB_ORDER[n - 1];
         if (target) {
           e.preventDefault();
           setTab(target);
@@ -564,6 +578,16 @@ export default function App() {
     }
   }
 
+  /** «Отчёт для руководителя»: HTML печатается в PDF скрытым окном Electron. */
+  async function printScoreReport(html: string) {
+    try {
+      const res = await window.qa.printReport({ html, appName: analysis?.appName ?? 'Приложение' });
+      showToast(`PDF сохранён: ${res.path}`);
+    } catch (err) {
+      showToast(`Не удалось сохранить PDF: ${String(err)}`);
+    }
+  }
+
   /** Экспорт модели данных приложения в Excel (листы на таблицы, поля, объекты). */
   async function exportDataModel() {
     if (!analysis?.dataModel?.length) return;
@@ -763,6 +787,9 @@ export default function App() {
     [analysis],
   );
 
+  // Правило, по которому надо раскрыть «Анализ» (кнопка «Открыть» в «Оценке»).
+  const [analysisFilter, setAnalysisFilter] = useState<string | null>(null);
+
   // Правки правил — счётчик на вкладке «Улучшенный скрипт».
   const refactorCount = useMemo(
     () => (analysis?.script
@@ -875,13 +902,17 @@ export default function App() {
         </button>
       </div>
 
-      <nav className="sheetbar">
-        {TAB_ORDER.map((id, i) => (
+      <nav className="sheetbar" aria-label="Разделы">
+        {TAB_GROUPS.flatMap((g) => [
+          <span key={`g-${g.label}`} className="grouplabel">{g.label}</span>,
+          ...g.tabs.map((id) => {
+            const i = TAB_ORDER.indexOf(id);
+            return (
           <button
             key={id}
             className={`tab${tab === id ? ' on' : ''}`}
             onClick={() => setTab(id)}
-            title={`Ctrl+${i + 1} — ${TAB_LABELS[id]}`}
+            title={`Ctrl+${i === 9 ? 0 : i + 1} — ${TAB_LABELS[id]}`}
           >
             {TAB_LABELS[id]}
             {id === 'analysis' && analysis ? (
@@ -899,7 +930,9 @@ export default function App() {
               <span className="cnt">{libraryFunctions.length}</span>
             ) : null}
           </button>
-        ))}
+            );
+          }),
+        ])}
       </nav>
 
       <div className="wrap">
@@ -917,6 +950,22 @@ export default function App() {
           <span className="progress-stage">{analyzeStage.detail ?? stageLabel(analyzeStage.stage)}</span>
           <span className="muted small">{stageLabel(analyzeStage.stage)}</span>
         </div>
+      )}
+
+      {tab === 'score' && (
+        <ScoreTab
+          analysis={analysis}
+          runs={aiRuns}
+          batch={batch}
+          onOpenAnalysis={(ruleId) => {
+            setAnalysisFilter(ruleId);
+            setTab('analysis');
+          }}
+          onOpenRefactor={() => setTab('refactor')}
+          onAnalyzeApp={(id) => void analyzeAppById(id)}
+          onPrintReport={(html) => void printScoreReport(html)}
+          onNote={showToast}
+        />
       )}
 
       {tab === 'connect' && (
@@ -963,6 +1012,8 @@ export default function App() {
           rulesConfig={rulesConfig}
           onSaveRulesConfig={(c) => void saveRulesConfig(c)}
           onOpenScript={() => setTab('script')}
+          focusRule={analysisFilter}
+          onFilterUsed={() => setAnalysisFilter(null)}
           onOpenRefactor={() => setTab('refactor')}
           onOpenModel={() => setTab('model')}
           onAskAi={(finding) => {

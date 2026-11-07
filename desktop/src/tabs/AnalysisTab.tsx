@@ -67,6 +67,10 @@ type Props = {
   onOpenScript?: () => void;
   /** Переход к вкладке «Улучшенный скрипт» — из блока правок. */
   onOpenRefactor?: () => void;
+  /** Правило, по которому надо раскрыть находки (кнопка «Открыть» в «Оценке»). */
+  focusRule?: string | null;
+  /** Сообщить наверх, что фокус-правило применено. */
+  onFilterUsed?: () => void;
   /** Переход к вкладке «Модель данных». */
   onOpenModel?: () => void;
   /** Переход к вкладке «ИИ-чат» с вопросом по находке. */
@@ -167,6 +171,7 @@ function PatternRows(props: {
 export default function AnalysisTab(props: Props) {
   const {
     analysis, categories, onNote, onExport, onExportScript, onExportDataModel,
+    focusRule, onFilterUsed,
     rulesConfig, onSaveRulesConfig, onOpenScript, onOpenRefactor, onOpenModel, onAskAi,
   } = props;
 
@@ -185,6 +190,15 @@ export default function AnalysisTab(props: Props) {
 
   // Поиск по произвольному выражению (QSME: search any expression).
   const [exprQuery, setExprQuery] = useState('');
+
+  // Фокус-правило из «Оценки»: подставляется в поиск один раз.
+  useEffect(() => {
+    if (focusRule) {
+      setSearch(focusRule);
+      onFilterUsed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRule]);
 
   // Esc закрывает панель паттерна — иначе её можно закрыть только мышью.
   useEffect(() => {

@@ -2,7 +2,7 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'connect' | 'analysis' | 'script' | 'refactor' | 'summary' | 'model' | 'rules' | 'library' | 'ai';
+export type Tab = 'score' | 'connect' | 'analysis' | 'script' | 'refactor' | 'summary' | 'model' | 'rules' | 'library' | 'ai';
 
 /**
  * Одна правка в перечне вкладки «Улучшенный скрипт».
@@ -356,6 +356,10 @@ export type BatchItem = {
     /** Версия формулы оценки и вердикт (v2, 0.12.0). */
     scoreVersion?: number;
     verdict?: string;
+    /** Оценки по доменам и первоочередные исправления (v2, 0.13.0). */
+    domains?: Record<string, { score: number; verdict: string; word: string; findings: number; places: number }>;
+    top?: { ruleId: string; title: string; severity: string; domain: string | null; count: number; gain: number; hasFix: boolean }[];
+    forecast?: number | null;
   } | null;
 };
 
