@@ -844,3 +844,14 @@ table.rq tr.pat { cursor: pointer; }
 .dots i.n { background: var(--panel-3); }
 /* Таблица группы с горизонтальным скроллом. */
 .scrolltbl { overflow-x: auto; }
+
+/* Человеческое пояснение в раскрытой находке. */
+.whatblock {
+  margin: 4px 0 6px; padding: 6px 10px; border-radius: var(--r1, 8px);
+  background: var(--panel-2);
+}
+
+/* Настройки оценки на вкладке «Правила». */
+.scorecfg { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.scorecfg label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--fw); }
+.scorecfg input { padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r1); background: var(--panel); color: var(--text); }

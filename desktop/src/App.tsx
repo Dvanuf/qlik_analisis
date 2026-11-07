@@ -782,6 +782,32 @@ export default function App() {
     });
   }, [ruleInfo, ruleCat, ruleSearch]);
 
+  // История всех прогонов: колонка «Последняя оценка» в таблице приложений.
+  const [allRuns, setAllRuns] = useState<HistoryRun[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const runs = await window.qa.historyList({ limit: 500 });
+        if (alive) setAllRuns(runs);
+      } catch { /* без истории колонка просто пустая */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Последняя оценка каждого приложения — для колонки в «Подключении».
+  const scoresByApp = useMemo(() => {
+    const map: Record<string, { score: number; at: string; version: number }> = {};
+    for (const r of allRuns) {
+      const prev = map[r.appId];
+      // Прогон свежее — заменяет; при равных датах версия 2 приоритетнее.
+      if (!prev || r.at > prev.at || (r.at === prev.at && (r.scoreVersion ?? 1) > prev.version)) {
+        map[r.appId] = { score: r.score, at: r.at, version: r.scoreVersion ?? 1 };
+      }
+    }
+    return map;
+  }, [allRuns]);
+
   // Находки со строками скрипта — счётчик на вкладке «Скрипт загрузки».
   const scriptFindings = useMemo(
     () => (analysis?.findings ?? []).filter((f) => (f.lines?.length ?? 0) > 0).length,
@@ -993,6 +1019,7 @@ export default function App() {
           batchRunning={batchRunning}
           batchProgress={batchProgress}
           onSignIn={() => void signIn()}
+          scoresByApp={scoresByApp}
           onLoadApps={() => void loadApps()}
           onAnalyze={() => void analyzeSelected()}
           onAnalyzeAll={(ids) => void analyzeAll(ids)}

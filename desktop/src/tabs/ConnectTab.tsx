@@ -45,7 +45,11 @@ const STEPS = [
   },
 ] as const;
 
+type ScoresByApp = Record<string, { score: number; at: string; version: number }>;
+
 type Props = {
+  /** Последняя оценка каждого приложения — из истории прогонов. */
+  scoresByApp?: ScoresByApp;
   url: string; onUrl: (v: string) => void;
   insecure: boolean; onInsecure: (v: boolean) => void;
   platform: Platform; onPlatform: (p: Platform) => void;
@@ -91,6 +95,7 @@ function statusIcon(status: DoctorStep['status']): string {
 
 export default function ConnectTab(props: Props) {
   const {
+    scoresByApp,
     url, onUrl, insecure, onInsecure, platform, onPlatform,
     user, onUser, password, onPassword, cookie, onCookie, xrfKey, onXrfKey, csrfToken, onCsrfToken,
     apps, appId, onAppId, selectedIds, onSelectedIds,
@@ -499,6 +504,7 @@ export default function ConnectTab(props: Props) {
                   <th style={{ width: 230 }}>Владелец</th>
                   <th style={{ width: 260 }}>Тэги</th>
                   <th style={{ width: 130 }}>Вид</th>
+                  <th style={{ width: 110 }} title="Последняя оценка из истории прогонов">Оценка</th>
                 </tr>
               </thead>
               <tbody>
@@ -542,6 +548,13 @@ export default function ConnectTab(props: Props) {
                       <span className={`pill ${a.published === true ? 'ok' : 'mute'}`}>
                         {a.published === true ? 'опубликовано' : 'личное'}
                       </span>
+                    </td>
+                    <td style={{ width: 110 }}>
+                      {scoresByApp?.[a.id] ? (
+                        <span className={`pill ${scoresByApp[a.id].score < 50 ? 'error' : scoresByApp[a.id].score < 75 ? 'warning' : 'ok'}`}>
+                          {scoresByApp[a.id].score} · {new Date(scoresByApp[a.id].at).toLocaleDateString('ru-RU')}
+                        </span>
+                      ) : <span className="muted">—</span>}
                     </td>
                   </tr>
                 ))}

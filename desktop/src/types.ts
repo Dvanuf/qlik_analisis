@@ -397,6 +397,12 @@ export type RulesConfig = {
     thresholds: Record<string, Record<string, number>>;
     exclusions: Record<string, { tables?: string[] }>;
     suppress: { ruleId: string; app?: string; table?: string }[];
+  };  /** Веса и потолки формулы оценки v2 (раздел scoring в rules.json). */
+  scoring?: {
+    weights?: { error?: number; warning?: number; info?: number };
+    ceilings?: { error?: number; warning?: number; info?: number };
+    wastedCeiling?: number;
+    wastedRules?: string[];
   };
 };
 

@@ -226,6 +226,8 @@ export function computeScore(findings, options = {}) {
       wasted: Math.round(wasted.penalty),
       findings: list.length,
       places: list.reduce((s, f) => s + (Number(f?.count) || 1), 0),
+      // Общее число строк модели — доля лишних данных считается от него.
+      totalRows,
     },
   };
 }

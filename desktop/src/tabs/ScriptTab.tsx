@@ -110,7 +110,11 @@ export default function ScriptTab(props: Props) {
               className={active === f ? 'on' : ''}
               onClick={() => pick(f)}
             >
-              <span className="ln">стр. {f.lines?.join(', ')}</span>
+              {/* Одна строка: первое место и, если есть, сколько ещё — вместо ряда номеров. */}
+              <span className="ln">
+                {`строка ${f.lines?.[0] ?? '?'}`}
+                {(f.lines?.length ?? 0) > 1 ? ` · ещё ${(f.lines as number[]).length - 1}` : ''}
+              </span>
               <span>
                 <b>{f.ruleId}</b> · {f.title}
                 <div className="hint">{f.message}</div>

@@ -18,6 +18,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'warning',
     title: 'Неиспользуемое поле',
+    humanTitle: 'Поле не используется нигде',
+    whatHappened: 'Поле загружено, но не нужно ни в объектах, ни в скрипте — можно убрать и освободить память.',
     description: 'Поле загружено в модель данных, но не используется ни в одном выражении объекта или переменной.',
     recommendation: 'Удалить поле из модели данных — экономия оперативной памяти и лицензионной квоты Qlik Cloud.',
     run(ctx) {
@@ -61,6 +63,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'warning',
     title: 'Поле используется только в скрипте',
+    humanTitle: 'Поле нужно только скрипту',
+    whatHappened: 'Поле участвует в трансформациях, но дальше не используется — после загрузки его можно удалить.',
     description: 'Поле участвует в трансформациях скрипта, но не используется в визуальном слое.',
     recommendation: 'Проверить, можно ли убрать поле из загрузки целиком, а не только удалить его в конце скрипта.',
     run(ctx) {
@@ -99,6 +103,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'warning',
     title: 'Неиспользуемая таблица',
+    humanTitle: 'Таблица не используется',
+    whatHappened: 'Ни одно поле таблицы не используется — она грузится зря и занимает память.',
     description: 'Ни одно поле таблицы не используется во фронт-энде и в скрипте — таблицу можно удалить.',
     recommendation: 'Добавить DROP TABLE в конец скрипта загрузки.',
     run(ctx) {
@@ -142,6 +148,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'info',
     title: 'Неиспользуемая переменная',
+    humanTitle: 'Переменная не используется',
+    whatHappened: 'Переменная объявлена, но нигде не применяется — её можно удалить.',
     description: 'Переменная объявлена, но нигде не используется.',
     recommendation: 'Удалить переменную из скрипта.',
     run(ctx) {
@@ -168,6 +176,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'warning',
     title: 'Поле полностью заполнено NULL',
+    humanTitle: 'Поле состоит из пустых значений',
+    whatHappened: 'Все значения поля NULL — оно бесполезно для аналитики и занимает место.',
     description: 'Все значения поля равны NULL — поле бесполезно для аналитики.',
     recommendation: 'Исключить поле из модели данных либо исправить источник данных.',
     run(ctx) {
@@ -196,6 +206,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'warning',
     title: 'Пустая таблица',
+    humanTitle: 'Таблица без строк',
+    whatHappened: 'Таблица загружена, но пуста — время перезагрузки тратится впустую.',
     description: 'Таблица загружена, но не содержит ни одной строки.',
     recommendation: 'Проверить условия загрузки (WHERE) и источник данных.',
     run(ctx) {
@@ -222,6 +234,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'info',
     title: 'Ключ можно заменить на AutoNumber',
+    humanTitle: 'Ключ можно сжать через AutoNumber',
+    whatHappened: 'Ключевое поле хранится как текст с множеством повторов — AutoNumber сожмёт его в число.',
     description: 'Ключевое поле уникально и без NULL — его можно заменить счётчиком AutoNumber.',
     recommendation: 'Использовать AutoNumber вместо исходного ключа: экономит память и ускоряет joins.',
     run(ctx) {
@@ -255,6 +269,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'info',
     title: 'Лист без объектов',
+    humanTitle: 'Лист без объектов',
+    whatHappened: 'На листе нет ни одного объекта — пользователи его не видят.',
     description: 'На листе нет ни одного визуального объекта.',
     recommendation: 'Удалить пустой лист.',
     run(ctx) {
@@ -281,6 +297,8 @@ export const resourceRules = [
     category: CATEGORY,
     severity: 'info',
     title: 'Поле-константа',
+    humanTitle: 'Поле-константа',
+    whatHappened: 'Во всём поле одно уникальное значение — лишняя колонка в памяти.',
     description: 'Поле содержит единственное уникальное значение — избыточно для аналитики.',
     recommendation: 'Проверить, нужен ли атрибут в модели данных.',
     run(ctx) {

@@ -273,3 +273,12 @@ test('платформа по умолчанию берётся из графа,
   assert.equal(withPlatform.summary.platform, PLATFORM_VIEW);
   assert.equal(withPlatform.findings.some((f) => f.ruleId === 'Q001'), false);
 });
+
+test('этап 4: у каждого правила есть humanTitle и whatHappened', () => {
+  for (const rule of ALL_RULES) {
+    assert.ok(rule.humanTitle, `${rule.id}: нет humanTitle`);
+    assert.ok(rule.whatHappened, `${rule.id}: нет whatHappened`);
+    assert.ok(rule.humanTitle.length <= 60, `${rule.id}: humanTitle длиннее 60 символов`);
+    assert.ok(!/[<>]/.test(rule.whatHappened), `${rule.id}: whatHappened содержит HTML`);
+  }
+});

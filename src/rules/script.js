@@ -65,6 +65,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S001,
     title: 'Загрузка без явного списка полей',
+    humanTitle: 'LOAD тянет все поля источника',
+    whatHappened: 'LOAD * переносит в модель все поля источника, включая ненужные — лишняя память и риск ключей.',
     description: 'LOAD без перечисления полей тянет в память все поля источника — при изменении источника модель меняется молча.',
     recommendation: 'Перечислите поля явно: LOAD field1, field2 FROM ...',
     run(ctx) {
@@ -87,6 +89,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S002,
     title: 'Загрузка без фильтра WHERE',
+    humanTitle: 'Таблица грузится без фильтра',
+    whatHappened: 'Данные грузятся целиком и фильтруются уже в памяти Qlik — быстрее фильтровать в источнике.',
     description: 'Данные грузятся целиком и фильтруются уже в памяти Qlik.',
     recommendation: 'Добавить WHERE в LOAD, чтобы сократить объём памяти при загрузке.',
     run(ctx) {
@@ -113,6 +117,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S003,
     title: 'Цепочка RESIDENT',
+    humanTitle: 'Цепочка RESIDENT-таблиц',
+    whatHappened: 'Таблица строится из промежуточной, которая тоже построена из RESIDENT — данные копируются по цепочке.',
     description: 'Таблица строится из таблицы, построенной из RESIDENT — данные переписываются в памяти несколько раз.',
     recommendation: 'Свести трансформации в одну операцию либо использовать промежуточные QVD.',
     run(ctx) {
@@ -135,6 +141,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S004,
     title: 'CONCATENATE без NoConcatenate',
+    humanTitle: 'CONCATENATE без NoConcatenate',
+    whatHappened: 'Склеивание таблиц без явного флага создаёт синтетический ключ и путает строки.',
     description: 'CONCATENATE без флага NoConcatenate создаёт синтетический ключ, если у таблиц разные наборы полей.',
     recommendation: 'Использовать CONCATENATE(...) с NoConcatenate и явно описать ключ.',
     run(ctx) {
@@ -157,6 +165,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S005,
     title: 'Повторная загрузка таблицы',
+    humanTitle: 'Таблица загружается повторно',
+    whatHappened: 'Одна и та же таблица загружается несколько раз — риск задвоения строк.',
     description: 'Одна и та же таблица загружается несколько раз — риск задвоения или потери данных.',
     recommendation: 'Объединить загрузки или явно переименовать целевую таблицу (INTO).',
     run(ctx) {
@@ -186,6 +196,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S006,
     title: 'JOIN по неключевому полю',
+    humanTitle: 'JOIN по неключевому полю',
+    whatHappened: 'Соединение по полю без ключа может дать декартово произведение строк.',
     description: 'JOIN по полю, которое не является ключом, — движок создаёт синтетический ключ и join дорожает.',
     recommendation: 'Соединять по ключевым полям либо заранее подготовить ключ AutoNumber.',
     run(ctx) {
@@ -219,6 +231,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S007,
     title: 'В скрипте нет DROP FIELD',
+    humanTitle: 'Служебные поля остаются в модели',
+    whatHappened: 'После загрузки служебные поля не удалены — они занимают память при каждой перезагрузке.',
     description: 'Служебные поля остаются в модели данных и занимают память приложения.',
     recommendation: 'Добавить DROP FIELD в конец скрипта для полей, не используемых во фронт-энде.',
     run(ctx) {
@@ -238,6 +252,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S008,
     title: 'Неиспользуемая переменная скрипта',
+    humanTitle: 'Переменная скрипта не используется',
+    whatHappened: 'Переменная объявлена в скрипте, но нигде не используется.',
     description: 'Переменная объявлена, но нигде в скрипте не используется.',
     recommendation: 'Удалить объявление.',
     run(ctx) {
@@ -270,6 +286,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S009,
     title: 'Ссылка на неизвестную таблицу',
+    humanTitle: 'Ссылка на несуществующую таблицу',
+    whatHappened: 'RESIDENT или JOIN ссылается на таблицу, которой к этому моменту нет — загрузка упадёт.',
     description: 'Оператор RESIDENT или JOIN ссылается на таблицу, которая не загружается в этом скрипте.',
     recommendation: 'Исправить имя таблицы либо загрузить её раньше по скрипту.',
     run(ctx) {
@@ -304,6 +322,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S010,
     title: 'Структурная ошибка в скрипте',
+    humanTitle: 'Скрипт со структурной ошибкой',
+    whatHappened: 'Незакрытая строка или скобка — перезагрузка приложения упадёт.',
     description: 'Скрипт содержит незакрытую строку или скобки — загрузка упадёт.',
     recommendation: 'Исправить скрипт (Ctrl+ → Check syntax в редакторе).',
     run(ctx) {
@@ -331,6 +351,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S011,
     title: 'Скрипт без комментариев',
+    humanTitle: 'Скрипт без комментариев',
+    whatHappened: 'В скрипте нет ни одного комментария — поддерживать его будет тяжело.',
     description: 'В скрипте нет ни одного комментария — его невозможно понять без владельца.',
     recommendation: 'Документировать секции загрузки комментариями.',
     run(ctx) {
@@ -348,6 +370,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S012,
     title: 'Загрузка файла без указания формата',
+    humanTitle: 'Загрузка файла без формата',
+    whatHappened: 'Для файла не указан формат — Qlik угадывает его и тратит время на каждый прогон.',
     description: 'Для файла не задан формат (txt, qvd, csv, ...) — Qlik тратит время на определение структуры.',
     recommendation: 'Указать формат явно: FROM \'file.csv\' (txt, delimiter is \',\', embedded labels).',
     run(ctx) {
@@ -372,6 +396,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S013,
     title: 'Недостижимый код после EXIT SCRIPT',
+    humanTitle: 'Код после EXIT SCRIPT',
+    whatHappened: 'После безусловного EXIT SCRIPT остались операторы — они никогда не выполнятся.',
     description: 'После безусловного EXIT SCRIPT остались операторы — они никогда не выполняются.',
     recommendation: 'Удалить недостижимый код или убрать EXIT SCRIPT, если он не нужен.',
     run(ctx) {
@@ -404,6 +430,8 @@ export const scriptRules = [
     category: CATEGORY,
     severity: SEVERITY.S014,
     title: 'Ошибка в скрипте загрузки',
+    humanTitle: 'Сервер сообщил об ошибке скрипта',
+    whatHappened: 'Сервер проверил скрипт и нашёл ошибку с точной строкой — исправьте и перезагрузите приложение.',
     description: 'Сервер проверил скрипт и сообщил об ошибке — с указанием строки и колонки.',
     recommendation: 'Исправить скрипт в указанной строке и перезагрузить приложение.',
     run(ctx) {

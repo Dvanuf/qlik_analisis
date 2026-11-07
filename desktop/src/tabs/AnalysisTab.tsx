@@ -10,6 +10,11 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchExpressions } from '../../../src/script/search.js';
+import { ALL_RULES } from '../../../src/rules/index.js';
+
+// Метаданные правил: humanTitle и whatHappened — человеческие тексты этапа 4.
+const RULE_META = new Map(ALL_RULES.map((r) => [r.id, r]));
+const ruleMeta = (ruleId: string) => RULE_META.get(ruleId);
 import type {
   AnalysisResult, DomainId, Finding, FindingScope, Pattern, PatternRule,
   RulesConfig, Severity,
@@ -638,7 +643,7 @@ export default function AnalysisTab(props: Props) {
                 <td><code>{f.ruleId}</code></td>
                 <td>{f.category}</td>
                 <td>
-                  <b>{f.title}</b>
+                  <b>{ruleMeta(f.ruleId)?.humanTitle ?? f.title}</b>
                   {f.count && f.count > 1 && <span className="pill count">×{f.count}</span>}
                   <div className="muted">
                     {isOpen || !long ? f.message : `${f.message.slice(0, 90)}…`}
@@ -648,7 +653,20 @@ export default function AnalysisTab(props: Props) {
                     <div className="muted small">Таблицы: {f.tables.join(', ')}</div>
                   )}
                   {isOpen && (
+                    <div className="whatblock muted small">
+                      <b>Что случилось.</b> {ruleMeta(f.ruleId)?.whatHappened ?? f.message}
+                    </div>
+                  )}
+                  {isOpen && (
                     <div className="row-actions">
+                      {onOpenScript && (f.lines?.length ?? 0) > 0 && (
+                        <button
+                          className="link"
+                          onClick={(e) => { e.stopPropagation(); onOpenScript(); }}
+                        >
+                          показать в скрипте
+                        </button>
+                      )}
                       {onAskAi && (
                         <button
                           className="link"
@@ -852,7 +870,7 @@ export default function AnalysisTab(props: Props) {
         {openPattern ? (
           <>
             <div className="dh">
-              <h3>{openPattern.title}</h3>
+              <h3>{ruleMeta(openPattern.ruleId)?.humanTitle ?? openPattern.title}</h3>
               <div className="hint">
                 <b>{openPattern.ruleId}</b> · {DOMAIN_LABELS[openPattern.domain]}
               </div>
@@ -866,6 +884,11 @@ export default function AnalysisTab(props: Props) {
               </div>
             </div>
             <div className="db">
+              {ruleMeta(openPattern.ruleId)?.whatHappened && (
+                <p className="muted small" style={{ marginTop: 0 }}>
+                  <b>Что случилось.</b> {ruleMeta(openPattern.ruleId)?.whatHappened}
+                </p>
+              )}
               <div className="hint" style={{ marginBottom: 6 }}>Выражение</div>
               <div className="code">{openPattern.expression || openPattern.message}</div>
               <div className="hint" style={{ margin: '14px 0 6px' }}>

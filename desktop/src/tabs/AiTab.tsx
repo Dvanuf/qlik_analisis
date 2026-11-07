@@ -12,7 +12,7 @@
  *
  * Настройки провайдера, ключей и лимитов — в блоке «Настройки ИИ».
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { chatKey, loadChat, saveChat } from '../../../src/ai/chat-store.js';
 import type {
   AiAnswer, AiMessage, AiPromptPreview, AiStatus, AnalysisResult, Finding, HistoryRun, Comparison,
@@ -56,6 +56,47 @@ type QaApi = {
 
 function api(): QaApi {
   return (window as unknown as { qa: QaApi }).qa;
+}
+
+/**
+ * Минимальная разметка ответов ИИ: **жирный**, маркерованные и нумерованные
+ * списки, абзацы. Без HTML-инъекций — только React-элементы.
+ */
+function RichText({ text }: { text: string }) {
+  const inline = (chunk: string, keyPrefix: string) =>
+    chunk.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+      part.startsWith('**') && part.endsWith('**') && part.length > 4
+        ? <b key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</b>
+        : <span key={`${keyPrefix}-${i}`}>{part}</span>,
+    );
+  const blocks: ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  const flush = (key: string) => {
+    if (!list) return;
+    blocks.push(list.ordered
+      ? <ol key={key}>{list.items.map((it, i) => <li key={i}>{inline(it, `${key}-${i}`)}</li>)}</ol>
+      : <ul key={key}>{list.items.map((it, i) => <li key={i}>{inline(it, `${key}-${i}`)}</li>)}</ul>);
+    list = null;
+  };
+  text.split(/\r?\n/).forEach((raw, idx) => {
+    const line = raw.trim();
+    const ol = /^(\d+)[.)]\s+(.*)$/.exec(line);
+    const ul = /^[-*•]\s+(.*)$/.exec(line);
+    if (ol) {
+      if (!list || !list.ordered) { flush(`f${idx}`); list = { ordered: true, items: [] }; }
+      list.items.push(ol[2]);
+      return;
+    }
+    if (ul) {
+      if (!list || list.ordered) { flush(`f${idx}`); list = { ordered: false, items: [] }; }
+      list.items.push(ul[1]);
+      return;
+    }
+    flush(`f${idx}`);
+    if (line) blocks.push(<p key={`p${idx}`}>{inline(line, `p${idx}`)}</p>);
+  });
+  flush('tail');
+  return <>{blocks}</>;
 }
 
 export default function AiTab(props: Props) {
@@ -516,7 +557,7 @@ export default function AiTab(props: Props) {
               {m.provider ? <span className="muted small">{m.provider}</span> : null}
               {m.note ? <span className="muted small">{m.note}</span> : null}
             </div>
-            <div className="ai-msg-text">{m.text}</div>
+            <div className="ai-msg-text">{m.role === 'assistant' ? <RichText text={m.text} /> : m.text}</div>
           </div>
         ))}
         {busy && <div className="busy">Запрос к модели…</div>}

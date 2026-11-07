@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
+import { computeScore } from '../../../src/score/index.js';
 import type { AnalysisResult, RefactorChange } from '../types.js';
 
 type Props = {
@@ -76,6 +77,23 @@ export default function RefactorTab(props: Props) {
   const proposed = source === 'ai' && aiResult?.ok && aiResult.script?.trim()
     ? aiResult.script
     : rules.script;
+
+  // Сводка «правок N, оценка A → B»: пересчитываем скор по находкам,
+  // у которых включённая правка устраняет паттерн.
+  const scoreAfter = useMemo(() => {
+    if (!analysis?.summary) return null;
+    const meta = analysis.summary.scoreDetails as { details?: { totalRows?: number } } | undefined;
+    const totalRows = meta?.details?.totalRows ?? 0;
+    const remaining = (analysis.findings ?? []).filter((f) => {
+      const fix = (f as { fix?: { kind?: string; payload?: unknown } }).fix;
+      if (!fix?.kind) return true;
+      const field = typeof fix.payload === 'string' ? fix.payload : (fix.payload as { field?: string })?.field;
+      const id = fix.kind === 'autoNumber' ? `autoNumber:${field}` : fix.kind;
+      // Выключенные правки оставляем — они не применяются.
+      return off.has(id);
+    });
+    return (computeScore(remaining, { totalRows }) as { score: number }).score;
+  }, [analysis, off]);
   const added = source === 'ai' ? [] : rules.added;
   const rightLines = useMemo(() => proposed.split(/\r?\n/), [proposed]);
   const addedSet = useMemo(() => new Set(added), [added]);
@@ -151,7 +169,22 @@ export default function RefactorTab(props: Props) {
   }
 
   return (
-    <section className="split2">
+    <section>
+      {/* Сводка над сравнением — как в макете: правок N, оценка A → B. */}
+      <div className="card row" style={{ marginBottom: 12 }}>
+        <div><div className="muted">Правок</div><div className="num">{rules.changes.length}</div></div>
+        <div>
+          <div className="muted">Оценка</div>
+          <div className="num">
+            {analysis?.summary?.score ?? '—'}
+            {' → '}
+            {scoreAfter != null ? <span style={{ color: 'var(--success)' }}>{scoreAfter}</span> : '—'}
+          </div>
+        </div>
+        <span className="grow" />
+        <span className="hint">правки применяются по месту; экспорт — показанная версия целиком</span>
+      </div>
+      <section className="split2">
       <div className="card">
         <h3>
           Текущий скрипт
@@ -275,6 +308,7 @@ export default function RefactorTab(props: Props) {
           </span>
         </div>
       </div>
+      </section>
     </section>
   );
 }

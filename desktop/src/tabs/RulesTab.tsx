@@ -7,6 +7,7 @@
  */
 import { useMemo, useState } from 'react';
 import type { DomainId, RuleInfo, RulesConfig } from '../types.js';
+import { ALL_RULES } from '../../../src/rules/index.js';
 
 /** Подписи доменов — как в остальном интерфейсе. */
 const DOMAIN_LABELS: Record<DomainId, string> = {
@@ -113,6 +114,34 @@ export default function RulesTab(props: Props) {
 
   const excludedTables = (id: string) => (rulesConfig?.rules.exclusions?.[id]?.tables ?? []).join(', ');
 
+  /** Пресет: Строгий — всё включено; Стандартный — дефолт; Только ошибки —
+   *  предупреждения и замечания выключены (по умолчанию важности правил). */
+  const applyPreset = (name: 'strict' | 'standard' | 'errors-only') => {
+    if (!rulesConfig) return;
+    let disabled: string[] = [];
+    if (name === 'errors-only') {
+      disabled = ALL_RULES.filter((r) => r.severity !== 'error').map((r) => r.id);
+    }
+    onSave({ ...rulesConfig, rules: { ...rulesConfig.rules, disabled } });
+  };
+
+  /** Правка одного веса/потолка в разделе scoring. */
+  const setScoringValue = (path: string, raw: string) => {
+    if (!rulesConfig) return;
+    const num = Number(raw.replace(',', '.'));
+    if (!Number.isFinite(num) || num < 0) return;
+    const [group, key] = path.split('.');
+    const base = { ...(rulesConfig.scoring ?? {}) } as Record<string, unknown>;
+    if (key) {
+      const sub = { ...((base[group] as Record<string, number>) ?? {}) };
+      sub[key] = num;
+      base[group] = sub;
+    } else {
+      base[group] = num;
+    }
+    onSave({ ...rulesConfig, scoring: base } as RulesConfig);
+  };
+
   return (
     <section className="card wide">
       <h2>Каталог правил ({ruleInfo?.total ?? 0})</h2>
@@ -147,6 +176,17 @@ export default function RulesTab(props: Props) {
         <span className="muted">показано {rules.length}</span>
       </div>
 
+      {/* Пресеты настроек (ТЗ этап 4): Строгий / Стандартный / Только ошибки. */}
+      <div className="toolbar">
+        <span className="muted">Пресет</span>
+        <button onClick={() => applyPreset('strict')}>Строгий</button>
+        <button onClick={() => applyPreset('standard')}>Стандартный</button>
+        <button onClick={() => applyPreset('errors-only')}>Только ошибки</button>
+        <span className="muted small" style={{ marginLeft: 'auto' }}>
+          Пресет заменяет список отключённых правил; примените «Сохранить настройки».
+        </span>
+      </div>
+
       <div className="actions">
         <button className="primary" onClick={() => rulesConfig && onSave(rulesConfig)} disabled={!rulesConfig}>
           Сохранить настройки
@@ -157,6 +197,42 @@ export default function RulesTab(props: Props) {
           Настройки применяются к следующему анализу и хранятся в файле rules.json рядом с данными приложения.
         </span>
       </div>
+
+      {/* Настройки оценки: веса и потолки формулы v2 (rules.json -> scoring). */}
+      {rulesConfig && (
+        <div className="card" style={{ margin: '12px 0' }}>
+          <h3>Настройки оценки</h3>
+          <div className="scorecfg">
+            {([
+              ['weights.error', 'Штраф за ошибку'],
+              ['weights.warning', 'Штраф за предупреждение'],
+              ['weights.info', 'Штраф за замечание'],
+              ['ceilings.error', 'Потолок: ошибки'],
+              ['ceilings.warning', 'Потолок: предупреждения'],
+              ['ceilings.info', 'Потолок: замечания'],
+              ['wastedCeiling', 'Потолок: лишние данные'],
+            ] as [string, string][]).map(([path, label]) => {
+              const [group, key] = path.split('.');
+              const scoring = rulesConfig.scoring as unknown as Record<string, Record<string, number> | number>;
+              const value = key ? (scoring?.[group] as Record<string, number>)?.[key] : scoring?.[group];
+              return (
+                <label key={path}>
+                  {label}
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={String(value ?? '')}
+                    onChange={(e) => setScoringValue(path, e.target.value)}
+                  />
+                </label>
+              );
+            })}
+            <p className="muted small" style={{ gridColumn: '1 / -1', margin: 0 }}>
+              Балл = 100 − штрафы; вес паттерна растёт как 1 + log2(мест). Версия формулы записана в истории прогонов.
+            </p>
+          </div>
+        </div>
+      )}
 
       <table className="rules">
         <thead>
