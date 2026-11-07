@@ -11,6 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DEFAULT_THRESHOLDS, DEFAULT_EXCLUDED_TABLES } from './settings.js';
+import { DEFAULT_SCORING, normalizeScoring } from '../score/index.js';
 
 /** Имя файла конфигурации в каталоге данных приложения. */
 export const RULES_CONFIG_FILE = 'rules.json';
@@ -24,6 +25,13 @@ export function defaultRulesConfig() {
       thresholds: { ...DEFAULT_THRESHOLDS },
       exclusions: { S002: { tables: [...DEFAULT_EXCLUDED_TABLES] } },
       suppress: [],
+    },
+    // Веса и потолки формулы оценки — настраиваются пользователем.
+    scoring: {
+      weights: { ...DEFAULT_SCORING.weights },
+      ceilings: { ...DEFAULT_SCORING.ceilings },
+      wastedCeiling: DEFAULT_SCORING.wastedCeiling,
+      wastedRules: [...DEFAULT_SCORING.wastedRules],
     },
   };
 }
@@ -49,6 +57,7 @@ export function readRulesConfig(path) {
         exclusions: { ...base.rules.exclusions, ...(rules.exclusions ?? {}) },
         suppress: Array.isArray(rules.suppress) ? rules.suppress : [],
       },
+      scoring: normalizeScoring(raw?.scoring),
     };
   } catch {
     // Битый файл не должен ломать запуск — берём значения по умолчанию.
@@ -119,5 +128,6 @@ export function sanitizeRulesConfig(config, knownIds = []) {
       exclusions: { ...base.rules.exclusions, ...exclusions },
       suppress,
     },
+    scoring: normalizeScoring(config?.scoring),
   };
 }

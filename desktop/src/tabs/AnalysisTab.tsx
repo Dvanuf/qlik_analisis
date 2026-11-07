@@ -448,7 +448,8 @@ export default function AnalysisTab(props: Props) {
                 <span className="f"><b>{d.failed}</b>нарушено</span>
                 <span className="o"><b>{d.passed}</b>пройдено</span>
                 <span className="s"><b>{d.skipped}</b>пропущено</span>
-                <span style={{ marginLeft: 'auto' }}><b>{d.places}</b>находок</span>
+                {/* d.places — это места (f.count), а не записи находок. */}
+                <span style={{ marginLeft: 'auto' }}><b>{d.places}</b>&nbsp;{plural(d.places, 'место', 'места', 'мест')}</span>
               </div>
               <div className="bar">
                 <i className="f" style={{ width: `${(d.failed / tot) * 100}%` }} />

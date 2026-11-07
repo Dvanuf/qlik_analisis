@@ -700,7 +700,9 @@ ipcMain.handle('core:analyze-all', async (_e, opts: {
     insecure: opts.insecure,
     // undefined = платформа определяется автоматически по типу API экстрактора.
     platform: opts.platform,
-    rules: { platform: opts.platform, ...currentRules() },
+    // Вложенно, как при одиночном анализе: иначе подавления (rules.suppress)
+    // и остальные настройки при пакетном прогоне не работают.
+    rules: currentRules(),
     pauseMs: opts.pauseMs ?? 1000,
     // Пустой список — анализируем все приложения сервера.
     appIds: opts.appIds?.length ? opts.appIds : undefined,
@@ -777,14 +779,18 @@ ipcMain.handle('core:history-save', async (_e, payload: {
 }) => {
   const db = await openHistory(historyPath());
   try {
+    const summary = (payload.summary ?? {}) as { scoreVersion?: number };
     const runId = saveRun(db, {
       appId: payload.appId,
       appName: payload.appName ?? '',
       at: payload.at,
       score: payload.score ?? 0,
-      summary: (payload.summary ?? {}) as never,
+      summary: summary as never,
       findings: (payload.findings ?? []) as never[],
       rulesVersion: RULES_VERSION,
+      // Версия формулы берётся из сводки анализа: по ней тренд сравнивает
+      // только сопоставимые прогоны.
+      scoreVersion: summary.scoreVersion ?? 1,
     });
     return { runId };
   } finally {

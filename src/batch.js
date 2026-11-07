@@ -15,6 +15,22 @@ import { analyze } from './analyzer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Стабильная подпись настроек правил.
+ *
+ * Кэш пакетного прогона сверяется не только с lastReload приложения,
+ * но и с настройками: иначе после изменения правил (включение, важность,
+ * пороги, подавления) сводный отчёт показывает старые цифры, а «Анализ» —
+ * свежие, и числа расходятся.
+ */
+export function settingsHash(rules) {
+  const keys = Object.keys(rules ?? {}).sort();
+  const stable = keys.map((k) => `${k}:${JSON.stringify(rules[k])}`).join('|');
+  let h = 5381;
+  for (let i = 0; i < stable.length; i += 1) h = ((h << 5) + h + stable.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 /** Кэш анализа: <dir>/<appId>.json */
 function cachePath(dir, appId) {
   return resolve(dir, `${String(appId).replace(/[^\w-]/g, '_')}.json`);
@@ -89,7 +105,11 @@ export async function analyzeAll(options) {
 
       try {
         const cached = useCache && cacheDir ? readCache(cacheDir, app.id) : null;
-        if (cached && cached.lastReload && cached.lastReload === app.lastReload) {
+        // Настройки правил входят в подпись кэша: смена правил делает
+        // прежние сводки недействительными даже при том же lastReload.
+        const cacheTag = settingsHash(rules);
+        if (cached && cached.lastReload && cached.lastReload === app.lastReload
+          && cached.settingsHash === cacheTag) {
           results.push({ ...cached, fromCache: true });
           onProgress({
             phase: 'done', index: i, total, appId: app.id, title: app.title,
@@ -124,6 +144,7 @@ export async function analyzeAll(options) {
           tags: app.tags ?? [],
           published: app.published ?? null,
           lastReload: graph.meta?.lastReload ?? app.lastReload ?? null,
+          settingsHash: cacheTag,
           fromCache: false,
           summary: result.summary,
           findings: result.findings,

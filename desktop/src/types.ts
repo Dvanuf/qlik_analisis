@@ -262,6 +262,16 @@ export type AnalysisResult = {
     savings?: { removableFields: number; removableRows: number };
     score?: number;
     scoreDetails?: { formula: string; checks: number; penalty: number };
+    /** Версия формулы оценки: v2 — расчёт по паттернам с потолками. */
+    scoreVersion?: number;
+    /** Вердикт по баллу: Отлично / Хорошо / Требует внимания / Критично. */
+    verdict?: string;
+    /** Оценки по доменам — той же формулой (для вкладки «Оценка»). */
+    domains?: Record<string, { score: number; verdict: string; word: string; findings: number; places: number }>;
+    /** Первоочередные исправления: сортировка по приросту балла. */
+    top?: { ruleId: string; title: string; severity: string; domain: string | null; count: number; gain: number; hasFix: boolean }[];
+    /** Прогноз: балл после устранения первых трёх исправлений. */
+    forecast?: number | null;
     /** Платформа, определённая ядром по данным сервера или выбором пользователя. */
     platform?: string;
   };
@@ -343,6 +353,9 @@ export type BatchItem = {
     findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number> };
     savings?: { removableFields: number; removableRows: number };
     score?: number;
+    /** Версия формулы оценки и вердикт (v2, 0.12.0). */
+    scoreVersion?: number;
+    verdict?: string;
   } | null;
 };
 
@@ -357,6 +370,8 @@ export type BatchTotals = {
 export type HistoryRun = {
   id: number; appId: string; appName: string; at: string;
   rulesVersion: string; score: number;
+  /** Версия формулы оценки: тренд сравнивает только сопоставимые прогоны. */
+  scoreVersion?: number;
   errors: number; warnings: number; infos: number; total: number;
 };
 

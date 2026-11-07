@@ -611,6 +611,8 @@ export default function App() {
         stream: r.stream ?? '',
         owner: r.owner ?? '',
         tags: (r.tags ?? []).join(', '),
+        score: r.summary?.score ?? '',
+        scoreVersion: r.summary?.scoreVersion ?? '',
       };
       for (const f of r.findings ?? []) {
         rows.push({
@@ -619,6 +621,8 @@ export default function App() {
           stream: meta.stream,
           owner: meta.owner,
           tags: meta.tags,
+          score: meta.score,
+          scoreVersion: meta.scoreVersion,
           ruleId: f.ruleId ?? '',
           category: f.category ?? '',
           severity: f.severity === 'error' ? 'Ошибка'

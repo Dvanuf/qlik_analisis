@@ -8,7 +8,7 @@ import { parseScript } from './script/parse.js';
 import { buildOutline } from './script/outline.js';
 import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
-import { computeScore } from './score.js';
+import { computeScore } from './score/index.js';
 import { buildDataModelSheets } from './report/data-model.js';
 import { buildScriptIndex, findingLines } from './findings/locations.js';
 import { groupFindings } from './findings/group.js';
@@ -115,9 +115,14 @@ export function analyze(graph, config = {}) {
   const removable = findings.filter((f) => f.fix?.kind === 'dropField' && f.impact?.rows != null);
   const removableRows = removable.reduce((acc, f) => acc + (f.impact.rows ?? 0), 0);
 
-  // Скор 0–100: чем больше находок на выполненную проверку, тем ниже скор.
-  const checks = ruleStats.filter((s) => !s.skipped).length;
-  const score = computeScore({ bySeverity, checks });
+  // Скор v2: считается по находкам-паттернам (вес растёт медленно с числом
+  // мест), с потолками по важности и отдельным штрафом за лишние данные.
+  // Доля лишнего считается от всех строк модели — она приходит из графа.
+  const totalRows = (graph.tables ?? []).reduce((s, t) => s + (Number(t.rows) || 0), 0);
+  const score = computeScore(locatedFindings, {
+    scoring: config.scoring,
+    totalRows,
+  });
 
   const summary = {
     appName: graph.appName || '(без названия)',
@@ -167,6 +172,10 @@ export function analyze(graph, config = {}) {
       suppressed: suppressed.length,
     },
     score: score.score,
+    // Версия формулы: тренд в истории считается только между прогонами
+    // одной версии (v2 — расчёт по паттернам с потолками).
+    scoreVersion: score.scoreVersion,
+    verdict: score.verdict,
     scoreDetails: score,
     savings: {
       removableFields: removable.length,

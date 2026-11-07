@@ -14,6 +14,13 @@ import { dirname, resolve } from 'node:path';
 /** Версия набора правил — попадает в историю, чтобы сравнивать прогоны честно. */
 export const RULES_VERSION = '0.5.0';
 
+/**
+ * Версия формулы оценки. Со сменой формулы (v2, расчёт по паттернам с
+ * потолками) прежние баллы несопоставимы с новыми — тренд считается только
+ * между прогонами одной версии. Прогоны до миграции считаются версией 1.
+ */
+export const SCORE_VERSION = 2;
+
 let sqliteModule = null;
 
 /** Ленивая загрузка node:sqlite: на старых Node импорт не должен ронять приложение. */
@@ -67,7 +74,22 @@ export async function openHistory(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_findings_run ON findings(run_id);
     CREATE INDEX IF NOT EXISTS idx_runs_app ON runs(app_id);
   `);
+  migrate(db);
   return db;
+}
+
+/**
+ * Миграция схемы на существующей базе.
+ *
+ * node:sqlite не умеет «CREATE COLUMN IF NOT EXISTS», поэтому наличие
+ * колонки проверяется через table_info: колонка score_version нужна,
+ * чтобы отличать баллы старой формулы (1) от новой (2).
+ */
+function migrate(db) {
+  const cols = db.prepare('PRAGMA table_info(runs)').all().map((c) => c.name);
+  if (!cols.includes('score_version')) {
+    db.exec('ALTER TABLE runs ADD COLUMN score_version INTEGER NOT NULL DEFAULT 1');
+  }
 }
 
 /**
@@ -78,11 +100,13 @@ export async function openHistory(dbPath) {
  */
 export function saveRun(db, run) {
   const summary = run.summary ?? {};
-  const bySeverity = summary.bySeverity ?? {};
+  // Счётчики по важности живут в summary.findings.bySeverity; плоский
+  // summary.bySeverity поддержан для совместимости со старыми callers.
+  const bySeverity = summary.findings?.bySeverity ?? summary.bySeverity ?? {};
   const at = run.at ?? new Date().toISOString();
   const info = db.prepare(`
-    INSERT INTO runs (app_id, app_name, at, rules_version, score, errors, warnings, infos, total)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO runs (app_id, app_name, at, rules_version, score, errors, warnings, infos, total, score_version)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     String(run.appId ?? ''),
     String(run.appName ?? ''),
@@ -92,7 +116,8 @@ export function saveRun(db, run) {
     Number(bySeverity.error ?? 0),
     Number(bySeverity.warning ?? 0),
     Number(bySeverity.info ?? 0),
-    Number(summary.total ?? (run.findings ?? []).length),
+    Number(summary.findings?.total ?? summary.total ?? (run.findings ?? []).length),
+    Number(run.scoreVersion ?? summary.scoreVersion ?? 1),
   );
   const runId = Number(info.lastInsertRowid);
 
@@ -132,6 +157,8 @@ export function listRuns(db, options = {}) {
     at: r.at,
     rulesVersion: r.rules_version,
     score: Number(r.score ?? 0),
+    // Версия формулы: тренд считается только между прогонами одной версии.
+    scoreVersion: Number(r.score_version ?? 1),
     errors: Number(r.errors ?? 0),
     warnings: Number(r.warnings ?? 0),
     infos: Number(r.infos ?? 0),

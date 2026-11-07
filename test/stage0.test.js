@@ -11,7 +11,7 @@ import { analyze } from '../src/analyzer.js';
 import { checkScriptStructure, analyzeScriptIntegrity } from '../src/script/integrity.js';
 import { dedupeFindings } from '../src/findings/dedupe.js';
 import { parseIgnoreDirectives, applySuppression } from '../src/findings/suppress.js';
-import { computeScore } from '../src/score.js';
+import { computeScore } from '../src/score/index.js';
 import { maskSecrets, maskUrl } from '../src/logging/mask.js';
 import { normalizeRuleSettings, matchesExcludedTable } from '../src/rules/settings.js';
 
@@ -175,12 +175,16 @@ test('настройки правил: важность правила пере�
   assert.equal(s010[0].severity, 'info');
 });
 
-test('скор приложения: 100 при отсутствии находок и 0 при множестве ошибок', () => {
-  assert.equal(computeScore({ bySeverity: { error: 0, warning: 0, info: 0 }, checks: 40 }).score, 100);
-  const many = computeScore({ bySeverity: { error: 50, warning: 0, info: 0 }, checks: 40 }).score;
-  assert.equal(many, 0);
-  const one = computeScore({ bySeverity: { error: 1, warning: 0, info: 0 }, checks: 40 }).score;
-  assert.ok(one > 90 && one < 100, `скор одной ошибки: ${one}`);
+test('скор v2: 100 без находок; потолки держат балл при множестве ошибок', () => {
+  assert.equal(computeScore([]).score, 100);
+  // 50 ошибок по одному месту: сумма 500, потолок ошибок 40 → 60, не 0.
+  const many = computeScore(
+    Array.from({ length: 50 }, (_, i) => ({ ruleId: `R${i}`, severity: 'error', count: 1, domain: 'model' })),
+  ).score;
+  assert.equal(many, 60, `скор 50 ошибок с потолком: ${many}`);
+  // Одна ошибка: 100 − 10 = 90.
+  const one = computeScore([{ ruleId: 'R001', severity: 'error', count: 1, domain: 'model' }]).score;
+  assert.equal(one, 90, `скор одной ошибки: ${one}`);
 });
 
 test('маскирование: cookie, CSRF-токен и ключи не попадают в лог', () => {
