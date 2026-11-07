@@ -17,6 +17,8 @@ const APP = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'App.tsx'), 'utf8
 const SCRIPT_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ScriptTab.tsx'), 'utf8');
 const ANALYSIS_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'AnalysisTab.tsx'), 'utf8');
 const REFACTOR_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'RefactorTab.tsx'), 'utf8');
+const AI_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'AiTab.tsx'), 'utf8');
+const TYPES = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'types.ts'), 'utf8');
 const STYLES = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'styles.css'), 'utf8');
 
 test('App: тосты — showToast есть, тихие exportNote-строки убраны', () => {
@@ -70,4 +72,43 @@ test('styles.css: варианты тоста и подсветка поиска
   assert.ok(STYLES.includes('.toast.err::before'), 'нет маркера ошибки');
   assert.ok(STYLES.includes('.lnfind'), 'нет тулбара поиска');
   assert.ok(STYLES.includes('.codeview .l.mhit') && STYLES.includes('.codeview .l.mcur'), 'нет стилей совпадений');
+});
+
+test('styles.css: тёмная тема — заливки через --solid, ссылки через --link', () => {
+  // Регрессия 0.11.0: в dark --brand светлеет, и белые подписи на кнопках
+  // и шапках таблиц давали контраст ≈2.1:1. Заливки держатся на --solid,
+  // который в dark остаётся тёмным.
+  assert.ok(STYLES.includes('--solid: var(--brand)'), 'нет --solid в :root');
+  assert.ok(/--solid: #00873d/.test(STYLES), 'нет тёмного --solid в dark-медиа');
+  assert.ok(!STYLES.includes('background: var(--navy);'), 'остались заливки var(--navy)');
+  assert.ok(!STYLES.includes('#1d4ed8'), 'ссылки захардкожены мимо --link');
+  assert.ok(STYLES.includes('--link: #7fb3ff'), 'нет светлого --link для dark');
+});
+
+test('styles.css: sheetbar не переполняется, недостающие классы описаны', () => {
+  assert.ok(/\.sheetbar \{[^}]*overflow-x: auto/s.test(STYLES), 'sheetbar без горизонтального скролла');
+  assert.ok(/\.sheetbar \.tab \{[^}]*white-space: nowrap/s.test(STYLES), 'подписи вкладок заворачиваются');
+  for (const cls of ['.btn {', '.code {', '.num {', '.err {', '.ok {', '.checks {']) {
+    assert.ok(STYLES.includes(cls), `нет класса ${cls}`);
+  }
+  // Имя приложения в шапке обрезается, а не растягивает хаб.
+  assert.ok(/\.hub \.apppick \{[^}]*text-overflow: ellipsis/s.test(STYLES), 'apppick без ellipsis');
+});
+
+test('AnalysisTab: переключатель подавленных жив, мёртвый selected удалён', () => {
+  assert.ok(ANALYSIS_TAB.includes('setShowSuppressed((v) => !v)'), 'нет переключателя подавленных');
+  assert.ok(!ANALYSIS_TAB.includes('setSelected'), 'остался мёртвый selected');
+  assert.ok(!ANALYSIS_TAB.includes('const [selected'), 'объявление selected не удалено');
+});
+
+test('AiTab: дубль подписи «Конфиденциальность» убран, чекбоксы в ряду', () => {
+  const count = (AI_TAB.match(/Конфиденциальность<\/td>/g) ?? []).length;
+  assert.equal(count, 1, `ячейка «Конфиденциальность» встречается ${count} раз`);
+  assert.ok(AI_TAB.includes('className="checks"'), 'чекбоксы не обёрнуты в .checks');
+});
+
+test('App: аватар удалён, платформа показывается из анализа', () => {
+  assert.ok(!APP.includes('className="avatar"'), 'декоративный аватар остался');
+  assert.ok(APP.includes('platformLabel'), 'платформа не выводится в шапке');
+  assert.ok(TYPES.includes('platform?: string'), 'в AnalysisResult.summary нет поля platform');
 });

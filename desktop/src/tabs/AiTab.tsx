@@ -387,23 +387,25 @@ export default function AiTab(props: Props) {
                 <tr>
                   <td>Резервные провайдеры</td>
                   <td>
-                    {status.providers.filter((p) => p.id !== status.provider).map((p) => (
-                      <label key={p.id} className="muted small">
-                        <input
-                          type="checkbox"
-                          checked={status.fallback.includes(p.id)}
-                          onChange={(e) => {
-                            const fallback = e.target.checked
-                              ? [...status.fallback, p.id]
-                              : status.fallback.filter((x) => x !== p.id);
-                            const next = { ...status, fallback };
-                            setStatus(next);
-                            void api().aiSaveSettings({ fallback });
-                          }}
-                        />{' '}
-                        {p.label}
-                      </label>
-                    ))}
+                    <div className="checks">
+                      {status.providers.filter((p) => p.id !== status.provider).map((p) => (
+                        <label key={p.id} className="muted small">
+                          <input
+                            type="checkbox"
+                            checked={status.fallback.includes(p.id)}
+                            onChange={(e) => {
+                              const fallback = e.target.checked
+                                ? [...status.fallback, p.id]
+                                : status.fallback.filter((x) => x !== p.id);
+                              const next = { ...status, fallback };
+                              setStatus(next);
+                              void api().aiSaveSettings({ fallback });
+                            }}
+                          />{' '}
+                          {p.label}
+                        </label>
+                      ))}
+                    </div>
                   </td>
                 </tr>
                 <tr>
@@ -421,7 +423,6 @@ export default function AiTab(props: Props) {
                   </td>
                 </tr>
                 <tr>
-                  <td>Конфиденциальность</td>
                   <td>Конфиденциальность</td>
                   <td>
                     <label className="muted small">

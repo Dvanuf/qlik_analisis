@@ -262,6 +262,8 @@ export type AnalysisResult = {
     savings?: { removableFields: number; removableRows: number };
     score?: number;
     scoreDetails?: { formula: string; checks: number; penalty: number };
+    /** Платформа, определённая ядром по данным сервера или выбором пользователя. */
+    platform?: string;
   };
   findings: Finding[];
   suppressed?: Finding[];

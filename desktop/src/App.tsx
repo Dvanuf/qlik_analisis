@@ -818,6 +818,11 @@ export default function App() {
   const currentApp = apps.find((a) => a.id === appId);
   const appTitle = analysis?.appName ?? currentApp?.title ?? 'Приложение не выбрано';
   const appIdShort = analysis?.appId ?? appId;
+  // Платформа из анализа: ядро определяет её по данным сервера или берёт выбор пользователя.
+  const platformLabel = analysis?.summary?.platform
+    ? ({ 'qlik-sense': 'Qlik Sense', qlikview: 'QlikView', any: 'on-prem' } as Record<string, string>)[analysis.summary.platform]
+      ?? analysis.summary.platform
+    : null;
 
   return (
     <div className="app">
@@ -825,12 +830,12 @@ export default function App() {
         <div className="qlmark" aria-hidden="true">Q</div>
         <div className="qlname">Qlik Анализатор</div>
         <div className="sep" />
-        <div className="apppick">
+        <div className="apppick" title={appTitle}>
           <span className="live" />
           {appTitle}
         </div>
         <span className="hint">
-          {appIdShort ? `on-prem · ${String(appIdShort).slice(0, 8)}…` : 'on-prem'}
+          {platformLabel ?? 'on-prem'}{appIdShort ? ` · ${String(appIdShort).slice(0, 8)}…` : ''}
         </span>
         <div className="grow" />
         <div className="zoomer" role="group" aria-label="Размер шрифта">
@@ -864,7 +869,6 @@ export default function App() {
         >
           ⟳
         </button>
-        <div className="avatar" title="Пользователь">АВ</div>
       </div>
 
       <nav className="sheetbar">

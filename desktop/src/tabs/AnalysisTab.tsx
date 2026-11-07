@@ -180,7 +180,6 @@ export default function AnalysisTab(props: Props) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('severity');
   const [sortAsc, setSortAsc] = useState(true);
-  const [selected, setSelected] = useState<Finding | null>(null);
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -618,7 +617,7 @@ export default function AnalysisTab(props: Props) {
               <tr
                 key={key}
                 className="clickable"
-                onClick={() => { setSelected(f); if (long) setExpanded(toggle(expanded, key)); }}
+                onClick={() => { if (long) setExpanded(toggle(expanded, key)); }}
               >
                 <td><span className={`pill ${f.severity}`}>{SEVERITIES.find((s) => s.id === f.severity)?.label ?? f.severity}</span></td>
                 <td><code>{f.ruleId}</code></td>
@@ -722,17 +721,6 @@ export default function AnalysisTab(props: Props) {
               {analysis.scriptErrors.map((e, i) => (
                 <tr
                   key={`${e.line}-${i}`}
-                  className={e.line ? 'link-row' : ''}
-                  onClick={() => {
-                    if (!e.line) return;
-                    setSelected({
-                      ruleId: 'S014', category: 'Script', severity: 'error',
-                      title: 'Ошибка в скрипте загрузки',
-                      message: e.message, recommendation: 'Исправить скрипт и перезагрузить приложение.',
-                      detail: e.column ? `Колонка ${e.column}` : undefined,
-                      line: e.line,
-                    });
-                  }}
                 >
                   <td>{e.line ?? '—'}</td>
                   <td>{e.column ?? '—'}</td>
@@ -804,7 +792,16 @@ export default function AnalysisTab(props: Props) {
       {/* --- Подавленные находки --- */}
       {showSuppressed && suppressed.length > 0 && (
         <>
-          <h3>Подавленные находки</h3>
+          <h3>
+            Подавленные находки
+            <button
+              className="link"
+              onClick={() => setShowSuppressed((v) => !v)}
+              aria-expanded={showSuppressed}
+            >
+              {' '}· {showSuppressed ? 'скрыть' : `показать (${suppressed.length})`}
+            </button>
+          </h3>
           <table className="findings">
             <thead>
               <tr><th>Правило</th><th>Находка</th><th>Причина</th><th /></tr>
