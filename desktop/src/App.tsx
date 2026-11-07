@@ -505,7 +505,9 @@ export default function App() {
     try {
       const res = await window.qa.analyzeApp({ ...conn, appId: targetAppId, platform });
       setAnalysis(res);
-      setTab('score');
+      // «Открыть»/«анализ» из сводных представлений — это детальный разбор
+      // находок; на «Оценку» переводит основной анализ приложения.
+      setTab('analysis');
     } catch (err) {
       showToast(`Не удалось проанализировать приложение: ${String(err)}`);
       setTab('summary');

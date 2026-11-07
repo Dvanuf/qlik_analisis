@@ -8,6 +8,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { DOMAIN_ORDER, DOMAIN_LABELS } from '../../../src/rules/domains.js';
+import { v2Info } from '../v2fallback.js';
 
 // Домен из находки — строка; подписи ядра имеют конкретные ключи.
 const DL = DOMAIN_LABELS as Record<string, string>;
@@ -327,7 +328,7 @@ export default function ScoreTab(props: Props) {
               <thead>
                 <tr>
                   <th>Приложение</th><th style={{ width: '22%' }}>Оценка</th>
-                  <th>Домены</th><th>Что сделать первым</th><th>Тренд</th>
+                  <th>Домены</th><th>Что сделать первым</th><th title="Появится после двух прогонов приложения одной версии формулы">Тренд</th>
                 </tr>
               </thead>
               <tbody>
@@ -343,14 +344,14 @@ export default function ScoreTab(props: Props) {
                     <td>
                       <div className="dots">
                         {DOMAIN_ORDER.map((id) => {
-                          const d = item.summary?.domains?.[id]?.score;
+                          const d = v2Info(item).domains?.[id]?.score;
                           return d == null
                             ? <i key={id} className="n" title={DL[id]} />
                             : <i key={id} className={zone(d)} title={`${DL[id]}: ${d}`} />;
                         })}
                       </div>
                     </td>
-                    <td className="muted">{item.summary?.top?.[0]?.title ?? '—'}</td>
+                    <td className="muted">{v2Info(item).top?.[0]?.title ?? '—'}</td>
                     <td>
                       {(() => {
                         const tr = trendOf(item.appId);

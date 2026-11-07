@@ -193,7 +193,7 @@ export default function RefactorTab(props: Props) {
             {script.split(/\r?\n/).length} строк · подсвечены места правок
           </span>
         </h3>
-        <div className="codeview">
+        <div className="codeview senseview">
           {script.split(/\r?\n/).map((text, i) => (
             <div key={i} className={`l${anchorLines.has(i + 1) ? ' anchor' : ''}`}>
               <span className="n">{i + 1}</span>
@@ -284,7 +284,7 @@ export default function RefactorTab(props: Props) {
           </p>
         )}
 
-        <div className="codeview">
+        <div className="codeview senseview">
           {rightLines.map((text, i) => (
             <div key={i} className={`l${addedSet.has(i + 1) ? ' added' : ''}`}>
               <span className="n">{i + 1}</span>

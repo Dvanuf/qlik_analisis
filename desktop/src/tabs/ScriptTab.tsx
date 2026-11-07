@@ -171,7 +171,7 @@ export default function ScriptTab(props: Props) {
           <button className="small" onClick={() => gotoMatch(mIdx + 1)} disabled={!matches.length} aria-label="Следующее совпадение">›</button>
         </div>
 
-        <div className="codeview" ref={codeRef}>
+        <div className="codeview senseview" ref={codeRef}>
           {lines.map((text, i) => {
             const n = i + 1;
             const cls = [

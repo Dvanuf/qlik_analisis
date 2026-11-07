@@ -10,6 +10,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { aggregateGroup } from '../../../src/score/index.js';
+import { v2Info } from '../v2fallback.js';
 import { DOMAIN_ORDER, DOMAIN_LABELS } from '../../../src/rules/domains.js';
 import type { BatchItem, BatchTotals, Comparison, DomainId, HistoryRun } from '../types.js';
 
@@ -256,7 +257,7 @@ export default function SummaryTab(props: Props) {
   const domainAvgs = useMemo(() => {
     const out: Record<string, number | null> = {};
     for (const id of DOMAIN_ORDER) {
-      const arr = filtered.map((r) => r.summary?.domains?.[id]?.score).filter((v): v is number => v != null);
+      const arr = filtered.map((r) => v2Info(r).domains?.[id]?.score).filter((v): v is number => v != null);
       out[id] = arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
     }
     return out;
@@ -426,7 +427,7 @@ export default function SummaryTab(props: Props) {
             <tr>
               <th style={{ textAlign: 'left' }}>Приложение</th><th>Оценка</th>
               {DOMAIN_ORDER.map((id) => <th key={id}>{DL[id]}</th>)}
-              <th>Тренд</th>
+              <th title="Появится после двух прогонов приложения одной версии формулы">Тренд</th>
             </tr>
           </thead>
           <tbody>
@@ -438,7 +439,7 @@ export default function SummaryTab(props: Props) {
                   <td style={{ textAlign: 'left' }}><b>{r.title}</b></td>
                   <td><span className={`pill ${zoneOf(r.summary?.score ?? 100)}`}>{r.summary?.score ?? '—'}</span></td>
                   {DOMAIN_ORDER.map((id) => {
-                    const v = r.summary?.domains?.[id]?.score;
+                    const v = v2Info(r).domains?.[id]?.score;
                     return (
                       <td key={id}>
                         {v == null
