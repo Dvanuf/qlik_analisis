@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AnalysisResult, Finding } from '../types.js';
+import { highlightScript, type Token } from '../qlisense-highlight.js';
 
 type Props = {
   analysis: AnalysisResult | null;
@@ -172,7 +173,7 @@ export default function ScriptTab(props: Props) {
         </div>
 
         <div className="codeview senseview" ref={codeRef}>
-          {lines.map((text, i) => {
+          {highlightScript(script).map((parts: Token[], i) => {
             const n = i + 1;
             const cls = [
               'l',
@@ -188,7 +189,7 @@ export default function ScriptTab(props: Props) {
                 onClick={() => gotoLine(n)}
               >
                 <span className="n">{n}</span>
-                <span className="c">{text}</span>
+                <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
               </div>
             );
           })}

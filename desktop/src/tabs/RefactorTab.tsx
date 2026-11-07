@@ -13,6 +13,7 @@
 import { useMemo, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
 import { computeScore } from '../../../src/score/index.js';
+import { highlightScript, type Token } from '../qlisense-highlight.js';
 import type { AnalysisResult, RefactorChange } from '../types.js';
 
 type Props = {
@@ -184,7 +185,7 @@ export default function RefactorTab(props: Props) {
         <span className="grow" />
         <span className="hint">правки применяются по месту; экспорт — показанная версия целиком</span>
       </div>
-      <section className="split2">
+      <div className="refgrid">
       <div className="card">
         <h3>
           Текущий скрипт
@@ -194,10 +195,10 @@ export default function RefactorTab(props: Props) {
           </span>
         </h3>
         <div className="codeview senseview">
-          {script.split(/\r?\n/).map((text, i) => (
+          {highlightScript(script).map((parts: Token[], i) => (
             <div key={i} className={`l${anchorLines.has(i + 1) ? ' anchor' : ''}`}>
               <span className="n">{i + 1}</span>
-              <span className="c">{text}</span>
+              <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
             </div>
           ))}
         </div>
@@ -206,6 +207,9 @@ export default function RefactorTab(props: Props) {
         {rules.changes.length > 0 && (
           <div className="fixlist">
             <h4>Правки правил ({rules.changes.length})</h4>
+            <p className="muted small" style={{ margin: '0 0 6px' }}>
+              Готовые правки дают правила R001, R003, R005 и R007; у этого приложения сработали {rules.changes.length}.
+            </p>
             {rules.changes.map((c) => (
               <label key={c.id} className="fixitem">
                 <input
@@ -285,10 +289,10 @@ export default function RefactorTab(props: Props) {
         )}
 
         <div className="codeview senseview">
-          {rightLines.map((text, i) => (
+          {highlightScript(proposed).map((parts: Token[], i) => (
             <div key={i} className={`l${addedSet.has(i + 1) ? ' added' : ''}`}>
               <span className="n">{i + 1}</span>
-              <span className="c">{text}</span>
+              <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
             </div>
           ))}
         </div>
@@ -308,7 +312,7 @@ export default function RefactorTab(props: Props) {
           </span>
         </div>
       </div>
-      </section>
+      </div>
     </section>
   );
 }

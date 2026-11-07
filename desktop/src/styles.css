@@ -871,14 +871,27 @@ table.rq tr.pat { cursor: pointer; }
 .zoneline .zn { background: var(--panel-3); color: var(--fw); }
 .zonelegend { display: flex; gap: 14px; flex-wrap: wrap; }
 
-/* Код в стилистике редактора загрузки Qlik Sense: тёмный фон всегда,
- * чуть крупнее и с большим межстрочным — легче читать длинные скрипты. */
+/* Код в стилистике редактора загрузки Qlik Sense: светлый фон (как в Sense),
+ * ключевые слова и функции синие, поля красные, комментарии зелёные. */
 .codeview.senseview {
-  background: #2b2b2b;
+  background: #f2f3f2;
+  color: #1d2420;
   font-size: 0.8125rem;
   line-height: 1.75;
   max-height: 720px;
 }
-.codeview.senseview .c { color: #f0f0f0; }
-.codeview.senseview .n { color: rgba(240, 240, 240, .4); border-right-color: rgba(255, 255, 255, .12); }
-.codeview.senseview .l:hover { background: rgba(255, 255, 255, .06); }
+.codeview.senseview .n { color: #8a8f8c; border-right-color: #d6dad8; }
+.codeview.senseview .l:hover { background: rgba(31, 138, 69, .07); }
+.codeview.senseview .l.hit { background: var(--ws); }
+.codeview.senseview .l.added { background: color-mix(in srgb, var(--brand) 20%, #f2f3f2); box-shadow: inset 3px 0 0 var(--brand); }
+.codeview.senseview .l.added .n { color: var(--brand); }
+.codeview.senseview .l.anchor { background: color-mix(in srgb, var(--info) 14%, #f2f3f2); box-shadow: inset 3px 0 0 var(--info); }
+.codeview.senseview .l.mhit { background: color-mix(in srgb, var(--info) 10%, #f2f3f2); }
+.codeview.senseview .l.mcur { background: color-mix(in srgb, var(--info) 22%, #f2f3f2); box-shadow: inset 3px 0 0 var(--info); }
+.codeview.senseview .tk-kw { color: #0f62a7; font-weight: 600; }
+.codeview.senseview .tk-field { color: #b02a37; }
+.codeview.senseview .tk-comment { color: #0a7d32; font-style: italic; }
+.codeview.senseview .tk-str { color: #7a5a00; }
+/* Панели «Улучшенного скрипта» — одинаковой ширины. */
+.refgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .refgrid { grid-template-columns: minmax(0, 1fr); } }
