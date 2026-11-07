@@ -254,8 +254,8 @@ export default function RefactorTab(props: Props) {
           <button
             className={`small${source === 'ai' ? ' on' : ''}`}
             onClick={() => setSource('ai')}
-            disabled={aiLoading || !aiResult?.ok}
-            title={aiResult?.ok ? 'Показать предложение ИИ' : 'Сначала запросите предложение ИИ'}
+            disabled={aiLoading}
+            title={aiResult?.ok ? 'Показать предложение ИИ' : 'Скрипт будет отправлен провайдеру — запросите предложение'}
           >
             Предложение ИИ
           </button>
@@ -278,7 +278,7 @@ export default function RefactorTab(props: Props) {
           </p>
         )}
 
-        {!aiLoading && !aiResult?.ok && rules.changes.length > 0 && (
+        {!aiLoading && !aiResult?.ok && (source === 'ai' || rules.changes.length > 0) && (
           <p className="warnline">
             <span aria-hidden="true">⚠</span> ИИ-предложение: скрипт будет отправлен
             провайдеру целиком. Правила работают локально и наружу ничего не отправляют.

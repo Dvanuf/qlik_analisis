@@ -892,6 +892,10 @@ table.rq tr.pat { cursor: pointer; }
 .codeview.senseview .tk-field { color: #b02a37; }
 .codeview.senseview .tk-comment { color: #0a7d32; font-style: italic; }
 .codeview.senseview .tk-str { color: #7a5a00; }
-/* Панели «Улучшенного скрипта» — одинаковой ширины. */
-.refgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+/* Панели «Улучшенного скрипта» — одинаковой ширины и высоты. */
+.refgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.refgrid .card { display: flex; flex-direction: column; min-height: 0; }
+.refgrid .codeview { flex: 1; max-height: none; }
 @media (max-width: 1100px) { .refgrid { grid-template-columns: minmax(0, 1fr); } }
+/* Вкладки со скриптами — во всю ширину окна, без центрального ограничения. */
+.wrap:has(.refgrid), .wrap:has(.split2), .wrap:has(.fixlist) { max-width: none; }
