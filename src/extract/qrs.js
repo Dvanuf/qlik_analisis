@@ -144,6 +144,22 @@ export function parseQrsApps(payload) {
 
 
 /**
+ * Совет по отказу 403: без сертификата и с непринятым сертификатом
+ * причины разные, и подсказка должна вести в нужную сторону.
+ * Живой сервер отвечает «No client certificate supplied» без сертификата
+ * и «Client certificate invalid» с нераспознанным сертификатом
+ * (проверено на живом QRS 07.11.2026).
+ *
+ * @param {string} message — текст ошибки HTTP-запроса
+ * @returns {string} подсказка для пользователя
+ */
+export function qrsCertAdvice(message) {
+  return /invalid|not\s+recognized|unknown/i.test(String(message))
+    ? 'Сертификат отклонён сервером: неверный файл или сертификат не экспортирован из QMC.'
+    : 'Нужен клиентский сертификат QRS.';
+}
+
+/**
  * Запрос списка приложений у QRS.
  *
  * @param {{
@@ -184,7 +200,7 @@ export async function fetchQrsApps({
       if (/client certificate|403/i.test(message)) {
         return {
           ok: false,
-          note: `${maskUrl(target)} → ${message}. Нужен клиентский сертификат QRS.`,
+          note: `${maskUrl(target)} → ${message}. ${qrsCertAdvice(message)}`,
         };
       }
       log?.(`${maskUrl(target)} → ${message}`);
@@ -224,7 +240,7 @@ export async function fetchQrsVersion({
     const message = String(err?.message ?? err);
     return {
       ok: false,
-      note: `${maskUrl(target)} → ${message}. Нужен клиентский сертификат QRS.`,
+      note: `${maskUrl(target)} → ${message}. ${qrsCertAdvice(message)}`,
     };
   }
 }

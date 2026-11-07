@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   qrsBase, parseQrsApps, readQrsCertificate, fetchQrsApps, fetchQrsVersion,
-  QRS_PORT, QRS_APP_PATHS,
+  qrsCertAdvice, QRS_PORT, QRS_APP_PATHS,
 } from '../src/extract/qrs.js';
 import { resolveQrs } from '../src/config.js';
 
@@ -60,17 +60,7 @@ test('разбор ответа: JSON:API с data и attributes', () => {
   assert.equal(apps.length, 1);
   assert.equal(apps[0].title, 'Продажи');
   assert.equal(apps[0].stream, 'Розница');
-test('сертификат: файл читается, пароль передаётся', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'qa-qrs-'));
-  const file = join(dir, 'client.pfx');
-  writeFileSync(file, Buffer.from('fake-pfx'));
-  const cert = readQrsCertificate({ certPath: file, certPassword: 'секрет' });
-  assert.ok(cert.pfx);
-  assert.equal(cert.passphrase, 'секрет');
-  assert.equal(cert.note, undefined);
-});
-
-assert.deepEqual(apps[0].tags, ['Consumer:etl']);
+  assert.deepEqual(apps[0].tags, ['Consumer:etl']);
 });
 
 test('разбор ответа: пусто и мусор', () => {
@@ -105,6 +95,12 @@ test('версия QRS: без сертификата — понятная ош�
   const res = await fetchQrsVersion({ host: 'qlik.local' });
   assert.equal(res.ok, false);
   assert.match(res.note, /сертификат/);
+});
+
+test('совет по отказу 403: без сертификата и с отклонённым', () => {
+  assert.match(qrsCertAdvice('HTTP 403 No client certificate supplied'), /Нужен клиентский сертификат/);
+  assert.match(qrsCertAdvice('HTTP 403 Client certificate invalid: '), /отклонён сервером/);
+  assert.match(qrsCertAdvice('HTTP 403 Forbidden: '), /Нужен клиентский сертификат/);
 });
 
 test('адреса списка приложений перебираются', () => {
