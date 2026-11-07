@@ -8,6 +8,9 @@
  */
 import { computeScore } from '../../src/score/index.js';
 import type { BatchItem, RefactorChange } from './types.js';
+import { DOMAIN_ORDER } from '../../src/rules/domains.js';
+
+const DOMAIN_IDS = DOMAIN_ORDER;
 
 type DomainsInfo = NonNullable<BatchItem['summary']>['domains'];
 type TopInfo = NonNullable<BatchItem['summary']>['top'];
@@ -21,8 +24,17 @@ export function v2Info(item: BatchItem): { domains: DomainsInfo; top: TopInfo } 
   const recomputed = computeScore(item.findings ?? []) as {
     domains: DomainsInfo; top: TopInfo;
   };
+  let domains = (hasDomains ? s!.domains : recomputed.domains) as DomainsInfo;
+  // Приложение анализировалось, но по какому-то домену нет ни одной находки —
+  // это «нарушений не найдено», а не «нет данных»: в тепловой карте сводного
+  // отчёта такой домен показывается зелёным со баллом 100 (как в макете).
+  if (s && Object.keys(domains ?? {}).length === 0) {
+    domains = Object.fromEntries(DOMAIN_IDS.map((id) => [id, {
+      score: 100, verdict: 'Отлично', word: 'отлично', findings: 0, places: 0,
+    }])) as DomainsInfo;
+  }
   return {
-    domains: (hasDomains ? s!.domains : recomputed.domains) as DomainsInfo,
+    domains,
     top: (hasTop ? s!.top : recomputed.top) as TopInfo,
   };
 }
