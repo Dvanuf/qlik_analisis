@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.15.2 | [v0.15.2 — «Оценка» доведена до макета](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.15.2) |
 | 0.15.1 | [v0.15.1 — правки по живому прогону](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.15.1) |
 | 0.15.0 | [v0.15.0 — сводный отчёт: аналитика группы](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.15.0) |
 | 0.14.0 | [v0.14.0 — тексты правил, доработка вкладок](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.14.0) |
@@ -29,6 +30,9 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.15.2-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.15.2 |
+| `Qlik Analyzer-0.15.2-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.15.2 |
+| `Qlik Analyzer-0.15.2-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.15.2 |
 | `Qlik Analyzer-0.15.1-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.15.1 |
 | `Qlik Analyzer-0.15.1-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.15.1 |
 | `Qlik Analyzer-0.15.1-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.15.1 |

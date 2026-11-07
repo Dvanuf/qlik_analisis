@@ -805,8 +805,8 @@ table.rq tr.pat { cursor: pointer; }
 .scorehero { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
 .scorehero-main { flex: 1; min-width: 260px; }
 .scorehero-main h2 { margin: 0 0 4px; }
-.scorehero-counts { display: grid; grid-template-columns: auto auto; gap: 2px 12px; text-align: center; }
-.scorehero-counts .num { font-size: 22px; font-weight: 600; }
+.scorehero-counts { display: flex; gap: 20px; text-align: center; }
+.scorehero-counts .num { font-size: 24px; font-weight: 700; }
 .scorehero-counts .num.err { color: var(--danger); }
 .scorehero-counts .num.warn { color: var(--warning); }
 .howformula { margin: 8px 0 0; }

@@ -216,7 +216,7 @@ export default function ScoreTab(props: Props) {
                 {trend > 0 ? `+${trend}` : trend} с прошлой проверки
               </span>
             )}
-            <button className="link" onClick={() => setHowOpen((v) => !v)} aria-expanded={howOpen}>
+            <button className="btn small" onClick={() => setHowOpen((v) => !v)} aria-expanded={howOpen}>
               Как считается оценка
             </button>
           </div>
@@ -225,12 +225,18 @@ export default function ScoreTab(props: Props) {
           )}
         </div>
         <div className="scorehero-counts">
-          <div className="num err">{summary.findings.bySeverity.error ?? 0}</div>
-          <div className="muted">ошибки</div>
-          <div className="num warn">{summary.findings.bySeverity.warning ?? 0}</div>
-          <div className="muted">предупреждения</div>
-          <div className="num">{summary.findings.bySeverity.info ?? 0}</div>
-          <div className="muted">замечания</div>
+          <div>
+            <div className="num err">{summary.findings.bySeverity.error ?? 0}</div>
+            <div className="muted">ошибки</div>
+          </div>
+          <div>
+            <div className="num warn">{summary.findings.bySeverity.warning ?? 0}</div>
+            <div className="muted">предупр.</div>
+          </div>
+          <div>
+            <div className="num">{summary.findings.bySeverity.info ?? 0}</div>
+            <div className="muted">замечаний</div>
+          </div>
         </div>
       </div>
 
@@ -322,6 +328,7 @@ export default function ScoreTab(props: Props) {
           </div>
           <p className="muted">
             Средняя оценка <b>{groupAvg ?? '—'}</b> · в красной зоне {groupRed} из {group.length}
+            {' · '}квадраты по доменам: {DOMAIN_ORDER.map((id) => DL[id]).join(', ')}
           </p>
           <div className="scrolltbl">
             <table className="findings">
