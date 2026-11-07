@@ -6,7 +6,7 @@
  * (score v2: domains, top, forecast, wasted), ничего не пересчитывается
  * на месте. Группа приложений читает последний пакетный прогон.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DOMAIN_ORDER, DOMAIN_LABELS } from '../../../src/rules/domains.js';
 
 // Домен из находки — строка; подписи ядра имеют конкретные ключи.
@@ -44,6 +44,26 @@ function zone(score: number): 'r' | 'y' | 'g' {
 export default function ScoreTab(props: Props) {
   const { analysis, runs, batch, onOpenAnalysis, onOpenRefactor, onAnalyzeApp, onPrintReport, onNote } = props;
   const [howOpen, setHowOpen] = useState(false);
+  // История прогонов: тренды приложений в группе (колонка «Тренд» макета).
+  const [groupRuns, setGroupRuns] = useState<HistoryRun[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const runs = await window.qa.historyList({ limit: 500 });
+        if (alive) setGroupRuns(runs);
+      } catch { /* без истории трендов просто нет */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  /** Тренд приложения: разница двух последних прогонов одной версии формулы. */
+  const trendOf = (appId: string): number | null => {
+    const v2 = groupRuns.filter((r) => r.appId === appId && (r.scoreVersion ?? 1) === 2);
+    if (v2.length < 2) return null;
+    return v2[0].score - v2[1].score;
+  };
 
   const summary = analysis?.summary ?? null;
   const score = summary?.score;
@@ -172,6 +192,7 @@ export default function ScoreTab(props: Props) {
 
   return (
     <section>
+      <h2>Оценка приложения</h2>
       {/* --- Шапка: балл, вердикт, вывод, динамика --- */}
       <div className="card scorehero">
         <div className={`ring ${zone(score)}`}>
@@ -269,6 +290,9 @@ export default function ScoreTab(props: Props) {
             </div>
           ))}
           <p className="muted small" style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>
+            {(summary.candidates ?? 0) > top.length
+              ? `Ещё ${(summary.candidates ?? 0) - top.length} рекомендаций ниже по важности. `
+              : ''}
             Прирост показан для балла этого приложения. Прогноз после первых трёх: {summary.forecast ?? '—'}.
           </p>
         </div>
@@ -278,7 +302,9 @@ export default function ScoreTab(props: Props) {
       {group.length > 0 && (
         <div className="card">
           <div className="row">
-            <h3 style={{ margin: 0 }}>Группа приложений</h3>
+            <h3 style={{ margin: 0 }}>
+              Группа приложений{streamF !== 'all' ? `: поток «${streamF}»` : ''}
+            </h3>
             <span className="grow" />
             <select value={streamF} onChange={(e) => setStreamF(e.target.value)} aria-label="Фильтр по потоку">
               <option value="all">Все потоки</option>
@@ -301,7 +327,7 @@ export default function ScoreTab(props: Props) {
               <thead>
                 <tr>
                   <th>Приложение</th><th style={{ width: '22%' }}>Оценка</th>
-                  <th>Домены</th><th>Что сделать первым</th>
+                  <th>Домены</th><th>Что сделать первым</th><th>Тренд</th>
                 </tr>
               </thead>
               <tbody>
@@ -325,6 +351,17 @@ export default function ScoreTab(props: Props) {
                       </div>
                     </td>
                     <td className="muted">{item.summary?.top?.[0]?.title ?? '—'}</td>
+                    <td>
+                      {(() => {
+                        const tr = trendOf(item.appId);
+                        if (tr == null) return <span className="muted">—</span>;
+                        return (
+                          <span className={`pill ${tr > 0 ? 'ok' : tr < 0 ? 'error' : 'mute'}`}>
+                            {tr > 0 ? `+${tr}` : tr}
+                          </span>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

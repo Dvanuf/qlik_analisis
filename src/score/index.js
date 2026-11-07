@@ -175,7 +175,7 @@ export function computeScore(findings, options = {}) {
   }
 
   // Первоочередные исправления: прирост балла от устранения паттерна.
-  const top = list
+  const gains = list
     .map((f) => ({
       ruleId: String(f?.ruleId ?? ''),
       title: String(f?.title ?? ''),
@@ -189,9 +189,8 @@ export function computeScore(findings, options = {}) {
     .filter((t) => t.gain > 0)
     .sort((a, b) => b.gain - a.gain
       || SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity)
-      || b.count - a.count)
-    .slice(0, 5)
-    .map(({ ref, ...t }) => t);
+      || b.count - a.count);
+  const top = gains.slice(0, 5).map(({ ref, ...t }) => t);
 
   // Прогноз: пересчёт без первых трёх исправлений (по самим находкам).
   const topRefs = list
@@ -213,6 +212,8 @@ export function computeScore(findings, options = {}) {
       + 'вес растёт как 1 + log2(мест), потолки 40/30/10, лишние данные до 20',
     domains,
     top,
+    // Сколько всего паттернов дают прирост — для строки «Ещё N рекомендаций».
+    candidates: gains.length,
     forecast,
     wasted: {
       rows: wasted.rows,

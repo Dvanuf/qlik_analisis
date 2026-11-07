@@ -270,6 +270,8 @@ export type AnalysisResult = {
     domains?: Record<string, { score: number; verdict: string; word: string; findings: number; places: number }>;
     /** Первоочередные исправления: сортировка по приросту балла. */
     top?: { ruleId: string; title: string; severity: string; domain: string | null; count: number; gain: number; hasFix: boolean }[];
+    /** Сколько всего паттернов дают прирост (для «Ещё N рекомендаций»). */
+    candidates?: number;
     /** Прогноз: балл после устранения первых трёх исправлений. */
     forecast?: number | null;
     /** Платформа, определённая ядром по данным сервера или выбором пользователя. */
@@ -359,6 +361,7 @@ export type BatchItem = {
     /** Оценки по доменам и первоочередные исправления (v2, 0.13.0). */
     domains?: Record<string, { score: number; verdict: string; word: string; findings: number; places: number }>;
     top?: { ruleId: string; title: string; severity: string; domain: string | null; count: number; gain: number; hasFix: boolean }[];
+    candidates?: number;
     forecast?: number | null;
   } | null;
 };

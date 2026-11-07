@@ -481,7 +481,8 @@ export default function App() {
     try {
       const res = await window.qa.analyzeApp({ ...conn, appId, platform });
       setAnalysis(res);
-      setTab('analysis');
+      // ТЗ «Оценка»: вкладка «Оценка» открывается автоматически после анализа.
+      setTab('score');
     } catch (err) {
       setDoctorSteps([{ name: 'Анализ приложения', status: 'FAIL', detail: String(err) }]);
       setTab('connect');
@@ -504,7 +505,7 @@ export default function App() {
     try {
       const res = await window.qa.analyzeApp({ ...conn, appId: targetAppId, platform });
       setAnalysis(res);
-      setTab('analysis');
+      setTab('score');
     } catch (err) {
       showToast(`Не удалось проанализировать приложение: ${String(err)}`);
       setTab('summary');
