@@ -93,21 +93,9 @@ test('main.ts: ИИ-обработчики зарегистрированы', ()
     'core:ai-keys-clear',
     'core:ai-cancel',
     'core:ai-ask',
-  ];
-  for (const channel of required) {
-    assert.ok(MAIN.includes(`ipcMain.handle('${channel}'`), `нет обработчика ${channel}`);
-  }
-});
-
-test('main.ts: ИИ-обработчики зарегистрированы', () => {
-  const required = [
-    'core:ai-status',
-    'core:ai-settings-save',
-    'core:ai-keys-save',
-    'core:ai-keys-clear',
-    'core:ai-cancel',
-    'core:ai-ask',
     'core:ai-prompt',
+    // ИИ-рефакторинг скрипта (0.9.0, вкладка «Улучшенный скрипт»).
+    'core:ai-refactor',
   ];
   for (const channel of required) {
     assert.ok(MAIN.includes(`ipcMain.handle('${channel}'`), `нет обработчика ${channel}`);

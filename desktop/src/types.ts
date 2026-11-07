@@ -2,7 +2,26 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'connect' | 'analysis' | 'script' | 'summary' | 'model' | 'rules' | 'library' | 'ai';
+export type Tab = 'connect' | 'analysis' | 'script' | 'refactor' | 'summary' | 'model' | 'rules' | 'library' | 'ai';
+
+/**
+ * Одна правка в перечне вкладки «Улучшенный скрипт».
+ * Источник «правила»: результат buildRefactoredScript ядра.
+ */
+export type RefactorChange = {
+  id: string;
+  kind: 'dropField' | 'dropTable' | 'autoNumber' | string;
+  ruleId: string;
+  title: string;
+  /** Поле — только для AutoNumber. */
+  field?: string;
+  statement: string;
+  objects: string[];
+  /** «Вставка после строки N» — место в исходном скрипте. */
+  line: number | null;
+  before: string;
+  after: string;
+};
 
 /**
  * Провайдер ИИ в интерфейсе.

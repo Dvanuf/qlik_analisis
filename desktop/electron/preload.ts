@@ -10,7 +10,7 @@ const api = {
   saveRulesConfig: (config: unknown) => ipcRenderer.invoke('core:rules-config-save', config),
   exportRulesConfig: () => ipcRenderer.invoke('core:rules-config-export'),
   importRulesConfig: () => ipcRenderer.invoke('core:rules-config-import'),
-  exportScript: (payload: { appName?: string; script: string; patch?: { script?: string } }) => ipcRenderer.invoke('core:export-script', payload),
+  exportScript: (payload: { appName?: string; script: string; patch?: { script?: string }; finalScript?: string }) => ipcRenderer.invoke('core:export-script', payload),
   /** История прогонов в локальной базе SQLite. */
   qrsStatus: () => ipcRenderer.invoke('core:qrs-status'),
   qrsSaveSettings: (settings: {
@@ -107,6 +107,8 @@ const api = {
   aiClearKeys: () => ipcRenderer.invoke('core:ai-keys-clear'),
   /** ИИ-слой: вопрос по результатам анализа. */
   aiAsk: (payload: unknown) => ipcRenderer.invoke('core:ai-ask', payload),
+  /** ИИ-слой: предложенная версия скрипта загрузки (опционально, уходит к провайдеру). */
+  aiRefactor: (payload: unknown) => ipcRenderer.invoke('core:ai-refactor', payload),
   /** ИИ-слой: фактический промпт, который уйдёт модели (для просмотра и правки). */
   aiPrompt: (payload: unknown) => ipcRenderer.invoke('core:ai-prompt', payload),
   /** ИИ-слой: отмена текущего запроса. */

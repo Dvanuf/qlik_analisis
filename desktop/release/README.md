@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.9.0 | [v0.9.0 — вкладка «Улучшенный скрипт»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.9.0) |
 | 0.8.6 | [v0.8.6 — модуль репозитория QRS](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.6) |
 | 0.8.5 | [v0.8.5 — ИИ-чат помнит переписку, шрифт регулируемый](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.5) |
 | 0.8.4 | [v0.8.4 — настоящая ошибка провайдера и рабочие запросы к Z.ai](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.8.4) |
@@ -20,6 +21,9 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.9.0-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.9.0 |
+| `Qlik Analyzer-0.9.0-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.9.0 |
+| `Qlik Analyzer-0.9.0-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.9.0 |
 | `Qlik Analyzer-0.8.4-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.8.4 |
 | `Qlik Analyzer-0.8.4-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.8.4 |
 | `Qlik Analyzer-0.8.4-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.8.4 |

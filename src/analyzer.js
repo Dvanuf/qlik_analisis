@@ -14,6 +14,11 @@ import { buildScriptIndex, findingLines } from './findings/locations.js';
 import { groupFindings } from './findings/group.js';
 import { groupPatternsByRule } from './findings/patterns.js';
 import { DOMAIN_ORDER, DOMAIN_LABELS, domainForRule } from './rules/domains.js';
+import { buildScriptPatch } from './script/refactor.js';
+
+// Патч скрипта теперь собирается в src/script/refactor.js (единый источник правок);
+// экспорт сохранён для прежних потребителей (отчёты, тесты).
+export { buildScriptPatch };
 import { SCOPES, SCOPE_LABELS } from './rules/scopes.js';
 
 /**
@@ -221,54 +226,4 @@ export function buildExpressionIndex(graph) {
     }
   }
   return out;
-}
-
-/** Имя поля в скрипте: с пробелами — в квадратных скобках. */
-function ident(name) {
-  const value = String(name ?? '');
-  return /\s/.test(value) ? `[${value}]` : value;
-}
-
-/**
- * Формирует предложения по правке скрипта загрузки на основе находок.
- * @param {object[]} findings
- */
-export function buildScriptPatch(findings) {
-  const dropFields = new Set();
-  const dropTables = new Set();
-  // поле -> имя нового ключевого поля
-  const autoNumbers = new Map();
-
-  for (const f of findings) {
-    if (!f.fix) continue;
-    if (f.fix.kind === 'dropField') dropFields.add(f.fix.payload);
-    if (f.fix.kind === 'dropTable') dropTables.add(f.fix.payload);
-    if (f.fix.kind === 'autoNumber') {
-      const payload = f.fix.payload;
-      const field = typeof payload === 'string' ? payload : payload?.field;
-      const key = typeof payload === 'string' ? `Key_${payload}` : payload?.key;
-      if (field) autoNumbers.set(field, key || `Key_${field}`);
-    }
-  }
-
-  const lines = [];
-  if (dropFields.size) {
-    lines.push(`DROP FIELD ${[...dropFields].map(ident).join(', ')};`);
-  }
-  if (dropTables.size) {
-    lines.push(`DROP TABLE ${[...dropTables].map(ident).join(', ')};`);
-  }
-  if (autoNumbers.size) {
-    // Второй аргумент AutoNumber — имя нового поля, обязательно строковый литерал:
-    // AutoNumber(ID, 'Key_QvdTableHeader');
-    const pairs = [...autoNumbers.entries()].map(([field, key]) => `${ident(field)}, '${key}'`);
-    lines.push(`AutoNumber(${pairs.join(', ')});`);
-  }
-
-  return {
-    dropFields: [...dropFields],
-    dropTables: [...dropTables],
-    autoNumbers: [...autoNumbers.entries()].map(([field, key]) => ({ field, key })),
-    script: lines.join('\n'),
-  };
 }

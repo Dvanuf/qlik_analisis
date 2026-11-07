@@ -9,7 +9,6 @@
  * Клик по паттерну открывает панель справа с выражением и списком мест.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildFixes } from '../../../src/report/fixes.js';
 import { searchExpressions } from '../../../src/script/search.js';
 import type {
   AnalysisResult, DomainId, Finding, FindingScope, Pattern, PatternRule,
@@ -65,6 +64,8 @@ type Props = {
   onSaveRulesConfig: (config: RulesConfig) => void;
   /** Переход к вкладке «Скрипт загрузки» — из карточки паттерна. */
   onOpenScript?: () => void;
+  /** Переход к вкладке «Улучшенный скрипт» — из блока правок. */
+  onOpenRefactor?: () => void;
   /** Переход к вкладке «Модель данных». */
   onOpenModel?: () => void;
   /** Переход к вкладке «ИИ-чат» с вопросом по находке. */
@@ -165,7 +166,7 @@ function PatternRows(props: {
 export default function AnalysisTab(props: Props) {
   const {
     analysis, categories, exportNote, onExport, onExportScript, onExportDataModel,
-    rulesConfig, onSaveRulesConfig, onOpenScript, onOpenModel, onAskAi,
+    rulesConfig, onSaveRulesConfig, onOpenScript, onOpenRefactor, onOpenModel, onAskAi,
   } = props;
 
   // Активный домен: null — показываем все.
@@ -182,9 +183,7 @@ export default function AnalysisTab(props: Props) {
   const [showSuppressed, setShowSuppressed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [note, setNote] = useState('');
-  // Блок предлагаемых правок по умолчанию свёрнут: он длинный,
-  // а смотреть его нужно не всегда.
-  const [fixesOpen, setFixesOpen] = useState(false);
+
   // Поиск по произвольному выражению (QSME: search any expression).
   const [exprQuery, setExprQuery] = useState('');
 
@@ -204,6 +203,15 @@ export default function AnalysisTab(props: Props) {
     }
     return { bySeverity, byCategory, byScope };
   }, [findings]);
+
+  // Число правок для ссылки на вкладку «Улучшенный скрипт»: строка патча
+  // ядра, а если патча нет (старый отчёт) — находки с готовыми правками.
+  const fixes = useMemo(
+    () => (analysis?.patch?.script
+      ? String(analysis.patch.script).split('\n').filter(Boolean).length
+      : (analysis?.findings ?? []).filter((f) => (f as { fix?: unknown }).fix).length),
+    [analysis],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -230,11 +238,6 @@ export default function AnalysisTab(props: Props) {
       }
     });
   }, [findings, sevFilter, catFilter, scopeFilter, search, sortKey, sortAsc]);
-
-  const fixes = useMemo(
-    () => buildFixes(findings, analysis?.script ?? ''),
-    [findings, analysis?.script],
-  );
 
   /**
    * Сводка по доменам: сколько проверок, сколько нарушено, сколько мест.
@@ -776,47 +779,18 @@ export default function AnalysisTab(props: Props) {
         </>
       )}
 
-      {/* --- Предлагаемые правки --- */}
-      {fixes.length > 0 && (
-        <>
-          <h3>
-            Предлагаемые правки скрипта
-            <button
-              className="link"
-              onClick={() => setFixesOpen((v) => !v)}
-              aria-expanded={fixesOpen}
-            >
-              {' '}· {fixesOpen ? 'свернуть' : `развернуть (${fixes.length})`}
-            </button>
-          </h3>
-          {fixesOpen && fixes.map((fix, i) => (
-            <div className="fix" key={`${fix.ruleId}-${i}`}>
-              <h4>
-                {fix.title} <code>{fix.ruleId}</code>
-              </h4>
-              {fix.count > 1 && (
-                <p className="muted small">
-                  Затронуто объектов: {fix.count} ({fix.objects?.join(', ') ?? '—'})
-                </p>
-              )}
-              {fix.line != null && (
-                <p className="muted small">Вставка после строки {fix.line}</p>
-              )}
-              <div className="diff">
-                <span className="before">− {fix.before || '(конец скрипта)'}</span>
-                <span className="after">+ {fix.after}</span>
-              </div>
-              <div className="actions">
-                <button
-                  className="small ghost"
-                  onClick={() => { void navigator.clipboard?.writeText(fix.statement); setNote(`Скопировано: ${fix.statement}`); }}
-                >
-                  Копировать
-                </button>
-              </div>
-            </div>
-          ))}
-        </>
+      {/* --- Предлагаемые правки: полный экран на вкладке «Улучшенный скрипт» --- */}
+      {fixes > 0 && (
+        <h3>
+          Предлагаемые правки скрипта
+          <button
+            className="link"
+            onClick={onOpenRefactor}
+            title="Текущий и предложенный скрипт рядом"
+          >
+            {' '}· улучшенный скрипт → ({fixes})
+          </button>
+        </h3>
       )}
 
       {/* --- Подавленные находки --- */}

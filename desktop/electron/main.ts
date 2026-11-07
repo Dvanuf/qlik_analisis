@@ -29,6 +29,7 @@ import { renderCsv, FINDINGS_COLUMNS } from '../../src/report/csv.js';
 import { buildXlsx } from '../../src/report/xlsx.js';
 import { normalizeCredentials, isSessionUsable, parseCredentials } from '../../src/session/credentials.js';
 import { analyze as aiAnalyze, buildPromptPreview, providerChain, PROVIDERS } from '../../src/ai/index.js';
+import { refactorScript } from '../../src/ai/refactor.js';
 import { AiError } from '../../src/ai/errors.js';
 import { resolveAi, resolveQrs } from '../../src/config.js';
 
@@ -895,13 +896,17 @@ ipcMain.handle('core:rules-config-import', async () => {
  */
 ipcMain.handle('core:export-script', async (_e, payload: {
   appName?: string; script: string; patch?: { script?: string };
+  /** Готовый предложенный скрипт — выгружается как есть (вкладка «Улучшенный скрипт»). */
+  finalScript?: string;
 }) => {
   const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const safeName = String(payload.appName || 'app').replace(/[^\wа-яА-Я ._-]/g, '_').slice(0, 60);
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const file = resolve(dir, `${safeName} ${stamp}-скрипт.qvs`);
-  const text = applyPatchToScript(payload.script ?? '', payload.patch ?? {});
+  const text = typeof payload.finalScript === 'string' && payload.finalScript.trim()
+    ? `${payload.finalScript.replace(/\s+$/, '')}\n`
+    : applyPatchToScript(payload.script ?? '', payload.patch ?? {});
   writeFileSync(file, text, 'utf8');
   return { path: file };
 });
@@ -1607,6 +1612,69 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
     const message = err instanceof Error ? err.message : String(err);
     // Код и провайдер — чтобы интерфейс показал настоящую причину сбоя,
     // а не «неизвестная ошибка».
+    const code = err instanceof AiError ? err.code : null;
+    const provider = err instanceof AiError ? err.provider : null;
+    return { ok: false, error: maskSecrets(message), code, provider };
+  } finally {
+    if (aiAbort === controller) aiAbort = null;
+  }
+});
+
+/**
+ * ИИ-рефакторинг скрипта загрузки (вкладка «Улучшенный скрипт», opt-in).
+ *
+ * В запрос уходит сам скрипт — это осознанное отличие от чата, где наружу
+ * уходит только агрегированная сводка. Вкладка предупреждает об этом перед
+ * отправкой; в режиме конфиденциальности запрос пойдёт только локальной
+ * модели. Ответ никогда не применяется автоматически.
+ */
+ipcMain.handle('core:ai-refactor', async (_e, payload: {
+  script?: string;
+  findings?: unknown[];
+  appName?: string;
+}) => {
+  const settings = aiSettings();
+  const keys = await loadAiKeys();
+  const apiKeys: Record<string, string> = { ...keys };
+  for (const [id, p] of Object.entries(PROVIDERS)) {
+    const fromEnv = p.apiKeyEnv ? process.env[p.apiKeyEnv] : undefined;
+    if (fromEnv) apiKeys[id] = fromEnv;
+  }
+
+  aiAbort?.abort();
+  aiAbort = new AbortController();
+  const controller = aiAbort;
+
+  try {
+    const result = await refactorScript({
+      script: String(payload?.script ?? ''),
+      findings: (payload?.findings ?? []) as never[],
+      appName: payload?.appName ?? '',
+    }, {
+      provider: settings.provider,
+      fallback: settings.fallback,
+      apiKeys,
+      sensitive: settings.sensitive,
+      providers: settings.providers as Record<string, { baseUrl?: string; model?: string }>,
+      limits: settings.limits,
+      statePath: resolve(app.getPath('userData'), 'ai-state.json'),
+      signal: controller.signal,
+      onEvent: (event: { type?: string; message?: string; provider?: string }) => {
+        mainWindow?.webContents.send('ai:event', event);
+      },
+    });
+    return {
+      ok: true,
+      script: result.script,
+      commentary: result.commentary,
+      provider: result.provider,
+      model: result.model,
+      truncated: result.truncated,
+      redacted: result.redacted,
+      cached: result.cached,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     const code = err instanceof AiError ? err.code : null;
     const provider = err instanceof AiError ? err.provider : null;
     return { ok: false, error: maskSecrets(message), code, provider };

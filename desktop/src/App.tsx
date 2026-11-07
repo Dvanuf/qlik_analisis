@@ -9,7 +9,9 @@ import LibraryTab from './tabs/LibraryTab.js';
 import SummaryTab from './tabs/SummaryTab.js';
 import ModelTab from './tabs/ModelTab.js';
 import ScriptTab from './tabs/ScriptTab.js';
+import RefactorTab from './tabs/RefactorTab.js';
 import AiTab from './tabs/AiTab.js';
+import { buildRefactoredScript } from '../../src/script/refactor.js';
 import type {
   AnalysisResult, AnalyzeProgress, AppInfo, AppItem, BatchItem, BatchProgress, BatchTotals,
   Comparison, DoctorStep, Finding, HistoryRun, LibraryFunction, Platform, QrsStatus,
@@ -71,8 +73,15 @@ declare global {
       exportRulesConfig(): Promise<{ canceled: boolean; path?: string }>;
       importRulesConfig(): Promise<{ canceled: boolean; path?: string; config?: unknown }>;
       exportScript(payload: {
-        appName?: string; script: string; patch?: { script?: string };
+        appName?: string; script: string; patch?: { script?: string }; finalScript?: string;
       }): Promise<{ path: string }>;
+      /** ИИ-рефакторинг скрипта (opt-in): уходит к провайдеру целиком. */
+      aiRefactor(payload: {
+        script: string; findings?: unknown[]; appName?: string;
+      }): Promise<{
+        ok: boolean; script?: string; commentary?: string;
+        provider?: string; model?: string; redacted?: boolean; cached?: boolean; error?: string;
+      }>;
       historySave(payload: {
         appId: string; appName?: string; at?: string; score?: number;
         summary?: unknown; findings?: unknown[];
@@ -686,6 +695,14 @@ export default function App() {
     [analysis],
   );
 
+  // Правки правил — счётчик на вкладке «Улучшенный скрипт».
+  const refactorCount = useMemo(
+    () => (analysis?.script
+      ? buildRefactoredScript(analysis.script, analysis.findings ?? []).changes.length
+      : 0),
+    [analysis],
+  );
+
   const countsByRule = useMemo(() => {
     const map = new Map<string, number>();
     for (const f of analysis?.findings ?? []) map.set(f.ruleId, (map.get(f.ruleId) ?? 0) + 1);
@@ -785,6 +802,7 @@ export default function App() {
           ['connect', 'Подключение'],
           ['analysis', 'Анализ'],
           ['script', 'Скрипт загрузки'],
+          ['refactor', 'Улучшенный скрипт'],
           ['model', 'Модель данных'],
           ['summary', 'Сводный отчёт'],
           ['rules', 'Правила'],
@@ -798,6 +816,9 @@ export default function App() {
             ) : null}
             {id === 'script' && scriptFindings ? (
               <span className="cnt">{scriptFindings}</span>
+            ) : null}
+            {id === 'refactor' && refactorCount ? (
+              <span className="cnt">{refactorCount}</span>
             ) : null}
             {id === 'summary' && batch ? <span className="cnt">{batch.totals.apps}</span> : null}
             {id === 'rules' && ruleInfo ? <span className="cnt">{ruleInfo.total}</span> : null}
@@ -863,6 +884,7 @@ export default function App() {
           rulesConfig={rulesConfig}
           onSaveRulesConfig={(c) => void saveRulesConfig(c)}
           onOpenScript={() => setTab('script')}
+          onOpenRefactor={() => setTab('refactor')}
           onOpenModel={() => setTab('model')}
           onAskAi={(finding) => {
             setAiFocus(finding);
@@ -932,6 +954,10 @@ export default function App() {
 
       {tab === 'script' && (
         <ScriptTab analysis={analysis} />
+      )}
+
+      {tab === 'refactor' && (
+        <RefactorTab analysis={analysis} onNote={setExportNote} />
       )}
       </div>
     </div>

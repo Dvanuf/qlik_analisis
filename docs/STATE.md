@@ -3,7 +3,7 @@
 Документ отвечает на вопрос «с чего начать новую задачу». Правила работы с AI —
 в [`AGENTS.md`](../AGENTS.md), история версий — в [`CHANGELOG.md`](../CHANGELOG.md).
 
-**Обновлено:** 07.11.2026 · **Текущая версия:** 0.8.6 (тег `v0.8.6`)
+**Обновлено:** 07.11.2026 · **Текущая версия:** 0.9.0 (тег `v0.9.0`)
 
 Что можно перенести из расширения QS Metadata Explorer — в
 [`QSME-ANALYSIS.md`](QSME-ANALYSIS.md) (проверено на живом хабе 26.10.2026).
@@ -23,7 +23,7 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 |---|---|
 | Исходники | `/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer` |
 | Архив всех сборок | `<проект>/desktop/release/` |
-| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.8.6-{arm64.dmg,arm64-mac.zip}` |
+| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.9.0-{arm64.dmg,arm64-mac.zip,x64.exe}` |
 | Лог входа в хаб | `~/Library/Application Support/qlik-analyzer-desktop/hub-login.log` |
 | Настройки правил | `~/Library/Application Support/qlik-analyzer-desktop/rules.json` |
 | История прогонов | `~/Library/Application Support/qlik-analyzer-desktop/history.sqlite` |
@@ -39,6 +39,7 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 
 | Версия | Суть |
 |---|---|
+| 0.9.0 | **Вкладка «Улучшенный скрипт»: текущий код загрузки ↔ предложенная версия.** Единый механизм правок `src/script/refactor.js` (collectEdits → buildFixes / buildScriptPatch / buildRefactoredScript) вместо двух расходившихся; правки по месту (AutoNumber после своего LOAD, DROP в конец); чекбоксы правок пересобирают предложенную версию; ИИ-рефакторинг opt-in (`src/ai/refactor.js`, скрипт уходит провайдеру только по явной кнопке, ответ отдельным источником); блок «Предлагаемые правки» переехал из «Анализа»; экспорт .qvs выгружает показанную версию целиком. Тесты: 420/420 |
 | 0.1.13 | Применимость всех 45 правил по платформам; исправлен вход в хаб (перехват CSRF-токена) |
 | 0.1.14–0.1.18 | Итерации по списку приложений; первые попытки строились на неверной гипотезе (REST API хаба) |
 | 0.1.18 | Список приложений: WebSocket-метод `GetDocList` с csrf-токеном — **работает** |

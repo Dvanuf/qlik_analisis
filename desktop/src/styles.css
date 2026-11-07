@@ -647,6 +647,54 @@ table.rq tr.pat { cursor: pointer; }
 .codeview .l.hit { background: var(--ws); box-shadow: inset 3px 0 0 var(--warning); }
 .codeview .l.hit .n { color: var(--warning); font-weight: 700; }
 .codeview .l.flash { background: var(--ds); box-shadow: inset 3px 0 0 var(--danger); }
+.codeview .l.anchor { background: var(--ws); box-shadow: inset 3px 0 0 var(--info); }
+.codeview .l.anchor .n { color: var(--info); font-weight: 700; }
+/* Добавленные строки в предложенной версии скрипта. */
+.codeview .l.added { background: color-mix(in srgb, var(--success) 14%, transparent); box-shadow: inset 3px 0 0 var(--success); }
+.codeview .l.added .n { color: var(--success); font-weight: 700; }
+
+/* --- Улучшенный скрипт ------------------------------------------------ */
+/* Перечень правок с чекбоксами под текущим скриптом. */
+.fixlist { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.fixlist h4 { margin: 0 0 8px; }
+.fixitem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: var(--r1, 8px);
+  cursor: pointer;
+}
+.fixitem:hover { background: var(--panel-2); }
+.fixitem input { margin-top: 3px; }
+.fixbody { min-width: 0; }
+.fixbody .hint { word-break: break-word; }
+/* Переключатель источника предложения: правила / ИИ. */
+.aisrc { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.aisrc .small.on { outline: 2px solid var(--brand); }
+.warnline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--warning);
+  border-radius: var(--r1, 8px);
+  background: var(--ws);
+  margin-bottom: 10px;
+}
+.aicomm { margin-top: 10px; }
+.aicomm h4 { margin: 0 0 6px; }
+.aicomm pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r1, 8px);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+}
 
 /* --- ИИ-чат ---------------------------------------------------------- */
 .ai-tab h2 { margin-bottom: 4px; }
