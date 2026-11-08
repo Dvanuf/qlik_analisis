@@ -203,17 +203,19 @@ export function desEcb(block, key) {
   return out;
 }
 
-/** DES-ключ из 7 байт (56 бит) с битом чётности в 8-й бит каждого байта. */
+/**
+ * DES-ключ из 7 байт (NTLM): биты seed (старший бит байта — первый бит)
+ * распределяются по 7 бит на байт, 8-й бит — паритет (нечётность).
+ */
 export function desKey7(seed) {
-  const seedBits = Buffer.alloc(56);
-  for (let i = 0; i < 56; i += 1) seedBits[i] = (seed[i >> 3] >> (7 - (i & 7))) & 1;
   const key = Buffer.alloc(8);
   for (let i = 0; i < 8; i += 1) {
     let b = 0, ones = 0;
     for (let j = 0; j < 7; j += 1) {
-      const b7 = seedBits[i * 7 + j];
-      b = (b << 1) | b7;
-      ones += b7;
+      const bitIndex = i * 7 + j;
+      const bit = (seed[bitIndex >> 3] >> (7 - (bitIndex & 7))) & 1;
+      b = (b << 1) | bit;
+      ones += bit;
     }
     key[i] = (b << 1) | ((ones % 2 === 0) ? 1 : 0);
   }

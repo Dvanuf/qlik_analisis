@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { md4, ntlmHash, createType1Message, parseType2Message, createType3Message, ntResponseV1} from '../src/extract/ntlm.js';
+import { md4, ntlmHash, createType1Message, parseType2Message, createType3Message, ntResponseV1, lmResponseV1 } from '../src/extract/ntlm.js';
 
 test('MD4: векторы, сверенные с OpenSSL (эталон)', () => {
   const hex = (b) => b.toString('hex');
@@ -100,12 +100,21 @@ test('Type3: детерминирован для фиксированного в
   assert.equal(buf.slice(userOff, userOff + userLen).toString('utf16le'), 'u');
 });
 
-test('NTLMv1: официальный вектор MS-NLMP 4.2.2', () => {
+test('NTLMv1: официальный вектор MS-NLMP 4.2.2 (NT- и LM-ответы)', () => {
   // User='User', Domain='Domain', Password='Password', challenge 0x0123456789abcdef.
-  // NT-хеш: a4f49c406510bdcab6924ee7ba933c50.
-  const nt = ntlmHash('Password');
-  assert.equal(nt.toString('hex'), 'a4f49c406510bdcab6824ee7c30fd852');  // OpenSSL-эталон
+  // Векторы — из спецификации [MS-NLMP] 4.2.2.2 (PDF, сверено с эталоном).
   const challenge = Buffer.from('0123456789abcdef', 'hex');
-  const resp = ntResponseV1(nt, challenge);
-  assert.equal(resp.toString('hex'), '67c43011e74d1a18ba8f681e9b996b02c1cbcdc58b6e4662');
+  const nt = ntResponseV1(ntlmHash('Password'), challenge);
+  assert.equal(nt.toString('hex'), '67c43011f30298a2ad35ece64f16331c44bdbed927841f94', 'NT-ответ');
+  const lm = lmResponseV1('Password', challenge);
+  assert.equal(lm.toString('hex'), '98def7b87f88aa5dafe2df779688a172def11c7d5ccdef13', 'LM-ответ');
+});
+
+test('NTLMv1: структурные свойства', () => {
+  const challenge = Buffer.from('0123456789abcdef', 'hex');
+  const r1 = ntResponseV1(ntlmHash('Password'), challenge);
+  const r2 = ntResponseV1(ntlmHash('Password'), challenge);
+  assert.deepEqual(r1, r2, 'NT-ответ недетерминирован');
+  const r3 = ntResponseV1(ntlmHash('Password2'), challenge);
+  assert.notDeepEqual(r1, r3, 'NT-ответ не зависит от пароля');
 });
