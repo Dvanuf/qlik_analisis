@@ -13,7 +13,7 @@ const SEVERITY = {
   S001: 'warning', S002: 'info', S003: 'warning', S004: 'info',
   S005: 'warning', S006: 'warning', S007: 'info', S008: 'info',
   S009: 'warning', S010: 'error', S011: 'info', S012: 'info', S013: 'info',
-  S014: 'error',
+  S014: 'error', S015: 'warning', S016: 'warning', S017: 'info', S018: 'info', S019: 'error',
 };
 
 /**
@@ -453,6 +453,149 @@ export const scriptRules = [
           e.message,
           'Исправить скрипт в указанном месте и перезагрузить приложение.',
           { line: e.line ?? undefined, column: e.column ?? undefined }));
+      }
+      return out;
+    },
+  },
+
+  {
+    // Правило для QlikView-легаси: Binary подтягивает модель из другого
+    // документа — этот скрипт ломается молча, если источник переехал.
+    id: 'S015',
+    category: CATEGORY,
+    severity: SEVERITY.S015,
+    title: 'Скрипт начинается с Binary Load',
+    humanTitle: 'Скрипт зависит от другого документа',
+    whatHappened: 'Скрипт начинается с Binary — модель приходит из другого документа целиком, и его изменения ломают этот скрипт молча.',
+    description: 'Оператор Binary подтягивает модель данных из другого приложения — явной зависимости нет ни в скрипте, ни в документации.',
+    recommendation: 'Заменить Binary на явную загрузку нужных таблиц или зафиксировать источник и документировать зависимость.',
+    run(ctx) {
+      const out = [];
+      const lines = String(ctx.graph?.script ?? '').split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        if (/^\s*binary\s+\S/i.test(lines[i])) {
+          out.push(finding('S015', 'Скрипт начинается с Binary Load',
+            { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+            `Строка ${i + 1}: модель берётся из другого документа через Binary`,
+            lines[i].trim().slice(0, 160),
+            'Заменить Binary на явную загрузку нужных таблиц.',
+            { line: i + 1 }));
+          break;
+        }
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'S016',
+    category: CATEGORY,
+    severity: SEVERITY.S016,
+    title: 'ErrorMode отключён',
+    humanTitle: 'Ошибки загрузки маскируются',
+    whatHappened: 'ErrorMode=0 — ошибки загрузки не останавливают перезагрузку, и некачественные данные попадают в модель незаметно.',
+    description: 'SET ErrorMode=0 заставляет перезагрузку продолжаться при ошибках операторов — сбои не видны в журнале выполнения.',
+    recommendation: 'Убрать ErrorMode=0 или перейти на ErrorMode=2 (останов по ошибке) с обработкой ожидаемых сбоев.',
+    run(ctx) {
+      const out = [];
+      const lines = String(ctx.graph?.script ?? '').split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        if (/\bset\s+errormode\s*=\s*0\b/i.test(lines[i])) {
+          out.push(finding('S016', 'ErrorMode отключён',
+            { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+            `Строка ${i + 1}: ошибки загрузки игнорируются`,
+            lines[i].trim().slice(0, 160),
+            'Убрать ErrorMode=0 или обрабатывать ожидаемые сбои явно.',
+            { line: i + 1 }));
+        }
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'S017',
+    category: CATEGORY,
+    severity: SEVERITY.S017,
+    title: 'Пауза Sleep в скрипте',
+    humanTitle: 'Скрипт засыпает во время перезагрузки',
+    whatHappened: 'Sleep ставит перезагрузку на паузу — время тратится на ожидание при каждом прогоне.',
+    description: 'Оператор Sleep приостанавливает выполнение скрипта на заданное число секунд.',
+    recommendation: 'Убрать Sleep или заменить на проверку готовности источника (например, существования файла).',
+    run(ctx) {
+      const out = [];
+      const lines = String(ctx.graph?.script ?? '').split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        const m = /\bsleep\s*\(\s*(\d+)\s*\)/i.exec(lines[i]);
+        if (m) {
+          out.push(finding('S017', 'Пауза Sleep в скрипте',
+            { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+            `Строка ${i + 1}: пауза ${m[1]} с на каждом прогоне`,
+            lines[i].trim().slice(0, 160),
+            'Убрать Sleep или заменить проверкой готовности источника.',
+            { line: i + 1 }));
+        }
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'S018',
+    category: CATEGORY,
+    severity: SEVERITY.S018,
+    title: 'Include без Must_Include',
+    humanTitle: 'Подключаемый файл может исчезнуть молча',
+    whatHappened: 'Классический $(include=...) при отсутствии файла продолжает скрипт молча — часть логики выпадает без сигнала.',
+    description: '$(include=...) не падает, если файл не найден: скрипт выполняется без подключённой логики.',
+    recommendation: 'Для обязательных файлов использовать $(Must_Include=...) — при отсутствии загрузка упадёт сразу с понятной ошибкой.',
+    run(ctx) {
+      const out = [];
+      const lines = String(ctx.graph?.script ?? '').split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        const m = /\$\(\s*include\s*=\s*([^)]+)\)/i.exec(lines[i]);
+        if (m) {
+          out.push(finding('S018', 'Include без Must_Include',
+            { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+            `Строка ${i + 1}: файл подключается необязательно — при отсутствии скрипт продолжит молча`,
+            lines[i].trim().slice(0, 160),
+            'Для обязательных файлов использовать $(Must_Include=...).',
+            { line: i + 1 }));
+        }
+      }
+      return out;
+    },
+  },
+
+  {
+    id: 'S019',
+    category: CATEGORY,
+    severity: SEVERITY.S019,
+    title: 'CALL несуществующей подпрограммы',
+    humanTitle: 'Вызов подпрограммы, которой нет',
+    whatHappened: 'CALL обращается к подпрограмме, не определённой в скрипте — перезагрузка упадёт при достижении вызова.',
+    description: 'Оператор CALL вызывает SUB по имени; отсутствие определения приводит к ошибке выполнения.',
+    recommendation: 'Определить подпрограмму (SUB … END SUB) или убрать вызов.',
+    run(ctx) {
+      const out = [];
+      const lines = String(ctx.graph?.script ?? '').split(/\r?\n/);
+      const subs = new Set();
+      const calls = [];
+      for (let i = 0; i < lines.length; i += 1) {
+        const sm = /\bsub\s+([A-Za-z_][\w]*)/i.exec(lines[i]);
+        if (sm) subs.add(sm[1].toLowerCase());
+        const cm = /\bcall\s+([A-Za-z_][\w]*)/i.exec(lines[i]);
+        if (cm) calls.push({ name: cm[1], line: i + 1, raw: lines[i].trim() });
+      }
+      for (const c of calls) {
+        if (!subs.has(c.name.toLowerCase())) {
+          out.push(finding('S019', 'CALL несуществующей подпрограммы',
+            { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+            `Строка ${c.line}: CALL ${c.name} — подпрограмма не определена в скрипте`,
+            c.raw.slice(0, 160),
+            'Определить SUB или убрать вызов.',
+            { line: c.line }));
+        }
       }
       return out;
     },

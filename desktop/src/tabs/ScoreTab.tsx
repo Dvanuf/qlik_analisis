@@ -211,6 +211,13 @@ export default function ScoreTab(props: Props) {
               : 'Первых трёх исправлений достаточно для заметного роста.'}
           </p>
           <div className="row">
+            {/* Покрытие: сколько проверок применимо к этой платформе (для QV часть правил Sense-only пропускается). */}
+            {(() => {
+              const stats = (analysis as { ruleStats?: { skipped: boolean }[] }).ruleStats ?? [];
+              const total = stats.length;
+              const applied = stats.filter((st) => !st.skipped).length;
+              return total > 0 ? <span className="pill mute" title="Часть проверок может пропускаться: на QlikView недоступен фронт-энд Doc API">применимо {applied} из {total}</span> : null;
+            })()}
             {trend != null && (
               <span className={`pill ${trend > 0 ? 'ok' : trend < 0 ? 'error' : 'mute'}`}>
                 {trend > 0 ? `+${trend}` : trend} с прошлой проверки
