@@ -49,7 +49,8 @@ declare global {
       saveCredentials(creds: {
         hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
       }): Promise<boolean>;
-          loadCredentials(opts?: { host?: string }): Promise<{
+          ntlmLogin(payload: { loginUrl: string; username: string; domain?: string; password: string; insecure?: boolean }): Promise<{ ok: boolean; host?: string; error?: string }>;
+      loadCredentials(opts?: { host?: string }): Promise<{
 
         hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
       } | null>;
@@ -1086,6 +1087,7 @@ export default function App() {
           scoresByApp={scoresByApp}
           serverProfile={serverProfile}
           onServerProfile={switchServerProfile}
+          onSessionSaved={() => void loadSessionFor()}
           onLoadApps={() => void loadApps()}
           onAnalyze={() => void analyzeSelected()}
           onAnalyzeAll={(ids) => void analyzeAll(ids)}

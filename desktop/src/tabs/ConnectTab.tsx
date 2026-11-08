@@ -47,6 +47,69 @@ const STEPS = [
 
 type ScoresByApp = Record<string, { score: number; at: string; version: number }>;
 
+/** NTLM-вход в QlikView AccessPoint */ 
+function NtlmLoginBlock(props: { loginUrl: string; onNote: (t: string) => void; onDone: () => void }) {
+  const [user, setUser] = useState('');
+  const [pass, setPass] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  async function login() {
+    if (!user.trim() || !pass) { setNote('Введите логин и пароль.'); return; }
+    setBusy(true);
+    setNote('');
+    try {
+      const res = await window.qa.ntlmLogin({
+        loginUrl: props.loginUrl,
+        username: user.trim(),
+        password: pass,
+        insecure: true,
+      }) as { ok: boolean; host?: string; error?: string };
+      if (res.ok) {
+        props.onNote(`NTLM-сессия сохранена (${res.host ?? ''})`);
+        props.onDone();
+      } else {
+        setNote(res.error ?? 'Неизвестная ошибка NTLM-входа.');
+      }
+    } catch (err) {
+      setNote(`Ошибка NTLM-входа: ${String(err)}`);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="ntlmbox">
+      <b>Вход в QlikView (NTLM)</b>
+      <div className="muted small">
+        AccessPoint использует Windows-аутентификацию: логин обычно без домена,
+        как в браузере. Пароль не сохраняется — только cookie сессии.
+      </div>
+      <div className="row">
+        <input
+          value={user}
+          onChange={(e) => setUser(e.target.value)}
+          placeholder="логин"
+          aria-label="Логин QlikView"
+          disabled={busy}
+        />
+        <input
+          type="password"
+          value={pass}
+          onChange={(e) => setPass(e.target.value)}
+          placeholder="пароль"
+          aria-label="Пароль QlikView"
+          onKeyDown={(e) => { if (e.key === 'Enter') void login(); }}
+          disabled={busy}
+        />
+        <button className="small" onClick={() => void login()} disabled={busy || !user.trim() || !pass}>
+          Войти
+        </button>
+      </div>
+      {note && <div className="muted small">{note}</div>}
+    </div>
+  );
+}
+
 type Props = {
   /** Последняя оценка каждого приложения — из истории прогонов. */
   scoresByApp?: ScoresByApp;
@@ -54,6 +117,8 @@ type Props = {
   serverProfile?: string;
   /** Переключить профиль: подставить адрес и сессию сервера. */
   onServerProfile?: (profile: string) => void;
+  /** NTLM-сессия сохранена — перечитать сессию профиля. */
+  onSessionSaved?: () => void;
   url: string; onUrl: (v: string) => void;
   insecure: boolean; onInsecure: (v: boolean) => void;
   platform: Platform; onPlatform: (p: Platform) => void;
@@ -99,7 +164,7 @@ function statusIcon(status: DoctorStep['status']): string {
 
 export default function ConnectTab(props: Props) {
   const {
-    scoresByApp, serverProfile, onServerProfile,
+    scoresByApp, serverProfile, onServerProfile, onSessionSaved,
     url, onUrl, insecure, onInsecure, platform, onPlatform,
     user, onUser, password, onPassword, cookie, onCookie, xrfKey, onXrfKey, csrfToken, onCsrfToken,
     apps, appId, onAppId, selectedIds, onSelectedIds,
@@ -287,6 +352,14 @@ export default function ConnectTab(props: Props) {
           адрес и сессия переключаются автоматически; правка URL ведётся под выбранным сервером
         </span>
       </div>
+
+      {serverProfile === 'qv' && (
+        <NtlmLoginBlock
+          loginUrl="http://onyx-qlick.onyx.local/qlikview/index.htm"
+          onNote={(t) => setQrsNote(t)}
+          onDone={() => onSessionSaved?.()}
+        />
+      )}
 
       {/* --- Пошаговый сценарий --- */}
       <div className="wizard" role="list" aria-label="Шаги подключения">

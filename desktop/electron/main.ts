@@ -32,6 +32,7 @@ import { analyze as aiAnalyze, buildPromptPreview, providerChain, PROVIDERS } fr
 import { refactorScript } from '../../src/ai/refactor.js';
 import { AiError } from '../../src/ai/errors.js';
 import { resolveAi, resolveQrs } from '../../src/config.js';
+import { httpNtlmLogin } from '../../src/extract/ntlm.js';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -993,6 +994,44 @@ ipcMain.handle('core:save-credentials', (_e, creds: {
   writeFileSync(tmp, blob);
   renameSync(tmp, file);
   return true;
+});
+
+/**
+ * NTLM-вход в QlikView AccessPoint: программное NTLMv2-рукопожатие
+ * (Chromium на macOS NTLM не делает). Cookie сессии сохраняется
+ * в per-host хранилище профиля QlikView; пароль не сохраняется.
+ */
+ipcMain.handle('core:ntlm-login', async (_e, payload: {
+  loginUrl: string; username: string; domain?: string; password: string; insecure?: boolean;
+}) => {
+  try {
+    const res = await httpNtlmLogin({
+      url: String(payload?.loginUrl ?? ''),
+      username: String(payload?.username ?? ''),
+      password: String(payload?.password ?? ''),
+      domain: payload?.domain ? String(payload.domain) : undefined,
+      insecure: Boolean(payload?.insecure),
+    });
+    if (!res.cookieHeader) throw new Error('Сервер не вернул cookie сессии.');
+    // Cookie сохраняется в per-host хранилище как обычная сессия хаба:
+    // это позволяет Doc API-коннектору подставлять её в заголовки.
+    const creds = normalizeCredentials({
+      hubUrl: String(payload?.loginUrl ?? ''),
+      cookie: res.cookieHeader,
+      at: new Date().toISOString(),
+    });
+    if (!isSessionUsable(creds)) throw new Error('Сервер не вернул usable-сессию.');
+    const blob = safeStorage.encryptString(JSON.stringify(creds));
+    let host = '';
+    try { host = new URL(creds.hubUrl ?? '').hostname; } catch { host = ''; }
+    const file = resolve(app.getPath('userData'), credsFileFor(host));
+    const tmp = `${file}.tmp`;
+    writeFileSync(tmp, blob);
+    renameSync(tmp, file);
+    return { ok: true, host, cookieCount: res.cookies.size };
+  } catch (err) {
+    return { ok: false, error: maskSecrets(err instanceof Error ? err.message : String(err)) };
+  }
 });
 
 ipcMain.handle('core:load-credentials', async (_e, opts?: { host?: string }) => {

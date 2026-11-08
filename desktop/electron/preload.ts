@@ -56,6 +56,8 @@ const api = {
   saveCredentials: (creds: {
     hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
   }) => ipcRenderer.invoke('core:save-credentials', creds),
+  /** NTLM-вход в QlikView AccessPoint: логин/пароль → cookie сессии (per-host). */
+  ntlmLogin: (payload: { loginUrl: string; username: string; domain?: string; password: string; insecure?: boolean }) => ipcRenderer.invoke('core:ntlm-login', payload),
   loadCredentials: (opts?: { host?: string }) => ipcRenderer.invoke('core:load-credentials', opts ?? {}),
   clearCredentials: (opts?: { host?: string }) => ipcRenderer.invoke('core:clear-credentials', opts ?? {}),
   /** Пакетный анализ всех приложений сервера. */

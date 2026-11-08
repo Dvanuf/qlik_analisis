@@ -910,3 +910,12 @@ table.rq tr.pat { cursor: pointer; }
 .serverpill:hover { border-color: var(--brand); }
 .serverpill.on { border-color: var(--brand); background: var(--bs); }
 .serverpill.on b { color: var(--brand); }
+
+/* NTLM-вход в QlikView (профиль QlikView на «Подключении»). */
+.ntlmbox {
+  margin: 12px 0; padding: 10px 14px;
+  border: 1px solid var(--line-soft); border-radius: var(--r2);
+  background: var(--panel-2);
+}
+.ntlmbox .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.ntlmbox input { flex: 1; min-width: 140px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r1); background: var(--panel); color: var(--text); }
