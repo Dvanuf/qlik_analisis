@@ -142,8 +142,9 @@ export function createType3Message(opts) {
     .digest();
   const ntResponse = Buffer.concat([proof, blob]);
 
-  // LM-ответ при NTLMv2 не используется — дублируем NT-ответ (как в httpntlm).
-  const lmResponse = ntResponse;
+  // LM-ответ при NTLMv2 не используется: поле заполняется 24 нулями
+  // (дублированный NT-ответ строгие серверы отвергают как невалидный LM).
+  const lmResponse = Buffer.alloc(24);
 
   const u16 = (v) => Buffer.from(v, 'utf16le');
   // Шесть security-буферов по порядку MS-NLMP: LM, NT, Domain, User, Workstation, SessionKey.
