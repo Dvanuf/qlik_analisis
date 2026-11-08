@@ -13,8 +13,8 @@
  * нигде — сохраняется лишь полученная cookie сессии.
  */
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest, Agent } from 'node:https';
+import { request as httpRequest, Agent as HttpAgent } from 'node:http';
+import { request as httpsRequest, Agent as HttpsAgent } from 'node:https';
 
 // --- MD4 (RFC 1320) — нужен для NTLM-хеша пароля ---
 
@@ -169,10 +169,13 @@ export function createType3Message(opts) {
 function httpOnce(url, headers, insecure) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
+    // Агент должен совпадать с протоколом: https.Agent в http-запросе даёт
+    // ERR_INVALID_PROTOCOL «Expected https:».
+    const AgentCtor = u.protocol === 'https:' ? HttpsAgent : HttpAgent;
     const req = (u.protocol === 'https:' ? httpsRequest : httpRequest)(u, {
       method: 'GET',
       headers: { Connection: 'keep-alive', ...headers },
-      agent: new Agent({ keepAlive: true, rejectUnauthorized: !insecure }),
+      agent: new AgentCtor({ keepAlive: true, rejectUnauthorized: !insecure }),
     }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));

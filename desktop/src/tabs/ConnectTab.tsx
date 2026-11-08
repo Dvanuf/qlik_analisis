@@ -355,7 +355,7 @@ export default function ConnectTab(props: Props) {
 
       {serverProfile === 'qv' && (
         <NtlmLoginBlock
-          loginUrl="http://onyx-qlick.onyx.local/qlikview/index.htm"
+          loginUrl="http://onyx-qlick.onyx.local/QvAJAXZfc/Authenticate.aspx"
           onNote={(t) => setQrsNote(t)}
           onDone={() => onSessionSaved?.()}
         />
