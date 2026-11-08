@@ -3,7 +3,7 @@
 Документ отвечает на вопрос «с чего начать новую задачу». Правила работы с AI —
 в [`AGENTS.md`](../AGENTS.md), история версий — в [`CHANGELOG.md`](../CHANGELOG.md).
 
-**Обновлено:** 07.11.2026 · **Текущая версия:** 0.17.1 (тег `v0.17.1`)
+**Обновлено:** 07.11.2026 · **Текущая версия:** 0.17.2 (тег `v0.17.2`)
 
 Что можно перенести из расширения QS Metadata Explorer — в
 [`QSME-ANALYSIS.md`](QSME-ANALYSIS.md) (проверено на живом хабе 26.10.2026).
@@ -23,7 +23,7 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 |---|---|
 | Исходники | `/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer` |
 | Архив всех сборок | `<проект>/desktop/release/` |
-| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.17.1-{arm64.dmg,arm64-mac.zip,x64.exe}` |
+| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.17.2-{arm64.dmg,arm64-mac.zip,x64.exe}` |
 | Лог входа в хаб | `~/Library/Application Support/qlik-analyzer-desktop/hub-login.log` |
 | Настройки правил | `~/Library/Application Support/qlik-analyzer-desktop/rules.json` |
 | История прогонов | `~/Library/Application Support/qlik-analyzer-desktop/history.sqlite` |
@@ -39,6 +39,7 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 
 | Версия | Суть |
 |---|---|
+| 0.17.2 | **AccessPoint Login Failed → Kerberos/NTLM whitelist:** auth-server-whitelist/negotiate-delegate для доменных серверов (Safari входит по билету, Chromium — теперь тоже); доп. хосты через QLIK_AUTH_HOSTS. Тесты: 454/454 |
 | 0.17.1 | **Вход по профилю:** QV — AccessPoint (loginUrl per-profile), cookie по домену (не по пути), CSRF-догон только для Sense, окно входа показывается при ошибке загрузки. Тесты: 453/453 |
 | 0.17.0 | **Профили серверов:** кнопки Sense/QlikView на «Подключении», URL per-profile, сессии per-host (hub-credentials-<хост>.bin, legacy-подхват), смена профиля = адрес + сессия автоматически. Тесты: 453/453 |
 | 0.16.0 | **QV-скриптовые правила и покрытие (этап B+C анализа QV).** S015–S019 (Binary/ErrorMode/Sleep/include/CALL) — по тексту скрипта, BOTH, применимо на QV 26→31; ScoreTab: pill «применимо N из M» (ruleStats); RULE_PLATFORMS+domains+QLIKVIEW.md обновлены. QV-AccessPoint onyx-qlick жив (HTTP, Forms); порт 4747 закрыт — серверный анализ QV ждёт открытия порта (эксперимент A отложен). Тесты: 453/453 |

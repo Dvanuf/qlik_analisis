@@ -142,3 +142,10 @@ test('тесты: test() не вложен в другой test()', () => {
   }
   assert.deepEqual(nested, [], `вложенные тесты: ${nested.join(', ')}`);
 });
+test('main.ts: встроенная аутентификация доменных серверов (Kerberos/NTLM)', () => {
+  // Регрессия 0.17.2: AccessPoint с Windows-аутентификацией отвечал
+  // «Login Failed» — Chromium не делал negotiate без whitelist.
+  assert.ok(MAIN.includes("auth-server-whitelist"), 'нет auth-server-whitelist');
+  assert.ok(MAIN.includes("auth-negotiate-delegate-whitelist"), 'нет negotiate-delegate whitelist');
+  assert.ok(MAIN.includes('onyx-qlick.onyx.local'), 'QV AccessPoint не в whitelist');
+});

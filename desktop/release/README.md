@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.17.2 | [v0.17.2 — Kerberos-вход в AccessPoint](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.17.2) |
 | 0.17.1 | [v0.17.1 — вход по профилю: AccessPoint для QV](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.17.1) |
 | 0.17.0 | [v0.17.0 — профили серверов Sense / QlikView](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.17.0) |
 | 0.16.0 | [v0.16.0 — QlikView-скриптовые правила, покрытие анализа](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.16.0) |
@@ -37,6 +38,9 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.17.2-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.17.2 |
+| `Qlik Analyzer-0.17.2-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.17.2 |
+| `Qlik Analyzer-0.17.2-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.17.2 |
 | `Qlik Analyzer-0.17.1-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.17.1 |
 | `Qlik Analyzer-0.17.1-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.17.1 |
 | `Qlik Analyzer-0.17.1-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.17.1 |

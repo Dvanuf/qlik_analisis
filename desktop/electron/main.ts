@@ -35,6 +35,25 @@ import { resolveAi, resolveQrs } from '../../src/config.js';
 
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * Встроенная (Kerberos/NTLM) аутентификация доменных серверов Qlik.
+ *
+ * AccessPoint QlikView обычно настроен на Windows-аутентификацию: Safari
+ * входит автоматически по системному билету macOS, а Chromium без явного
+ * whitelist серверов negotiate не делает — AccessPoint отвечает «Login Failed».
+ * Свитчи применяются только при старте приложения, поэтому список — константа;
+ * дополнительные хосты можно передать через QLIK_AUTH_HOSTS (через запятую).
+ */
+const INTEGRATED_AUTH_HOSTS = [
+  'dc3-qliks-ap-03.onyx.local',
+  'onyx-qlick.onyx.local',
+  ...(process.env.QLIK_AUTH_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
+];
+for (const h of INTEGRATED_AUTH_HOSTS) {
+  app.commandLine.appendSwitch('auth-server-whitelist', `*${h}`);
+  app.commandLine.appendSwitch('auth-negotiate-delegate-whitelist', `*${h}`);
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
