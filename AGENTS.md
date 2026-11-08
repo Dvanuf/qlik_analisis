@@ -222,6 +222,9 @@ cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" node_modules/vite/bin/v
   и начинается скачивание.
 - Макрос `${arch}` в `artifactName` раскрывается числом — имена артефактов
   задаются явно: `${productName}-${version}-arm64.${ext}` и т. п.
+- Если сборка падает на скачивании Electron (HTTP 504 от зеркала) — задать
+  зеркало: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` перед
+  запуском build-release.mjs.
 - `npm list` для сбора зависимостей: production-зависимостей нет, достаточно
   заглушки, отдающей `{"name":…,"version":…,"dependencies":{}}`.
 - Многострочные скрипты не писать через shell-heredoc — ломается на backticks
