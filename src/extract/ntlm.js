@@ -116,7 +116,9 @@ function filetime(date) {
 
 /** Type3: финальное сообщение authenticate (тело base64). */
 export function createType3Message(opts) {
-  const domain = String(opts.domain ?? '').toUpperCase();
+  // Домен: в NTLMv2-хеш идёт ВЕРХНИЙ регистр, а в буфер Type3 — как ввёл пользователь
+  // (сервер сверяет proof со своим доменом; Safari/Windows передают ONYX).
+  const domain = String(opts.domain ?? '');
   const user = String(opts.username ?? '');
   const ws = String(opts.workstation ?? 'QLIK-ANALYZER');
   const password = String(opts.password ?? '');
@@ -124,7 +126,7 @@ export function createType3Message(opts) {
   // NT-хеш → NTLMv2-хеш: HMAC-MD5(NT, UPPER(user) + UPPER(domain)).
   const nt = ntlmHash(password);
   const v2Hash = createHmac('md5', nt)
-    .update(Buffer.from(`${user.toUpperCase()}${domain}`, 'utf16le'))
+    .update(Buffer.from(`${user.toUpperCase()}${domain.toUpperCase()}`, 'utf16le'))
     .digest();
 
   // Blob (MS-NLMP 3.3.2): версия, время, случайный клиент-нонс, AV-пары сервера.
@@ -247,7 +249,7 @@ export async function httpNtlmLogin(opts) {
       type2,
     }),
   }, opts.insecure ?? false);
-  if (third.status === 401) throw new Error('NTLM-аутентификация отклонена сервером (неверные учётные данные?)');
+  if (third.status >= 400) throw new Error(`Сервер отклонил NTLM-аутентификацию (HTTP ${third.status}). Проверьте логин, пароль и домен — при логине без домена укажите домен в поле.`);
   const cookies = collectSetCookie(third.headers);
   return {
     cookies,

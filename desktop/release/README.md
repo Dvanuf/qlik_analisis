@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.18.3 | [v0.18.3 — NTLM: поле «Домен»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.3) |
 | 0.18.2 | [v0.18.2 — NTLM 200 без cookie = успех](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.2) |
 | 0.18.1 | [v0.18.1 — NTLM-вход: правильный endpoint](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.1) |
 | 0.18.0 | [v0.18.0 — NTLM-вход в QlikView AccessPoint](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.0) |
@@ -41,6 +42,9 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
+| `Qlik Analyzer-0.18.3-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.18.3 |
+| `Qlik Analyzer-0.18.3-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.18.3 |
+| `Qlik Analyzer-0.18.3-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.18.3 |
 | `Qlik Analyzer-0.18.2-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.18.2 |
 | `Qlik Analyzer-0.18.2-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.18.2 |
 | `Qlik Analyzer-0.18.2-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.18.2 |

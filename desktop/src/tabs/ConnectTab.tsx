@@ -50,6 +50,7 @@ type ScoresByApp = Record<string, { score: number; at: string; version: number }
 /** NTLM-вход в QlikView AccessPoint */ 
 function NtlmLoginBlock(props: { loginUrl: string; onNote: (t: string) => void; onDone: () => void }) {
   const [user, setUser] = useState('');
+  const [domain, setDomain] = useState('');
   const [pass, setPass] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -62,6 +63,7 @@ function NtlmLoginBlock(props: { loginUrl: string; onNote: (t: string) => void; 
       const res = await window.qa.ntlmLogin({
         loginUrl: props.loginUrl,
         username: user.trim(),
+        domain: domain.trim(),
         password: pass,
         insecure: true,
       }) as { ok: boolean; host?: string; note?: string; error?: string };
@@ -81,8 +83,9 @@ function NtlmLoginBlock(props: { loginUrl: string; onNote: (t: string) => void; 
     <div className="ntlmbox">
       <b>Вход в QlikView (NTLM)</b>
       <div className="muted small">
-        AccessPoint использует Windows-аутентификацию: логин обычно без домена,
-        как в браузере. Пароль не сохраняется — только cookie сессии.
+        AccessPoint использует Windows-аутентификацию (NTLM): логин обычно без
+        домена — домен укажите в поле ниже (как в диалоге Windows, например ONYX).
+        Пароль не сохраняется — только cookie сессии.
       </div>
       <div className="row">
         <input
@@ -90,6 +93,13 @@ function NtlmLoginBlock(props: { loginUrl: string; onNote: (t: string) => void; 
           onChange={(e) => setUser(e.target.value)}
           placeholder="логин"
           aria-label="Логин QlikView"
+          disabled={busy}
+        />
+        <input
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          placeholder="домен (например ONYX)"
+          aria-label="Домен QlikView"
           disabled={busy}
         />
         <input
