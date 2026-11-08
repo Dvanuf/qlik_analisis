@@ -1048,7 +1048,13 @@ function hubLog(...args: unknown[]): void {
  * Вход в хаб: открываем окно браузера, пользователь вводит доменный пароль,
  * приложение само перехватывает cookie сессии и ключи рукопожатия.
  */
-ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: string; insecure?: boolean }) => {
+ipcMain.handle('core:open-hub', async (_e, opts: {
+  hubUrl: string; appId?: string; insecure?: boolean;
+  /** Страница входа: для QlikView — AccessPoint, для Sense — хаб (по умолчанию из hubUrl). */
+  loginUrl?: string;
+  /** Платформа: qv — не требует CSRF и не строит путь /sense/app. */
+  platform?: 'sense' | 'qv';
+}) => {
   const partition = 'persist:qlik-hub';
   const captured: { csrfToken?: string; xrfKey?: string; wsUrl?: string } = {};
   let host = '';
@@ -1119,12 +1125,21 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
 
   // 1) Сначала грузим страницу: до первой навигации у Electron нет цели для
   //    CDP («target closed while handling command») — окно остаётся белым.
-  const target = opts.appId
-    ? `${opts.hubUrl}/sense/app/${opts.appId}/overview`
-    : `${opts.hubUrl}/sense/app`;
+  const isQv = opts.platform === 'qv';
+  const loginPage = opts.loginUrl || opts.hubUrl;
+  const target = !isQv
+    ? (opts.appId ? `${opts.hubUrl}/sense/app/${opts.appId}/overview` : `${opts.hubUrl}/sense/app`)
+    : loginPage;
   hubLog('открываем:', target);
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     hubLog('did-fail-load:', code, desc, maskUrl(String(url ?? '')));
+    // Окно молча не показывалось при ошибке загрузки (показ — по
+    // ready-to-show) — пользователь думал, что «браузер не запустился».
+    if (!win.isDestroyed() && !win.isVisible()) {
+      win.show();
+      win.focus();
+      hubLog('окно показано с ошибкой загрузки — адрес страницы входа недоступен');
+    }
   });
   win.webContents.on('console-message', (_e, level, message) => {
     if (level >= 2) hubLog('консоль страницы:', message);
@@ -1168,8 +1183,11 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
     };
     const timer = setInterval(async () => {
       try {
-        const cookies = await win.webContents.session.cookies.get({ url: opts.hubUrl });
-        const session = cookies.find((c) => c.name.toLowerCase() === 'x-qlik-session');
+        const cookies = await win.webContents.session.cookies.get({});
+        // QlikView AccessPoint ставит cookie на путь /qlikview — фильтр по url
+        // с голым доменом её терял; фильтруем по имени и домену хоста.
+        const session = cookies.find((c) => c.name.toLowerCase() === 'x-qlik-session'
+          && (host === '' || (c.domain ?? '').replace(/^\./, '') === host || (c.domain ?? '').endsWith(`.${host}`)));
         hubLog('ожидание cookie: найдено [', cookies.map((c) => c.name).join(', ') || '—',
           '] | CSRF-токен:', captured.csrfToken ? '✓' : '✗');
         if (session) { finish(session); return; }
@@ -1183,7 +1201,7 @@ ipcMain.handle('core:open-hub', async (_e, opts: { hubUrl: string; appId?: strin
 
   // 4) Cookie есть, а CSRF-токена нет: движок не открыл новое WS (соединение
   //    переиспользовано). Перезагружаем страницу — рукопожатие повторится.
-  if (sessionCookie && !captured.csrfToken) {
+  if (sessionCookie && !captured.csrfToken && opts.platform !== 'qv') {
     hubLog('cookie получена, но CSRF-токен не перехвачен — перезагружаем страницу');
     try {
       await win.reload();

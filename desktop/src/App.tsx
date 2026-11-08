@@ -43,7 +43,7 @@ declare global {
         url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean; platform?: string;
       }): Promise<AnalysisResult>;
-      openHub(opts: { hubUrl: string; appId?: string; insecure?: boolean }): Promise<{
+      openHub(opts: { hubUrl: string; appId?: string; insecure?: boolean; loginUrl?: string; platform?: 'sense' | 'qv' }): Promise<{
         cookie?: string; xrfKey?: string; csrfToken?: string; wsUrl?: string;
       } | null>;
       saveCredentials(creds: {
@@ -135,11 +135,13 @@ const SERVER_PROFILES = [
   {
     id: 'sense', label: 'Qlik Sense', host: 'dc3-qliks-ap-03.onyx.local',
     url: 'wss://dc3-qliks-ap-03.onyx.local/app',
+    loginUrl: 'https://dc3-qliks-ap-03.onyx.local/hub/',
     hint: 'хаб: cookie через вход в хаб',
   },
   {
     id: 'qv', label: 'QlikView', host: 'onyx-qlick.onyx.local',
     url: 'wss://onyx-qlick.onyx.local:4747/app',
+    loginUrl: 'http://onyx-qlick.onyx.local/qlikview/index.htm',
     hint: 'AccessPoint: движок 4747 — нужен открытый порт',
   },
 ] as const;
@@ -393,10 +395,15 @@ export default function App() {
     );
     try {
       const targetApp = appId || appIdFromUrl;
+      // Страница входа — по профилю: для QlikView это AccessPoint,
+      // для Sense — хаб. Кастомный URL — прежняя эвристика из hubUrl.
+      const loginUrl = SERVER_PROFILES.find((p) => p.id === serverProfile)?.loginUrl;
       const res = await window.qa.openHub({
         hubUrl,
         appId: targetApp || undefined,
         insecure,
+        loginUrl,
+        platform: serverProfile === 'qv' ? 'qv' : 'sense',
       });
       if (res?.cookie) {
         setCookie(res.cookie);
