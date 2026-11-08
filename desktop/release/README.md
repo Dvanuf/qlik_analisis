@@ -10,7 +10,6 @@
 | Версия | Релиз |
 |---|---|
 | 0.18.6 | [v0.18.6 — исправление desKey7 (NTLMv1-ответы по вектору MS-NLMP)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.6) |
-| 0.18.6 | [v0.18.6 — NTLM-вход через httpntlm](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.6) |
 | 0.18.5 | [v0.18.5 — NTLMv2-ответы по MS-NLMP](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.5) |
 | 0.18.4 | [v0.18.4 — NTLM: пустое LM-поле](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.4) |
 | 0.18.3 | [v0.18.3 — NTLM: поле «Домен»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.3) |
@@ -46,9 +45,6 @@
 
 | Файл | Платформа | Архитектура | Размер | Версия |
 |---|---|---|---|---|
-| `Qlik Analyzer-0.18.6-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.18.6 |
-| `Qlik Analyzer-0.18.6-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.18.6 |
-| `Qlik Analyzer-0.18.6-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.18.6 |
 | `Qlik Analyzer-0.18.6-x64.exe` | Windows | x64 (NSIS-инсталлятор) | 108 МБ | 0.18.6 |
 | `Qlik Analyzer-0.18.6-arm64.dmg` | macOS | Apple Silicon (установщик) | 115 МБ | 0.18.6 |
 | `Qlik Analyzer-0.18.6-arm64-mac.zip` | macOS | Apple Silicon (архив) | 115 МБ | 0.18.6 |
