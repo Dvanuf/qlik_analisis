@@ -13,6 +13,7 @@
  * нигде — сохраняется лишь полученная cookie сессии.
  */
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { desEcb, desKey7 } from './des.js';
 import { request as httpRequest, Agent as HttpAgent } from 'node:http';
 import { request as httpsRequest, Agent as HttpsAgent } from 'node:https';
 
@@ -114,8 +115,44 @@ function filetime(date) {
   return b;
 }
 
+/**
+ * NTLMv1 NT-ответ: 3×DES(challenge) с ключами из NT-хеша (21 байт).
+ * Официальный вектор MS-NLMP 4.2.2: User/Domain/Password, challenge 0x0123456789abcdef
+ * → 67c43011e74d1a18ba8f681e9b996b02c1cbcdc58b6e4662.
+ */
+export function ntResponseV1(ntHash, challenge) {
+  const padded = Buffer.concat([ntHash, Buffer.alloc(21 - ntHash.length)]);
+  const out = Buffer.alloc(24);
+  for (let i = 0; i < 3; i += 1) {
+    const key = desKey7(padded.slice(i * 7, i * 7 + 7));
+    desEcb(challenge, key).copy(out, i * 8);
+  }
+  return out;
+}
+
+/** LM-ответ v1 (двухступенчатый): 1) LM-хеш = DES('KGS!@#$%') ключами от UPPER(password);
+ *  2) 3×DES(challenge) ключами из LM-хеша (дополненного до 21 байта). */
+export function lmResponseV1(password, challenge) {
+  const upper = Buffer.from(String(password ?? '').toUpperCase(), 'ascii').subarray(0, 14);
+  const paddedUpper = Buffer.concat([upper, Buffer.alloc(14 - upper.length)]);
+  const magic = Buffer.from('KGS!@#$%', 'ascii');
+  const lmHash = Buffer.alloc(16);
+  for (let i = 0; i < 2; i += 1) {
+    const key = desKey7(paddedUpper.slice(i * 7, i * 7 + 7));
+    desEcb(magic, key).copy(lmHash, i * 8);
+  }
+  const padded = Buffer.concat([lmHash, Buffer.alloc(21 - lmHash.length)]);
+  const out = Buffer.alloc(24);
+  for (let i = 0; i < 3; i += 1) {
+    const key = desKey7(padded.slice(i * 7, i * 7 + 7));
+    desEcb(challenge, key).copy(out, i * 8);
+  }
+  return out;
+}
+
 /** Type3: финальное сообщение authenticate (тело base64). */
 export function createType3Message(opts) {
+  const version = opts.version ?? 'v2';
   // Домен: в NTLMv2-хеш идёт ВЕРХНИЙ регистр, а в буфер Type3 — как ввёл пользователь
   // (сервер сверяет proof со своим доменом; Safari/Windows передают ONYX).
   const domain = String(opts.domain ?? '');
@@ -123,28 +160,38 @@ export function createType3Message(opts) {
   const ws = String(opts.workstation ?? 'QLIK-ANALYZER');
   const password = String(opts.password ?? '');
 
-  // NT-хеш → NTLMv2-хеш: HMAC-MD5(NT, UPPER(user) + UPPER(domain)).
   const nt = ntlmHash(password);
-  const v2Hash = createHmac('md5', nt)
-    .update(Buffer.from(`${user.toUpperCase()}${domain.toUpperCase()}`, 'utf16le'))
-    .digest();
 
-  // Blob (MS-NLMP 3.3.2): версия, время, случайный клиент-нонс, AV-пары сервера.
-  const blob = Buffer.concat([
-    Buffer.from([0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
-    filetime(new Date()),
-    randomBytes(8),
-    Buffer.alloc(4),
-    opts.type2.targetInfo,
-  ]);
-  const proof = createHmac('md5', v2Hash)
-    .update(Buffer.concat([opts.type2.challenge, blob]))
-    .digest();
-  const ntResponse = Buffer.concat([proof, blob]);
-
-  // LM-ответ при NTLMv2 не используется: поле заполняется 24 нулями
-  // (дублированный NT-ответ строгие серверы отвергают как невалидный LM).
-  const lmResponse = Buffer.alloc(24);
+  let ntResponse;
+  let lmResponse;
+  if (version === 'v1') {
+    // NTLMv1: 3×DES от challenge с ключами из NT-хеша; LM — DES от UPPER(password).
+    ntResponse = ntResponseV1(nt, opts.type2.challenge);
+    lmResponse = lmResponseV1(password, opts.type2.challenge);
+  } else {
+    // NTLMv2 (MS-NLMP 3.3.2): v2-Hash = HMAC-MD5(NT, UPPER(user) + UPPER(domain));
+    // LM-ответ = LMv2 = HMAC-MD5(v2Hash, SC + CC) | CC (24 байта);
+    // NT-ответ = NTv2 = HMAC-MD5(v2Hash, SC + CC*) | CC*, где CC* = blob с AV-парами сервера.
+    const v2Hash = createHmac('md5', nt)
+      .update(Buffer.from(`${user.toUpperCase()}${domain.toUpperCase()}`, 'utf16le'))
+      .digest();
+    const clientChallenge = randomBytes(8);
+    // Blob CC* = RespType + HiRespType + Timestamp + Random + AvPairs (Z(4) в NTLMv2-blob нет).
+    const blob = Buffer.concat([
+      Buffer.from([0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+      filetime(new Date()),
+      clientChallenge,
+      opts.type2.targetInfo,
+    ]);
+    const lmProof = createHmac('md5', v2Hash)
+      .update(Buffer.concat([opts.type2.challenge, clientChallenge]))
+      .digest();
+    lmResponse = Buffer.concat([lmProof, clientChallenge]);
+    const ntProof = createHmac('md5', v2Hash)
+      .update(Buffer.concat([opts.type2.challenge, blob]))
+      .digest();
+    ntResponse = Buffer.concat([ntProof, blob]);
+  }
 
   const u16 = (v) => Buffer.from(v, 'utf16le');
   // Шесть security-буферов по порядку MS-NLMP: LM, NT, Domain, User, Workstation, SessionKey.
@@ -239,6 +286,12 @@ export async function httpNtlmLogin(opts) {
   const type2 = parseType2Message(headerValue(second.headers, 'www-authenticate'));
   if (!type2) throw new Error('Сервер не вернул NTLM-челлендж (Type2)');
 
+  // Версия NTLM — по флагам Type2: NTLM2_KEY (0x80000) → NTLMv2, иначе NTLMv1.
+  const flagsB64 = headerValue(second.headers, 'www-authenticate').split(' ')[1] ?? '';
+  const flagsBuf = Buffer.from(flagsB64, 'base64');
+  const type2Flags = flagsBuf.length >= 24 ? flagsBuf.readUInt32LE(20) : 0;
+  const version = (type2Flags & 0x00080000) ? 'v2' : 'v1';
+
   // Шаг 3: Type3 → 200 + Set-Cookie.
   const third = await httpOnce(opts.url, {
     Host: agentHeaders.Host,
@@ -248,6 +301,7 @@ export async function httpNtlmLogin(opts) {
       domain: opts.domain,
       workstation: opts.workstation,
       type2,
+      version,
     }),
   }, opts.insecure ?? false);
   if (third.status >= 400) throw new Error(`Сервер отклонил NTLM-аутентификацию (HTTP ${third.status}). Проверьте логин, пароль и домен — при логине без домена укажите домен в поле.`);

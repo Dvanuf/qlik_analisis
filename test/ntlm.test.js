@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { md4, ntlmHash, createType1Message, parseType2Message, createType3Message } from '../src/extract/ntlm.js';
+import { md4, ntlmHash, createType1Message, parseType2Message, createType3Message, ntResponseV1} from '../src/extract/ntlm.js';
 
 test('MD4: векторы, сверенные с OpenSSL (эталон)', () => {
   const hex = (b) => b.toString('hex');
@@ -98,4 +98,14 @@ test('Type3: детерминирован для фиксированного в
   const userLen = buf.readUInt16LE(36);
   const userOff = buf.readUInt32LE(40);
   assert.equal(buf.slice(userOff, userOff + userLen).toString('utf16le'), 'u');
+});
+
+test('NTLMv1: официальный вектор MS-NLMP 4.2.2', () => {
+  // User='User', Domain='Domain', Password='Password', challenge 0x0123456789abcdef.
+  // NT-хеш: a4f49c406510bdcab6924ee7ba933c50.
+  const nt = ntlmHash('Password');
+  assert.equal(nt.toString('hex'), 'a4f49c406510bdcab6824ee7c30fd852');  // OpenSSL-эталон
+  const challenge = Buffer.from('0123456789abcdef', 'hex');
+  const resp = ntResponseV1(nt, challenge);
+  assert.equal(resp.toString('hex'), '67c43011e74d1a18ba8f681e9b996b02c1cbcdc58b6e4662');
 });
