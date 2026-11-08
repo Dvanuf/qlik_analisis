@@ -6,7 +6,7 @@
  */
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync, renameSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve as resolvePath, resolve } from 'node:path';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
 import { extractFromEngine, buildEngineUrl, ENIGMA_SCHEMA } from '../../src/extract/engine.js';
@@ -32,7 +32,7 @@ import { analyze as aiAnalyze, buildPromptPreview, providerChain, PROVIDERS } fr
 import { refactorScript } from '../../src/ai/refactor.js';
 import { AiError } from '../../src/ai/errors.js';
 import { resolveAi, resolveQrs } from '../../src/config.js';
-import { httpNtlmLogin } from '../../src/extract/ntlm.js';
+import * as httpntlm from 'httpntlm';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -1004,40 +1004,61 @@ ipcMain.handle('core:save-credentials', (_e, creds: {
 ipcMain.handle('core:ntlm-login', async (_e, payload: {
   loginUrl: string; username: string; domain?: string; password: string; insecure?: boolean;
 }) => {
-  try {
-    const res = await httpNtlmLogin({
-      url: String(payload?.loginUrl ?? ''),
+  // httpntlm — проверенная библиотека NTLM (Type1/2/3 с Version-полем,
+  // корректные буферы): против IIS/QVS работает там, где ручная эмуляция
+  // давала 400 malformed. Cookie сессии сохраняются в per-host хранилище;
+  // пароль не сохраняется.
+  const loginUrl = String(payload?.loginUrl ?? '');
+  return await new Promise((resolve) => {
+    httpntlm.get({
+      url: loginUrl,
       username: String(payload?.username ?? ''),
       password: String(payload?.password ?? ''),
-      domain: payload?.domain ? String(payload.domain) : undefined,
-      insecure: Boolean(payload?.insecure),
-    });
-    // NTLM при успехе может не выдавать cookie: аутентификация привязана
-    // к соединению, а не к cookie. 200 после Type3 = учётные данные приняты.
-    if (!res.cookieHeader) {
-      if (res.status >= 200 && res.status < 400) {
-        return { ok: true, host: new URL(String(payload?.loginUrl ?? '')).hostname, note: 'Аутентификация NTLM прошла: сервер принял учётные данные (cookie не выдаётся — сессия привязана к соединению).' };
+      domain: payload?.domain ? String(payload.domain) : '',
+      workstation: 'QLIK-ANALYZER',
+      rejectUnauthorized: Boolean(payload?.insecure),
+    }, (err: Error | null, res: { statusCode?: number; headers?: Record<string, string | string[] | undefined>; body?: Buffer }) => {
+      if (err) {
+        resolve({ ok: false, error: maskSecrets(err.message ?? String(err)) });
+        return;
       }
-      throw new Error(`Сервер ответил ${res.status} после NTLM-рукопожатия.`);
-    }
-    // Cookie есть — сохраняем их как обычную сессию хаба (per-host).
-    const creds = normalizeCredentials({
-      hubUrl: String(payload?.loginUrl ?? ''),
-      cookie: res.cookieHeader,
-      at: new Date().toISOString(),
+      const status = res.statusCode ?? 0;
+      const rawCookies = res.headers?.['set-cookie'];
+      const list = Array.isArray(rawCookies) ? rawCookies : rawCookies ? [rawCookies] : [];
+      const pairs = list.map((l: string) => l.split(';')[0]).filter(Boolean);
+      const cookieHeader = pairs.join('; ');
+      if (status === 401 || status === 403) {
+        resolve({ ok: false, error: 'Учётные данные отклонены сервером (HTTP 401). Проверьте логин, пароль и домен.' });
+        return;
+      }
+      if (status >= 400) {
+        resolve({ ok: false, error: `Сервер ответил HTTP ${status} после NTLM-рукопожатия.` });
+        return;
+      }
+      let host = '';
+      try { host = new URL(loginUrl).hostname; } catch { host = ''; }
+      // Cookie сессии (если выдаются) сохраняем per-host для Doc API-коннектора.
+      if (cookieHeader) {
+        try {
+          const creds = normalizeCredentials({
+            hubUrl: loginUrl,
+            cookie: cookieHeader,
+            at: new Date().toISOString(),
+          });
+          if (isSessionUsable(creds)) {
+            const blob = safeStorage.encryptString(JSON.stringify(creds));
+            const file = resolvePath(app.getPath('userData'), credsFileFor(host));
+            const tmp = `${file}.tmp`;
+            writeFileSync(tmp, blob);
+            renameSync(tmp, file);
+          }
+        } catch { /* cookie сохранить не удалось — не блокируем успех */ }
+      }
+      resolve({ ok: true, host, note: pairs.length
+        ? `NTLM-аутентификация прошла; cookie сессии: ${pairs.map((p) => p.split('=')[0]).join(', ')}`
+        : 'NTLM-аутентификация прошла (сессия привязана к соединению).' });
     });
-    if (!isSessionUsable(creds)) throw new Error('Сервер не вернул usable-сессию.');
-    const blob = safeStorage.encryptString(JSON.stringify(creds));
-    let host = '';
-    try { host = new URL(creds.hubUrl ?? '').hostname; } catch { host = ''; }
-    const file = resolve(app.getPath('userData'), credsFileFor(host));
-    const tmp = `${file}.tmp`;
-    writeFileSync(tmp, blob);
-    renameSync(tmp, file);
-    return { ok: true, host, cookieCount: res.cookies.size };
-  } catch (err) {
-    return { ok: false, error: maskSecrets(err instanceof Error ? err.message : String(err)) };
-  }
+  });
 });
 
 ipcMain.handle('core:load-credentials', async (_e, opts?: { host?: string }) => {
