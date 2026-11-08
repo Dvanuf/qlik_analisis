@@ -56,8 +56,8 @@ const api = {
   saveCredentials: (creds: {
     hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
   }) => ipcRenderer.invoke('core:save-credentials', creds),
-  loadCredentials: () => ipcRenderer.invoke('core:load-credentials'),
-  clearCredentials: () => ipcRenderer.invoke('core:clear-credentials'),
+  loadCredentials: (opts?: { host?: string }) => ipcRenderer.invoke('core:load-credentials', opts ?? {}),
+  clearCredentials: (opts?: { host?: string }) => ipcRenderer.invoke('core:clear-credentials', opts ?? {}),
   /** Пакетный анализ всех приложений сервера. */
   analyzeAll: (opts: {
     url: string; cookie?: string; xrfKey?: string; csrfToken?: string;

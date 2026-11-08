@@ -49,10 +49,11 @@ declare global {
       saveCredentials(creds: {
         hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
       }): Promise<boolean>;
-      loadCredentials(): Promise<{
+          loadCredentials(opts?: { host?: string }): Promise<{
+
         hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
       } | null>;
-      clearCredentials(): Promise<boolean>;
+      clearCredentials(opts?: { host?: string }): Promise<boolean>;
       onDoctorStep(cb: (step: DoctorStep) => void): () => void;
       /** Этапы анализа приложения. */
       onAnalyzeProgress(cb: (p: AnalyzeProgress) => void): () => void;
@@ -129,6 +130,22 @@ const TAB_GROUPS: { label: string; tabs: Tab[] }[] = [
 ];
 const TAB_ORDER: Tab[] = TAB_GROUPS.flatMap((g) => g.tabs);
 
+/** Предзаполненные серверы: переключение Sense ↔ QlikView кнопкой, без ручного ввода. */
+const SERVER_PROFILES = [
+  {
+    id: 'sense', label: 'Qlik Sense', host: 'dc3-qliks-ap-03.onyx.local',
+    url: 'wss://dc3-qliks-ap-03.onyx.local/app',
+    hint: 'хаб: cookie через вход в хаб',
+  },
+  {
+    id: 'qv', label: 'QlikView', host: 'onyx-qlick.onyx.local',
+    url: 'wss://onyx-qlick.onyx.local:4747/app',
+    hint: 'AccessPoint: движок 4747 — нужен открытый порт',
+  },
+] as const;
+
+type ServerProfileId = (typeof SERVER_PROFILES)[number]['id'];
+
 const TAB_LABELS: Record<Tab, string> = {
   score: 'Оценка',
   connect: 'Подключение',
@@ -177,9 +194,22 @@ export default function App() {
   const [busy, setBusy] = useState('');
   const [doctorSteps, setDoctorSteps] = useState<DoctorStep[]>([]);
 
-  const [url, setUrl] = useState(
-    () => localStorage.getItem('qa.url') ?? 'wss://dc3-qliks-ap-03.onyx.local/app',
+  // Профиль сервера: 'sense' | 'qv' | 'custom' — кнопки на «Подключении».
+  const [serverProfile, setServerProfile] = useState<string>(
+    () => localStorage.getItem('qa.serverProfile') ?? 'sense',
   );
+  // Адрес каждого профиля хранится отдельно — переключение не затирает ввод.
+  const urlFor = (profile: string): string => {
+    const preset = SERVER_PROFILES.find((p) => p.id === profile);
+    if (!preset) return localStorage.getItem('qa.url') ?? '';
+    return localStorage.getItem(`qa.url.${profile}`) ?? preset.url;
+  };
+  const [url, setUrl] = useState(() => {
+    const profile = localStorage.getItem('qa.serverProfile') ?? 'sense';
+    const preset = SERVER_PROFILES.find((p) => p.id === profile);
+    if (!preset) return localStorage.getItem('qa.url') ?? 'wss://dc3-qliks-ap-03.onyx.local/app';
+    return localStorage.getItem(`qa.url.${profile}`) ?? preset.url;
+  });
   const [user, setUser] = useState(() => localStorage.getItem('qa.user') ?? '');
   const [password, setPassword] = useState('');
   const [cookie, setCookie] = useState('');
@@ -227,7 +257,11 @@ export default function App() {
 
   // Настройки подключения живут между запусками: без этого после перезапуска
   // поле URL возвращается к заглушке и список приложений не грузится.
-  useEffect(() => { localStorage.setItem('qa.url', url); }, [url]);
+  useEffect(() => {
+    if (serverProfile === 'custom') localStorage.setItem('qa.url', url);
+    else localStorage.setItem(`qa.url.${serverProfile}`, url);
+  }, [url, serverProfile]);
+  useEffect(() => { localStorage.setItem('qa.serverProfile', serverProfile); }, [serverProfile]);
   useEffect(() => { localStorage.setItem('qa.user', user); }, [user]);
   useEffect(() => { localStorage.setItem('qa.insecure', insecure ? '1' : '0'); }, [insecure]);
   useEffect(() => { localStorage.setItem('qa.platform', platform); }, [platform]);
@@ -277,6 +311,34 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [tab]);
+
+  /** Восстанавливает сессию выбранного сервера (у каждого профиля — своя). */
+  function loadSessionFor() {
+    let host = '';
+    try { host = new URL(url).hostname; } catch { host = ''; }
+    void window.qa.loadCredentials({ host }).then((creds) => {
+      if (!creds?.cookie) {
+        setCookie(''); setXrfKey(''); setCsrfToken(''); setSessionAt(null);
+        setHubStatus('Сессии для этого сервера нет — нажмите «Войти в хаб».');
+        return;
+      }
+      setCookie(creds.cookie);
+      setXrfKey(creds.xrfKey ?? '');
+      setCsrfToken(creds.csrfToken ?? '');
+      setSessionAt(creds.at ?? null);
+      setHubStatus(`Сессия ${host} восстановлена из защищённого хранилища. `
+        + 'Если сервер отвечает 403 — сессия истекла, войдите заново.');
+    });
+  }
+
+  /** Переключение сервера кнопкой: подставить адрес и перечитать его сессию. */
+  function switchServerProfile(profile: string) {
+    if (profile === serverProfile) return;
+    setServerProfile(profile);
+    setUrl(urlFor(profile));
+    setAppId(''); setApps([]); setSelectedIds([]);
+    // Сессия подгрузится эффектом [serverProfile] по новому URL.
+  }
 
   /**
    * Прогоны анализируемого приложения: сводка для ИИ показывает динамику
@@ -378,16 +440,9 @@ export default function App() {
     void window.qa.rules().then(setRuleInfo);
     void window.qa.library().then((r) => setLibraryFunctions(r.functions ?? []));
     void window.qa.rulesConfig().then((c) => setRulesConfig(c as RulesConfig));
-    // Восстанавливаем сохранённую сессию хаба (зашифрована safeStorage).
-    void window.qa.loadCredentials().then((creds) => {
-      if (!creds?.cookie) return;
-      setCookie(creds.cookie);
-      setXrfKey(creds.xrfKey ?? '');
-      setCsrfToken(creds.csrfToken ?? '');
-      setSessionAt(creds.at ?? null);
-      setHubStatus('Сессия хаба восстановлена из защищённого хранилища. '
-        + 'Если хаб отвечает 403 — сессия истекла, нажмите «Войти в хаб» ещё раз.');
-    });
+    // Восстанавливаем сессию текущего сервера (у каждого профиля — своя).
+    void loadSessionFor();
+
     // Шаги приходят по мере проверки и по индексу: повторяющиеся шаги
     // заменяют предыдущую запись, а не добавляются вторым списком.
     const offDoctor = window.qa.onDoctorStep((step) => {
@@ -407,7 +462,7 @@ export default function App() {
       offBatch();
       offAnalyze();
     };
-  }, []);
+  }, [serverProfile]);
 
   const conn = { url, user, password, cookie, xrfKey, csrfToken, insecure };
 
@@ -1022,6 +1077,8 @@ export default function App() {
           batchProgress={batchProgress}
           onSignIn={() => void signIn()}
           scoresByApp={scoresByApp}
+          serverProfile={serverProfile}
+          onServerProfile={switchServerProfile}
           onLoadApps={() => void loadApps()}
           onAnalyze={() => void analyzeSelected()}
           onAnalyzeAll={(ids) => void analyzeAll(ids)}

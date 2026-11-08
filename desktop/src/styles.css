@@ -899,3 +899,14 @@ table.rq tr.pat { cursor: pointer; }
 @media (max-width: 1100px) { .refgrid { grid-template-columns: minmax(0, 1fr); } }
 /* Вкладки со скриптами — во всю ширину окна, без центрального ограничения. */
 .wrap:has(.refgrid), .wrap:has(.split2), .wrap:has(.fixlist) { max-width: none; }
+
+/* Профили серверов на «Подключении»: Sense / QlikView кнопками. */
+.serverpills { display: flex; gap: 10px; align-items: stretch; margin-bottom: 12px; flex-wrap: wrap; }
+.serverpill {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--r2);
+  background: var(--panel); cursor: pointer; text-align: left; min-width: 200px;
+}
+.serverpill:hover { border-color: var(--brand); }
+.serverpill.on { border-color: var(--brand); background: var(--bs); }
+.serverpill.on b { color: var(--brand); }

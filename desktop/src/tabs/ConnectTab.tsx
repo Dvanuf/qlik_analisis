@@ -50,6 +50,10 @@ type ScoresByApp = Record<string, { score: number; at: string; version: number }
 type Props = {
   /** Последняя оценка каждого приложения — из истории прогонов. */
   scoresByApp?: ScoresByApp;
+  /** Активный профиль сервера: sense | qv | custom. */
+  serverProfile?: string;
+  /** Переключить профиль: подставить адрес и сессию сервера. */
+  onServerProfile?: (profile: string) => void;
   url: string; onUrl: (v: string) => void;
   insecure: boolean; onInsecure: (v: boolean) => void;
   platform: Platform; onPlatform: (p: Platform) => void;
@@ -95,7 +99,7 @@ function statusIcon(status: DoctorStep['status']): string {
 
 export default function ConnectTab(props: Props) {
   const {
-    scoresByApp,
+    scoresByApp, serverProfile, onServerProfile,
     url, onUrl, insecure, onInsecure, platform, onPlatform,
     user, onUser, password, onPassword, cookie, onCookie, xrfKey, onXrfKey, csrfToken, onCsrfToken,
     apps, appId, onAppId, selectedIds, onSelectedIds,
@@ -260,6 +264,29 @@ export default function ConnectTab(props: Props) {
   return (
     <section className="card wide">
       <h2>Подключение к Qlik</h2>
+
+      {/* Профили серверов: переключение Sense / QlikView одной кнопкой.
+          У каждого профиля — свой адрес и своя сохранённая сессия. */}
+      <div className="serverpills" role="group" aria-label="Сервер">
+        <button
+          className={`serverpill${serverProfile === 'sense' ? ' on' : ''}`}
+          onClick={() => onServerProfile?.('sense')}
+        >
+          <b>Qlik Sense</b>
+          <span className="hint">dc3-qliks-ap-03</span>
+        </button>
+        <button
+          className={`serverpill${serverProfile === 'qv' ? ' on' : ''}`}
+          onClick={() => onServerProfile?.('qv')}
+          title="Движок QlikView: нужен открытый порт 4747 и вход через AccessPoint"
+        >
+          <b>QlikView</b>
+          <span className="hint">onyx-qlick · порт 4747</span>
+        </button>
+        <span className="hint" style={{ marginLeft: 'auto', alignSelf: 'center' }}>
+          адрес и сессия переключаются автоматически; правка URL ведётся под выбранным сервером
+        </span>
+      </div>
 
       {/* --- Пошаговый сценарий --- */}
       <div className="wizard" role="list" aria-label="Шаги подключения">

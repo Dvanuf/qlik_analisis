@@ -946,6 +946,16 @@ ipcMain.handle('core:export-script', async (_e, payload: {
 /** Сессионная cookie хаба и ключи хранятся в зашифрованном виде (safeStorage). */
 const CREDS_FILE = 'hub-credentials.bin';
 
+/**
+ * Файл сессии — на каждый сервер свой: Sense и QlikView хранят разные
+ * cookie, и переключение между ними не требует повторного входа.
+ * Файл без суффикса — прежнее единственное хранилище (совместимость).
+ */
+function credsFileFor(host?: string): string {
+  const h = String(host ?? '').trim().toLowerCase().replace(/[^\w.-]/g, '_');
+  return h ? `hub-credentials-${h}.bin` : CREDS_FILE;
+}
+
 ipcMain.handle('core:save-credentials', (_e, creds: {
   hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
 }) => {
@@ -955,7 +965,10 @@ ipcMain.handle('core:save-credentials', (_e, creds: {
   const payload = normalizeCredentials(creds);
   if (!isSessionUsable(payload)) throw new Error('Сессия хаба пуста — сохранять нечего.');
   const blob = safeStorage.encryptString(JSON.stringify(payload));
-  const file = resolve(app.getPath('userData'), CREDS_FILE);
+  // Сессия привязана к серверу: у Sense и QlikView — свои файлы.
+  let host = '';
+  try { host = new URL((payload as { hubUrl?: string }).hubUrl ?? '').hostname; } catch { host = ''; }
+  const file = resolve(app.getPath('userData'), credsFileFor(host));
   // Пишем через временный файл: оборванная запись не должна оставлять мусор.
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, blob);
@@ -963,27 +976,40 @@ ipcMain.handle('core:save-credentials', (_e, creds: {
   return true;
 });
 
-ipcMain.handle('core:load-credentials', async () => {
-  const file = resolve(app.getPath('userData'), CREDS_FILE);
-  if (!existsSync(file)) return null;
-  try {
-    // Файл мог быть записан старой сборкой или прерванной записью — тогда в нём
-    // не JSON, а мусор. Такой файл молча ломал бы восстановление сессии.
-    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(readFileSync(file));
-    const creds = parseCredentials(result);
-    // Ключ хранения мог быть ротирован: перешифровываем файл новым ключом,
-    // иначе следующая запись не расшифруется.
-    if (creds && shouldReEncrypt) {
-      writeFileSync(file, await safeStorage.encryptStringAsync(result));
+ipcMain.handle('core:load-credentials', async (_e, opts?: { host?: string }) => {
+  // Сессия ищется по хосту текущего профиля; если файла для него ещё нет —
+  // пробуем прежнее единственное хранилище (миграция со старых сборок),
+  // но только если там лежит сессия именно этого сервера.
+  const candidates: string[] = [credsFileFor(opts?.host), CREDS_FILE];
+  for (const name of candidates) {
+    const file = resolve(app.getPath('userData'), name);
+    if (!existsSync(file)) continue;
+    try {
+      // Файл мог быть записан старой сборкой или прерванной записью — тогда в нём
+      // не JSON, а мусор. Такой файл молча ломал бы восстановление сессии.
+      const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(readFileSync(file));
+      const creds = parseCredentials(result);
+      if (!creds) continue;
+      if (name === CREDS_FILE && opts?.host) {
+        let legacyHost = '';
+        try { legacyHost = new URL((creds as { hubUrl?: string }).hubUrl ?? '').hostname; } catch { legacyHost = ''; }
+        if (legacyHost && legacyHost !== opts.host) continue; // сессия другого сервера
+      }
+      // Ключ хранения мог быть ротирован: перешифровываем файл новым ключом,
+      // иначе следующая запись не расшифруется.
+      if (shouldReEncrypt) {
+        writeFileSync(file, await safeStorage.encryptStringAsync(result));
+      }
+      return creds;
+    } catch {
+      // битый файл — пробуем следующий кандидат
     }
-    return creds;
-  } catch {
-    return null;
   }
+  return null;
 });
 
-ipcMain.handle('core:clear-credentials', () => {
-  const file = resolve(app.getPath('userData'), CREDS_FILE);
+ipcMain.handle('core:clear-credentials', (_e, opts?: { host?: string }) => {
+  const file = resolve(app.getPath('userData'), credsFileFor(opts?.host));
   if (existsSync(file)) rmSync(file);
   return true;
 });
