@@ -49,7 +49,7 @@ declare global {
       saveCredentials(creds: {
         hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;
       }): Promise<boolean>;
-          ntlmLogin(payload: { loginUrl: string; username: string; domain?: string; password: string; insecure?: boolean }): Promise<{ ok: boolean; host?: string; error?: string }>;
+          ntlmLogin(payload: { loginUrl: string; username: string; domain?: string; password: string; insecure?: boolean }): Promise<{ ok: boolean; host?: string; note?: string; error?: string }>;
       loadCredentials(opts?: { host?: string }): Promise<{
 
         hubUrl: string; cookie: string; xrfKey?: string; csrfToken?: string; at?: string;

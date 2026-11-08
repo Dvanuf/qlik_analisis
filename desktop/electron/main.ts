@@ -1012,9 +1012,15 @@ ipcMain.handle('core:ntlm-login', async (_e, payload: {
       domain: payload?.domain ? String(payload.domain) : undefined,
       insecure: Boolean(payload?.insecure),
     });
-    if (!res.cookieHeader) throw new Error('Сервер не вернул cookie сессии.');
-    // Cookie сохраняется в per-host хранилище как обычная сессия хаба:
-    // это позволяет Doc API-коннектору подставлять её в заголовки.
+    // NTLM при успехе может не выдавать cookie: аутентификация привязана
+    // к соединению, а не к cookie. 200 после Type3 = учётные данные приняты.
+    if (!res.cookieHeader) {
+      if (res.status >= 200 && res.status < 400) {
+        return { ok: true, host: new URL(String(payload?.loginUrl ?? '')).hostname, note: 'Аутентификация NTLM прошла: сервер принял учётные данные (cookie не выдаётся — сессия привязана к соединению).' };
+      }
+      throw new Error(`Сервер ответил ${res.status} после NTLM-рукопожатия.`);
+    }
+    // Cookie есть — сохраняем их как обычную сессию хаба (per-host).
     const creds = normalizeCredentials({
       hubUrl: String(payload?.loginUrl ?? ''),
       cookie: res.cookieHeader,

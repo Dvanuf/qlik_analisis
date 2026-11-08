@@ -64,9 +64,9 @@ function NtlmLoginBlock(props: { loginUrl: string; onNote: (t: string) => void; 
         username: user.trim(),
         password: pass,
         insecure: true,
-      }) as { ok: boolean; host?: string; error?: string };
+      }) as { ok: boolean; host?: string; note?: string; error?: string };
       if (res.ok) {
-        props.onNote(`NTLM-сессия сохранена (${res.host ?? ''})`);
+        props.onNote(res.note ?? `NTLM-аутентификация прошла (${res.host ?? ''})`);
         props.onDone();
       } else {
         setNote(res.error ?? 'Неизвестная ошибка NTLM-входа.');
