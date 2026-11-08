@@ -3,7 +3,7 @@
 Документ отвечает на вопрос «с чего начать новую задачу». Правила работы с AI —
 в [`AGENTS.md`](../AGENTS.md), история версий — в [`CHANGELOG.md`](../CHANGELOG.md).
 
-**Обновлено:** 07.11.2026 · **Текущая версия:** 0.18.1 (тег `v0.18.1`)
+**Обновлено:** 07.11.2026 · **Текущая версия:** 0.18.2 (тег `v0.18.2`)
 
 Что можно перенести из расширения QS Metadata Explorer — в
 [`QSME-ANALYSIS.md`](QSME-ANALYSIS.md) (проверено на живом хабе 26.10.2026).
@@ -23,7 +23,7 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 |---|---|
 | Исходники | `/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer` |
 | Архив всех сборок | `<проект>/desktop/release/` |
-| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.18.1-{arm64.dmg,arm64-mac.zip,x64.exe}` |
+| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.18.2-{arm64.dmg,arm64-mac.zip,x64.exe}` |
 | Лог входа в хаб | `~/Library/Application Support/qlik-analyzer-desktop/hub-login.log` |
 | Настройки правил | `~/Library/Application Support/qlik-analyzer-desktop/rules.json` |
 | История прогонов | `~/Library/Application Support/qlik-analyzer-desktop/history.sqlite` |
@@ -39,6 +39,7 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 
 | Версия | Суть |
 |---|---|
+| 0.18.2 | **NTLM 200 без cookie = успех** (Authenticate.aspx не выдаёт cookie — сессия привязана к соединению). Тесты: 460/460 |
 | 0.18.1 | **NTLM-блок бьёт в Authenticate.aspx** (`/QvAJAXZfc/Authenticate.aspx` — 401 NTLM подтверждён), агент по протоколу (http.Agent для http). Тесты: 460/460 |
 | 0.18.0 | **NTLM-вход в QV AccessPoint с macOS.** Ядро NTLMv2 (`src/extract/ntlm.js`: MD4 на JS + Type1/2/3 по MS-NLMP), IPC `core:ntlm-login`, UI в QV-профиле (логин без домена + пароль → cookie в per-host хранилище, пароль не сохраняется). AccessPoint onyx-qlick — Windows-аутентификация (login.htm — автологин-скрипт). Порт 4747 по-прежнему закрыт — полный анализ после открытия. Тесты: 460/460 |
 | 0.17.2 | **AccessPoint Login Failed → Kerberos/NTLM whitelist:** auth-server-whitelist/negotiate-delegate для доменных серверов (Safari входит по билету, Chromium — теперь тоже); доп. хосты через QLIK_AUTH_HOSTS. Тесты: 454/454 |
