@@ -478,9 +478,9 @@ p.small, .small { font-size: 0.75rem; }
   color: var(--panel); font-weight: 800; font-size: 17px;
 }
 .menu__title { display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; }
-.menu__title b { font-size: 13px; font-weight: 650; }
+.menu__title b { font-size: 0.9375rem; font-weight: 650; }
 .menu__ver {
-  font-size: 10px; color: var(--muted);
+  font-size: 0.71875rem; color: var(--muted);
   border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px;
   font-variant-numeric: tabular-nums; cursor: default;
 }
@@ -493,9 +493,9 @@ p.small, .small { font-size: 0.75rem; }
 
 .menu__search { padding: 0 12px 6px; position: relative; }
 .menu__search input {
-  width: 100%; height: 32px; padding: 0 10px 0 30px;
+  width: 100%; height: 34px; padding: 0 10px 0 30px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  color: var(--text); font: inherit; font-size: 12.5px; outline: 0;
+  color: var(--text); font: inherit; font-size: 0.875rem; outline: 0;
 }
 .menu__search input::placeholder { color: var(--muted); }
 .menu__search input:focus {
@@ -513,7 +513,7 @@ p.small, .small { font-size: 0.75rem; }
   width: 100%; display: flex; align-items: center;
   padding: 6px 8px; border: 0; border-radius: 7px; background: 0 0; cursor: pointer;
   color: var(--muted); font-family: inherit;
-  font-size: 10.5px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase;
+  font-size: 0.71875rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase;
 }
 .group__head:hover { color: var(--text); }
 .group__head::after {
@@ -526,11 +526,11 @@ p.small, .small { font-size: 0.75rem; }
 .group__list { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
 
 .nav-item {
-  position: relative; width: 100%; min-height: 34px;
+  position: relative; width: 100%; min-height: 38px;
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 9px; border: 0; border-radius: 8px;
+  padding: 8px 10px; border: 0; border-radius: 8px;
   background: transparent; color: var(--fw);
-  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+  font: inherit; font-size: 0.9375rem; text-align: left; cursor: pointer;
   transition: background .14s, color .14s;
 }
 .nav-item svg { flex: 0 0 16px; color: var(--muted); transition: color .14s; }
@@ -548,12 +548,12 @@ p.small, .small { font-size: 0.75rem; }
 }
 .nav-item.is-active svg { color: var(--brand); }
 .nav-item__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-item__label--wrap { white-space: normal; line-height: 1.25; font-size: 12.5px; }
+.nav-item__label--wrap { white-space: normal; line-height: 1.25; }
 .nav-item__badge {
   margin-left: auto; min-width: 24px; height: 19px; padding: 0 6px;
   display: grid; place-items: center; border-radius: 6px;
   background: var(--panel-3); color: var(--text);
-  font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .nav-item.is-active .nav-item__badge {
   background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--brand);
@@ -563,7 +563,7 @@ p.small, .small { font-size: 0.75rem; }
 .menu__foot {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; border-top: 1px solid var(--line);
-  font-size: 11.5px; color: var(--muted); white-space: nowrap;
+  font-size: 0.8125rem; color: var(--muted); white-space: nowrap;
   overflow: hidden;
 }
 .menu__foot b { color: var(--text); font-weight: 550; }
