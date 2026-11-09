@@ -143,3 +143,24 @@ test('App: аватар удалён, платформа показываетс�
   assert.ok(APP.includes('platformLabel'), 'платформа не выводится в шапке');
   assert.ok(TYPES.includes('platform?: string'), 'в AnalysisResult.summary нет поля platform');
 });
+
+test('RefactorTab: форматирование и синхронная прокрутка панелей', () => {
+  assert.ok(REFACTOR_TAB.includes("formatScript(proposed)"), 'форматирование не подключено');
+  assert.ok(REFACTOR_TAB.includes('setFormatOn'), 'нет тумблера формата');
+  assert.ok(REFACTOR_TAB.includes('setSyncScroll'), 'нет тумблера прокрутки');
+  assert.ok(REFACTOR_TAB.includes('syncFrom'), 'нет синхронной прокрутки');
+  assert.ok(REFACTOR_TAB.includes('finalScript: shown'), 'экспортируется не показанная версия');
+});
+
+test('ScoreTab: аналитическая карточка по макету', () => {
+  const SCORE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ScoreTab.tsx'), 'utf8');
+  assert.ok(SCORE_TAB.includes('headline'), 'нет заголовка-вывода');
+  assert.ok(SCORE_TAB.includes('scoretiles'), 'нет плиток находок');
+  assert.ok(SCORE_TAB.includes('comp-track'), 'нет полосы-композиции');
+  assert.ok(SCORE_TAB.includes('domainDiag'), 'нет диагнозов доменов');
+  assert.ok(SCORE_TAB.includes('балл срезан'), 'нет диагноза «срезан проверками»');
+  assert.ok(SCORE_TAB.includes('planbox'), 'нет агрегированного плана');
+  assert.ok(SCORE_TAB.includes('tailcard'), 'нет блока «вне топ-5»');
+  assert.ok(SCORE_TAB.includes('задачи перезагрузки'), 'нет футера-предупреждения');
+  assert.ok(!SCORE_TAB.includes('scorehero-counts'), 'старые счётчики не убраны');
+});

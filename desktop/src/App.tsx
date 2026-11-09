@@ -553,12 +553,12 @@ export default function App() {
       if (Array.isArray(res)) {
         setApps(res);
         setMetaNote(null);
-        if (!appId && res[0]) setAppId(res[0].id);
+        // Автоподстановка первого приложения отменена: выбор — галочками в списке.
       } else if ('apps' in res) {
         setApps(res.apps);
         // Диагностика: показываем, откуда взялись метаданные и какое покрытие.
         setMetaNote(res.notes.length ? res.notes.join(' · ') : null);
-        if (!appId && res.apps[0]) setAppId(res.apps[0].id);
+        // Автоподстановка первого приложения отменена: выбор — галочками в списке.
       } else {
         setApps([]);
         setMetaNote(null);

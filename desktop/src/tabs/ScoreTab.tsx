@@ -85,6 +85,64 @@ export default function ScoreTab(props: Props) {
     return entries.sort((a, b) => a[1].score - b[1].score)[0];
   }, [domains]);
 
+  // --- Аналитическая карточка: состав находок, план, хвост ---
+  const sev = summary?.findings.bySeverity ?? {};
+  const counts = {
+    error: sev.error ?? 0, warning: sev.warning ?? 0, info: sev.info ?? 0,
+  };
+  const totalFindings = counts.error + counts.warning + counts.info;
+  const infoShare = totalFindings ? Math.round((counts.info / totalFindings) * 100) : 0;
+  const ruleStats = (analysis as { ruleStats?: { skipped: boolean; domain?: string }[] }).ruleStats ?? [];
+  const skippedCount = ruleStats.filter((st) => st.skipped).length;
+
+  /** Заголовок-вывод: почему балл такой, одним предложением. */
+  const headline = useMemo(() => {
+    if (!weakest) return 'существенных слабых мест не найдено';
+    const [wid] = weakest;
+    const sorted = Object.entries(domains).sort((a, b) => a[1].score - b[1].score);
+    const spread = sorted.length > 1 ? sorted[sorted.length - 1][1].score - sorted[0][1].score : 0;
+    if (score != null && score >= 75) return 'проблемы точечные — модель в хорошем состоянии';
+    if (spread >= 25) return `домен «${DL[wid] ?? wid}» тянет вниз всё`;
+    return 'проблемы распределены по доменам';
+  }, [weakest, domains, score]);
+
+  /** Домены в норме (>=90) и средние (50–74) — для разбивки в шапке. */
+  const domSplit = useMemo(() => {
+    const entries = Object.entries(domains);
+    const good = entries.filter(([, d]) => d.score >= 90);
+    const mid = entries.filter(([, d]) => d.score >= 50 && d.score < 90);
+    const names = (list: typeof entries) => list.map(([id]) => DL[id] ?? id);
+    const goodText = good.length
+      ? `${names(good).join(', ')} в норме (${good[0][1].score})`
+      : '';
+    const midText = mid.length
+      ? `${names(mid).join(', ')} — ${mid.map(([, d]) => d.score).join('–')}`
+      : '';
+    return [goodText, midText].filter(Boolean).join(', ');
+  }, [domains]);
+
+  /** Диагноз домена для таблицы: что именно и почему балл такой. */
+  const domainDiag = (id: string, d: { score: number; findings?: number }): string => {
+    if ((d.findings ?? 0) > 0) {
+      const first = top.find((t) => t.domain === id);
+      return first ? first.title : `${d.findings} находок`;
+    }
+    const skippedInDomain = ruleStats.filter((st) => st.skipped && st.domain === id).length;
+    if (skippedInDomain > 0) {
+      return `нарушений нет: балл срезан ${skippedInDomain} неприменимыми проверками`;
+    }
+    return 'нарушений нет';
+  };
+
+  // Агрегированный план по топ-5: что закрывается правкой, что вручную.
+  const readyFixes = top.filter((t) => t.hasFix);
+  const manualFixes = top.filter((t) => !t.hasFix);
+  const readyGain = readyFixes.reduce((s, t) => s + t.gain, 0);
+  const manualGain = manualFixes.reduce((s, t) => s + t.gain, 0);
+
+  // Хвост: находки вне первых пяти пунктов.
+  const tailFindings = Math.max(0, totalFindings - top.reduce((s, t) => s + t.count, 0));
+
   // Группа приложений с баллами v2 — из последнего пакетного прогона.
   const group = useMemo(() => {
     const rows = (batch?.results ?? [])
@@ -201,23 +259,20 @@ export default function ScoreTab(props: Props) {
           <span className="muted">из 100</span>
         </div>
         <div className="scorehero-main">
-          <h2 className="verdict">{summary.verdict ?? ''}</h2>
+          <span className={`pill ${zone(score) === 'r' ? 'error' : zone(score) === 'y' ? 'warning' : 'ok'}`}>
+            {summary.verdict ?? ''}
+          </span>
+          <h2 className="verdict">{score} из 100: {headline}</h2>
           <p className="muted">
             {weakest
               ? `Слабее всего «${DL[weakest[0]] ?? weakest[0]}»: ${weakest[1].findings} ${weakest[1].findings === 1 ? 'находка' : weakest[1].findings < 5 ? 'находки' : 'находок'}, балл домена ${weakest[1].score}. `
-              : 'Существенных слабых мест не найдено. '}
+              : ''}
+            {domSplit ? `${domSplit}. ` : ''}
             {summary.forecast != null && summary.forecast > score
               ? `Если исправить первые три пункта, оценка вырастет примерно до ${summary.forecast}.`
               : 'Первых трёх исправлений достаточно для заметного роста.'}
           </p>
           <div className="row">
-            {/* Покрытие: сколько проверок применимо к этой платформе (для QV часть правил Sense-only пропускается). */}
-            {(() => {
-              const stats = (analysis as { ruleStats?: { skipped: boolean }[] }).ruleStats ?? [];
-              const total = stats.length;
-              const applied = stats.filter((st) => !st.skipped).length;
-              return total > 0 ? <span className="pill mute" title="Часть проверок может пропускаться: на QlikView недоступен фронт-энд Doc API">применимо {applied} из {total}</span> : null;
-            })()}
             {trend != null && (
               <span className={`pill ${trend > 0 ? 'ok' : trend < 0 ? 'error' : 'mute'}`}>
                 {trend > 0 ? `+${trend}` : trend} с прошлой проверки
@@ -231,44 +286,75 @@ export default function ScoreTab(props: Props) {
             <p className="muted small howformula">{summary.scoreDetails?.formula ?? ''}</p>
           )}
         </div>
-        <div className="scorehero-counts">
-          <div>
-            <div className="num err">{summary.findings.bySeverity.error ?? 0}</div>
-            <div className="muted">ошибки</div>
+        <div className="scoretiles">
+          <div className="tile">
+            <div className="num">{totalFindings}</div>
+            <div className="tile-l">находок</div>
           </div>
-          <div>
-            <div className="num warn">{summary.findings.bySeverity.warning ?? 0}</div>
-            <div className="muted">предупр.</div>
+          <div className="tile t-err">
+            <div className="num">{counts.error}</div>
+            <div className="tile-l">ошибки</div>
           </div>
-          <div>
-            <div className="num">{summary.findings.bySeverity.info ?? 0}</div>
-            <div className="muted">замечаний</div>
+          <div className="tile t-warn">
+            <div className="num">{counts.warning}</div>
+            <div className="tile-l">предупр.</div>
+          </div>
+          <div className="tile">
+            <div className="num">{counts.info}</div>
+            <div className="tile-l">замечаний</div>
           </div>
         </div>
       </div>
 
-      {/* --- Домены: слабые первыми --- */}
-      <div className="domgrid">
-        {DOMAIN_ORDER
-          .filter((id) => domains[id])
-          .map((id) => ({ id, d: domains[id] }))
-          .sort((a, b) => a.d.score - b.d.score)
-          .map(({ id, d }) => {
-            const first = top.find((t) => t.domain === id);
-            return (
-              <div className="card domcard" key={id}>
-                <div className="muted">{DL[id]}</div>
-                <div className="row" style={{ gap: 6, margin: '4px 0 8px' }}>
-                  <b className="num">{d.score}</b>
-                  <span className="muted">{d.word}</span>
-                </div>
-                <div className="pbar"><i className={zone(d.score)} style={{ width: `${d.score}%` }} /></div>
-                <div className="muted" style={{ marginTop: 8 }}>
-                  {first ? first.title : 'нарушений нет'}
-                </div>
-              </div>
-            );
-          })}
+      {/* --- Полоса-композиция: из чего состоят находки --- */}
+      {totalFindings > 0 && (
+        <div className="card compbar">
+          <div className="comp-track">
+            <i className="c-err" style={{ width: `${(counts.error / totalFindings) * 100}%` }} />
+            <i className="c-warn" style={{ width: `${(counts.warning / totalFindings) * 100}%` }} />
+            <i className="c-info" style={{ width: `${(counts.info / totalFindings) * 100}%` }} />
+          </div>
+          <div className="comp-legend muted">
+            <span><i className="dot d-err" /> {counts.error} ошибок</span>
+            <span><i className="dot d-warn" /> {counts.warning} предупреждений</span>
+            <span>
+              <i className="dot d-info" /> {counts.info} замечаний
+              {infoShare >= 60
+                ? ` — ${infoShare}% находок, но балл двигают меньше всех: вес в ошибках и предупреждениях`
+                : ''}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* --- Домены таблицей: балл, находки, статус, что именно --- */}
+      <div className="card">
+        <div className="scrolltbl">
+          <table className="findings">
+            <thead>
+              <tr>
+                <th>Домен</th><th style={{ width: 70 }}>Балл</th>
+                <th style={{ width: 90 }}>Находок</th><th style={{ width: 110 }}>Статус</th>
+                <th>Что именно</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DOMAIN_ORDER
+                .filter((id) => domains[id])
+                .map((id) => ({ id, d: domains[id] }))
+                .sort((a, b) => a.d.score - b.d.score)
+                .map(({ id, d }) => (
+                  <tr key={id}>
+                    <td><b>{DL[id]}</b></td>
+                    <td><b className={`num ${zone(d.score) === 'r' ? 'err' : zone(d.score) === 'y' ? 'warn' : 'ok'}`}>{d.score}</b></td>
+                    <td>{d.findings ?? 0}</td>
+                    <td className={zone(d.score) === 'r' ? 'err' : zone(d.score) === 'y' ? 'warn' : 'ok'}>{d.word}</td>
+                    <td className="muted">{domainDiag(id, d)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* --- Исправьте в первую очередь --- */}
@@ -303,14 +389,51 @@ export default function ScoreTab(props: Props) {
               )}
             </div>
           ))}
-          <p className="muted small" style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>
-            {(summary.candidates ?? 0) > top.length
-              ? `Ещё ${(summary.candidates ?? 0) - top.length} рекомендаций ниже по важности. `
-              : ''}
-            Прирост показан для балла этого приложения. Прогноз после первых трёх: {summary.forecast ?? '—'}.
-          </p>
+          <div className="planbox">
+            {readyFixes.length > 0 && (
+              <div className="planrow">
+                <b>Готовых правок: {readyFixes.length}</b> — прирост +{readyGain} балла,
+                закрывается кнопкой «Применить» за секунды
+                ({readyFixes.map((t) => t.title).join('; ')}).
+              </div>
+            )}
+            {manualFixes.length > 0 && (
+              <div className="planrow">
+                <b>Вручную: {manualFixes.length}</b> — прирост +{manualGain} балла
+                ({manualFixes.map((t) => t.title).join('; ')}).
+              </div>
+            )}
+            <div className="planrow warnline">
+              <span aria-hidden="true">⚠</span> «Применить» меняет скрипт загрузки —
+              перед применением проверьте отключённые листы, задачи перезагрузки
+              и внешние отчёты, читающие эти поля.
+            </div>
+            <p className="muted small" style={{ margin: '6px 0 0' }}>
+              {(summary.candidates ?? 0) > top.length
+                ? `Ещё ${(summary.candidates ?? 0) - top.length} рекомендаций ниже по важности. `
+                : ''}
+              Прирост показан для балла этого приложения. Прогноз после первых трёх: {summary.forecast ?? '—'}.
+            </p>
+          </div>
         </div>
       )}
+
+      {/* --- Что вне топ-5, но важно --- */}
+      <div className="card tailcard">
+        <h3>Что вне топ-5, но важно</h3>
+        <div className="trow"><b>{tailFindings}</b><span className="muted">находок не раскрыто в пяти первых пунктах — детали в «Анализе»</span></div>
+        <div className="trow"><b>{Math.max(0, (summary.candidates ?? 0) - top.length)}</b><span className="muted">рекомендаций ниже по важности</span></div>
+        <div className="trow"><b>{skippedCount} из {ruleStats.length}</b><span className="muted">проверок не применилось (платформа или недостающие данные)</span></div>
+        {(() => {
+          const clean = Object.entries(domains).filter(([, d]) => (d.findings ?? 0) === 0).sort((a, b) => b[1].score - a[1].score)[0];
+          return clean
+            ? <div className="trow"><b>{clean[1].score}</b><span className="muted">балл домена «{DL[clean[0]]}» без единого нарушения {domainDiag(clean[0], clean[1]) === 'нарушений нет' ? '' : `· ${domainDiag(clean[0], clean[1])}`}</span></div>
+            : null;
+        })()}
+        <p className="muted small" style={{ margin: '8px 0 0' }}>
+          Оценка взвешена по доменам: сумма баллов доменов не равна итогу.
+        </p>
+      </div>
 
       {/* --- Группа приложений --- */}
       {group.length > 0 && (

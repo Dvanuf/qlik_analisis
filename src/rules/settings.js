@@ -21,6 +21,28 @@ export const DEFAULT_THRESHOLDS = {
   R020: { maxDistinctRatio: 0.9 },
 };
 
+/**
+ * Базовые системные переменные среды Qlik: настройки форматов и календаря.
+ * Они объявлены SET-ом в скрипте, нигде «не используются» в смысле ссылок —
+ * но это норма, а не находка. Правила «переменная не используется» их
+ * никогда не флагуют (сверка с пользователем 09.11.2026).
+ */
+export const SYSTEM_VARIABLES = new Set([
+  'thousandsep', 'decimalsep', 'moneythousandsep', 'moneydecimalsep',
+  'moneyformat', 'moneydecimalpoint', 'moneythousandseparatorpoint',
+  'timeformat', 'dateformat', 'timestampformat', 'monthnames',
+  'longmonthnames', 'daynames', 'longdaynames', 'firstweekday',
+  'brokenweeks', 'referenceday', 'firstmonthofyear', 'collationlocale',
+  'createsearchindexonreload', 'numericalabbreviation', 'listdelimiters',
+  'crossallowed', 'hashpercent', 'sortbyloadorder', 'openinclient',
+  'searchmode', 'hideprefix', 'hidesuffix', 'stripcomments',
+]);
+
+/** Является ли имя переменной системной (без учёта регистра). */
+export function isSystemVariable(name) {
+  return SYSTEM_VARIABLES.has(String(name ?? '').trim().toLowerCase());
+}
+
 /** Служебные таблицы, для которых S002 («загрузка без WHERE») не срабатывает. */
 export const DEFAULT_EXCLUDED_TABLES = ['Fields', 'Info', 'tmp_*', 'sys_*'];
 

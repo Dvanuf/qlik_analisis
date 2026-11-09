@@ -4,7 +4,7 @@
  * конкретное исправление скрипта (fix).
  */
 import { canonicalFieldName } from '../normalize.js';
-import { matchesExcludedTable } from './settings.js';
+import { isSystemVariable, matchesExcludedTable } from './settings.js';
 
 /** Ключ для сравнения имён без квадратных скобок и в нижнем регистре. */
 function canon(name) {
@@ -160,6 +160,8 @@ export const resourceRules = [
     run(ctx) {
       const findings = [];
       for (const v of ctx.graph.variables ?? []) {
+        // Системные переменные среды (ThousandSep, DateFormat…) — норма.
+        if (isSystemVariable(v.name)) continue;
         const usage = ctx.index.variableUsage.get(canonicalFieldName(v.name));
         if (!usage || usage.usedInFrontEnd) continue;
         findings.push({

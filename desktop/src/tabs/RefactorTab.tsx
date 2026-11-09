@@ -10,9 +10,10 @@
  * Ответ ИИ никогда не применяется автоматически и показывается отдельным
  * источником: скрипт уходит провайдеру только после нажатия кнопки.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
 import { computeScore } from '../../../src/score/index.js';
+import { formatScript } from '../../../src/script/format.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
 import type { AnalysisResult, RefactorChange } from '../types.js';
 
@@ -55,6 +56,13 @@ export default function RefactorTab(props: Props) {
   // Последняя ошибка запроса: показывается в панели постоянно, а не только
   // тостом (тост исчезает за 5 секунд — «непонятно, что делается»).
   const [aiError, setAiError] = useState<string | null>(null);
+  // Форматирование предложенной версии (отступы как в линтерах) и
+  // синхронная прокрутка панелей «было/стало».
+  const [formatOn, setFormatOn] = useState(true);
+  const [syncScroll, setSyncScroll] = useState(true);
+  const leftRef = useRef<HTMLDivElement | null>(null);
+  const rightRef = useRef<HTMLDivElement | null>(null);
+  const syncingRef = useRef(false);
 
   const rules = useMemo<{ script: string; changes: RefactorChange[]; added: number[] }>(
     () => buildRefactoredScript(script, analysis?.findings ?? [], { disabled: off }) as {
@@ -98,7 +106,11 @@ export default function RefactorTab(props: Props) {
     });
     return (computeScore(remaining, { totalRows }) as { score: number }).score;
   }, [analysis, off]);
-  const rightLines = useMemo(() => proposed.split(/\r?\n/), [proposed]);
+  const shown = useMemo(
+    () => (formatOn ? formatScript(proposed) : proposed),
+    [proposed, formatOn],
+  );
+  const rightLines = useMemo(() => shown.split(/\r?\n/), [shown]);
 
   const anchorLines = useMemo(
     () => new Set(rules.changes.map((c: RefactorChange) => c.line).filter((n): n is number => n != null)),
@@ -115,7 +127,7 @@ export default function RefactorTab(props: Props) {
   };
 
   const copy = () => {
-    void navigator.clipboard?.writeText(proposed);
+    void navigator.clipboard?.writeText(shown);
     onNote(`Скопировано: предложенная версия (${rightLines.length} строк)`);
   };
 
@@ -126,7 +138,7 @@ export default function RefactorTab(props: Props) {
       const res = await window.qa.exportScript({
         appName: analysis.appName ?? analysis.file ?? 'Приложение',
         script,
-        finalScript: proposed,
+        finalScript: shown,
       });
       onNote(`Изменённый скрипт сохранён: ${res.path}`);
     } catch (err) {
@@ -171,13 +183,13 @@ export default function RefactorTab(props: Props) {
       return m;
     };
     const a = counts(script.split(/\r?\n/));
-    const b = counts(proposed.split(/\r?\n/));
+    const b = counts(shown.split(/\r?\n/));
     let added = 0;
     let removed = 0;
     for (const [l, n] of b) added += Math.max(0, n - (a.get(l) ?? 0));
     for (const [l, n] of a) removed += Math.max(0, n - (b.get(l) ?? 0));
     return { added, removed };
-  }, [source, aiResult, proposed, script]);
+  }, [source, aiResult, shown, script]);
 
   /** Строки версии ИИ, которых нет в текущем скрипте, — для подсветки. */
   const aiAddedSet = useMemo(() => {
@@ -194,6 +206,32 @@ export default function RefactorTab(props: Props) {
   }, [source, aiResult, script, rightLines]);
   const added = source === 'ai' ? [...aiAddedSet].sort((x, y) => x - y) : rules.added;
   const addedSet = useMemo(() => new Set(added), [added]);
+
+  /** Добавленные строки показанной версии: при форматировании — постстрочный
+   *  diff (номера строк сдвигаются), без — точные метки правил. */
+  const shownAdded = useMemo(() => {
+    if (!formatOn) return source === 'ai' ? aiAddedSet : addedSet;
+    const rest = new Map<string, number>();
+    for (const l of script.split(/\r?\n/)) rest.set(l, (rest.get(l) ?? 0) + 1);
+    const set = new Set<number>();
+    rightLines.forEach((l, i) => {
+      const n = rest.get(l) ?? 0;
+      if (n > 0) rest.set(l, n - 1);
+      else set.add(i + 1);
+    });
+    return set;
+  }, [formatOn, source, aiAddedSet, addedSet, script, rightLines]);
+
+  /** Синхронная прокрутка: позиция одной панели переносится во вторую. */
+  const syncFrom = (side: 'left' | 'right') => (e: React.UIEvent<HTMLDivElement>) => {
+    if (!syncScroll || syncingRef.current) return;
+    const dst = side === 'left' ? rightRef.current : leftRef.current;
+    if (!dst) return;
+    syncingRef.current = true;
+    dst.scrollTop = e.currentTarget.scrollTop;
+    dst.scrollLeft = e.currentTarget.scrollLeft;
+    syncingRef.current = false;
+  };
 
   if (!analysis || !script.trim()) {
     return (
@@ -233,7 +271,7 @@ export default function RefactorTab(props: Props) {
             {script.split(/\r?\n/).length} строк · подсвечены места правок
           </span>
         </h3>
-        <div className="codeview senseview">
+        <div className="codeview senseview" ref={leftRef} onScroll={syncFrom('left')}>
           {highlightScript(script).map((parts: Token[], i) => (
             <div key={i} className={`l${anchorLines.has(i + 1) ? ' anchor' : ''}`}>
               <span className="n">{i + 1}</span>
@@ -304,6 +342,21 @@ export default function RefactorTab(props: Props) {
           {source === 'ai' && aiResult?.redacted && (
             <span className="hint">данные обезличены перед отправкой</span>
           )}
+          <span className="grow" />
+          <button
+            className={`small${formatOn ? ' on' : ''}`}
+            onClick={() => setFormatOn((v) => !v)}
+            title="Выравнивать отступы предложенной версии (как в линтерах)"
+          >
+            Формат
+          </button>
+          <button
+            className={`small${syncScroll ? ' on' : ''}`}
+            onClick={() => setSyncScroll((v) => !v)}
+            title="Прокручивать панели «было/стало» синхронно"
+          >
+            Синхронно
+          </button>
         </div>
 
         {aiLoading && (
@@ -340,9 +393,9 @@ export default function RefactorTab(props: Props) {
           </p>
         )}
 
-        <div className="codeview senseview">
-          {highlightScript(proposed).map((parts: Token[], i) => (
-            <div key={i} className={`l${(source === 'ai' ? aiAddedSet : addedSet).has(i + 1) ? ' added' : ''}`}>
+        <div className="codeview senseview" ref={rightRef} onScroll={syncFrom('right')}>
+          {highlightScript(shown).map((parts: Token[], i) => (
+            <div key={i} className={`l${shownAdded.has(i + 1) ? ' added' : ''}`}>
               <span className="n">{i + 1}</span>
               <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
             </div>

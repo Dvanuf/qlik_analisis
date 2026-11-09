@@ -965,6 +965,43 @@ table.rq tr.pat { cursor: pointer; }
 .scorehero-main h2.verdict { margin: 0 0 4px; font-size: 20px; color: var(--text); }
 .scorehero-counts { display: flex; gap: 20px; text-align: center; }
 .scorehero-counts .num { font-size: 24px; font-weight: 700; }
+/* --- «Оценка» как аналитическая карточка --- */
+/* Плитки находок: всего / ошибки / предупреждения / замечания. */
+.scoretiles { display: flex; gap: 10px; align-items: stretch; flex: none; }
+.scoretiles .tile {
+  min-width: 86px; padding: 8px 12px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  text-align: center;
+}
+.scoretiles .tile .num { font-size: 1.25rem; font-weight: 700; }
+.scoretiles .tile-l { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.scoretiles .tile.t-err { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.scoretiles .tile.t-err .num { color: var(--danger); }
+.scoretiles .tile.t-warn { border-color: color-mix(in srgb, var(--warn, #e0a33e) 45%, transparent); }
+.scoretiles .tile.t-warn .num { color: var(--warn, #e0a33e); }
+
+/* Полоса-композиция находок по важности. */
+.compbar { padding: 12px 16px 10px; }
+.comp-track { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--panel-2); }
+.comp-track i { height: 100%; }
+.comp-track .c-err { background: var(--danger); }
+.comp-track .c-warn { background: var(--warn, #e0a33e); }
+.comp-track .c-info { background: var(--panel-3); }
+.comp-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 0.8125rem; }
+.comp-legend .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+.comp-legend .d-err { background: var(--danger); }
+.comp-legend .d-warn { background: var(--warn, #e0a33e); }
+.comp-legend .d-info { background: var(--panel-3); }
+
+/* Агрегированный план топ-5. */
+.planbox { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 4px; }
+.planrow { margin: 4px 0; }
+.planrow.warnline { color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+
+/* Хвост «вне топ-5». */
+.tailcard .trow { display: flex; gap: 12px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
+.tailcard .trow:last-of-type { border-bottom: none; }
+.tailcard .trow b { min-width: 56px; text-align: right; font-size: 1.05rem; }
 .scorehero-counts .num.err { color: var(--danger); }
 .scorehero-counts .num.warn { color: var(--warning); }
 .howformula { margin: 8px 0 0; }

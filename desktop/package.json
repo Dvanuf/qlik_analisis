@@ -1,6 +1,6 @@
 {
   "name": "qlik-analyzer-desktop",
-  "version": "0.21.5",
+  "version": "0.22.0",
   "private": true,
   "description": "Десктоп-приложение qlik-analyzer: анализ качества приложений Qlik Sense / QlikView",
   "main": "dist/main/main.js",

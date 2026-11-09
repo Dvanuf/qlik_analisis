@@ -453,3 +453,32 @@ test('P002: реюз одной мастер-меры — не дублиров�
   // В detail — исходная формула для панели.
   assert.match(p002[0].detail, /Выражение:\s*Sum\(\[A\]\) \* 3 \+ 7/);
 });
+
+test('системные переменные среды — норма, не находка (R004/S008 молчат)', () => {
+  // Фрагмент пользователя 09.11.2026: базовые SET-настройки не флагуются.
+  const sysVars = ['ThousandSep', 'DecimalSep', 'MoneyFormat', 'DateFormat',
+    'TimestampFormat', 'FirstWeekDay', 'CollationLocale', 'MonthNames', 'DayNames'];
+  const script = [
+    ...sysVars.map((n, i) => `SET ${n}='значение${i}';`),
+    'SET vРеальнаяПеременная=\'значение\';',
+    'Таб:',
+    'LOAD * FROM t.csv;',
+  ].join('\n');
+  const result = analyze({
+    fields: [{ name: 'a', table: 'Таб', rows: 5 }],
+    tables: [{ name: 'Таб', rows: 5, fields: ['a'] }],
+    // Объект нужен, чтобы S008 («переменная скрипта») был применим.
+    objects: [{ id: 'o1', name: 'Тест', type: 'table', expressions: [{ kind: 'measure', expr: 'Sum([a])' }] }],
+    variables: [
+      ...sysVars.map((n) => ({ name: n, value: 'значение' })),
+      { name: 'vРеальнаяПеременная', value: 'значение' },
+    ],
+    script,
+  }, { rules: { disabled: [] } });
+  const unusedVars = result.findings.filter((f) => f.ruleId === 'R004' || f.ruleId === 'S008');
+  assert.ok(unusedVars.some((f) => f.target.name === 'vРеальнаяПеременная'), 'настоящая неиспользуемая переменная находится');
+  for (const v of sysVars) {
+    assert.ok(!unusedVars.some((f) => f.target.name.toLowerCase() === v.toLowerCase()),
+      `системная ${v} не должна флагаться`);
+  }
+});

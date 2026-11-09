@@ -5,7 +5,7 @@
  */
 import { canonicalFieldName } from '../normalize.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
-import { matchesExcludedTable } from './settings.js';
+import { isSystemVariable, matchesExcludedTable } from './settings.js';
 
 const CATEGORY = 'Script';
 
@@ -271,6 +271,8 @@ export const scriptRules = [
       }
       for (const v of ctx.script.variables) {
         if (!v.name) continue;
+        // Системные переменные среды (ThousandSep, DateFormat…) — норма.
+        if (isSystemVariable(v.name)) continue;
         if (new RegExp(`\\$\\{?${v.name}\\b`, 'i').test(script)) continue;
         out.push(finding('S008', 'Неиспользуемая переменная скрипта',
           { kind: 'variable', name: v.name, id: v.name },
