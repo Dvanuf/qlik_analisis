@@ -23,7 +23,6 @@ QlikView» (28), авторизация через хаб, офлайн-режи
 |---|---|
 | Исходники | `/Users/anufriev_d_v/.cline/data/workspaces/chat/qlik-analyzer` |
 | Архив всех сборок | `<проект>/desktop/release/` |
-| Последняя сборка на рабочем столе | `/Users/anufriev_d_v/Desktop/Qlik Analyzer-0.18.8-{arm64.dmg,arm64-mac.zip,x64.exe}` |
 | Лог входа в хаб | `~/Library/Application Support/qlik-analyzer-desktop/hub-login.log` |
 | Настройки правил | `~/Library/Application Support/qlik-analyzer-desktop/rules.json` |
 | История прогонов | `~/Library/Application Support/qlik-analyzer-desktop/history.sqlite` |
