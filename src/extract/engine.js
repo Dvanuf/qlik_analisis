@@ -351,6 +351,35 @@ export async function extractFromEngine(config) {
       });
     }
 
+    // --- Расширения, установленные на сервере ---
+    // Объект приложения с типом расширения, которого нет на сервере, не
+    // отрисуется (перенос приложения между средами). Список нужен правилу
+    // «отсутствует расширение».
+    report('extensionsInstalled', 'Расширения сервера');
+    const extList = await attempt('extensionsInstalled', () => app.getExtensionList(), null);
+    if (extList) {
+      const items = extList?.qExtensionList ?? extList?.qList ?? extList;
+      const names = (Array.isArray(items) ? items : [])
+        .map((e) => String(e?.qName ?? e?.name ?? ''))
+        .filter(Boolean);
+      graph.meta.extensionsInstalled = names;
+      capabilities.push('extensionsInstalled');
+    }
+
+    // --- Полный JSON свойств приложения ---
+    // Имена полей живут не только в гиперкубах: условия показа и расчёта,
+    // действия кнопок, закладки, альтернативные состояния, свойства
+    // расширений. Скан отмечает поля, упомянутые где-либо в свойствах, —
+    // «неиспользуемое поле» по ним не флагается.
+    report('appProperties', 'Свойства приложения');
+    const props = await attempt('appProperties', () => app.getProperties(), null);
+    if (props) {
+      const json = JSON.stringify(props);
+      const names = [...new Set((graph.fields ?? []).map((f) => String(f.name ?? '')))].filter(Boolean);
+      graph.meta.fieldNamesInProps = names.filter((n) => json.includes(n));
+      capabilities.push('appProperties');
+    }
+
     // --- Переменные: имена из скрипта, значения уточняем у движка ---
     report('variables', 'Переменные');
     const varNames = new Set();

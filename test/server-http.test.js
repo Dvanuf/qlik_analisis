@@ -39,8 +39,8 @@ test('HTTP: служебные маршруты и каталог правил',
   const rules = await fetch(`${base}/api/rules`);
   assert.equal(rules.status, 200);
   const rulesBody = await rules.json();
-  assert.equal(rulesBody.total, 61);
-  assert.equal(rulesBody.rules.length, 61);
+  assert.equal(rulesBody.total, 64);
+  assert.equal(rulesBody.rules.length, 64);
 
   const me = await fetch(`${base}/api/me`);
   assert.equal(me.status, 200);

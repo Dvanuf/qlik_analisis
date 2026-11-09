@@ -31,6 +31,7 @@ const api = {
     sheets: { name: string; headers: string[]; rows: (string | number)[][] }[];
     fileName?: string;
   }) => ipcRenderer.invoke('core:export-data-model', payload),
+  exportRulesCatalog: () => ipcRenderer.invoke('core:export-rules-catalog'),
   rules: () => ipcRenderer.invoke('core:rules'),
   /** Каталог готовых функций скрипта: список, выгрузка в .qvs, разбор своей библиотеки. */
   library: () => ipcRenderer.invoke('core:library'),

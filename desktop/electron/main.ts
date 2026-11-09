@@ -109,7 +109,7 @@ async function runSmokeCheck(): Promise<void> {
         // Открываем вкладку «Правила» — там каталог с описаниями и рекомендациями.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('Правила') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -135,7 +135,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Каталог функций»: записи с сигнатурами и кодом.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('Каталог функций') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -156,7 +156,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Подключение»: пошаговый сценарий и главная кнопка.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('Подключение') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -237,7 +237,7 @@ async function runSmokeCheck(): Promise<void> {
         }
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('Анализ') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -267,7 +267,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Скрипт загрузки»: строки с номерами и находки.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('Скрипт загрузки') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -306,7 +306,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Модель данных»: разделы модели и поиск по ним.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('Модель данных') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -326,7 +326,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «ИИ-чат»: поле вопроса, кнопка настроек, подсказки.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sheetbar .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
               .filter(function (b) { return b.textContent.indexOf('ИИ-чат') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -880,6 +880,43 @@ ipcMain.handle('core:export-data-model', async (_e, payload: {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const file = resolve(dir, `${payload.fileName ?? 'Модель данных'} ${stamp}.xlsx`);
   writeFileSync(file, buildXlsxBook(payload.sheets ?? []), 'utf8');
+  return { path: file };
+});
+
+/** Каталог правил в Excel: все правила с кодами, важностью и описаниями. */
+ipcMain.handle('core:export-rules-catalog', async () => {
+  const { buildXlsx } = await import('../../src/report/xlsx.js');
+  const { DOMAIN_LABELS, domainForRule } = await import('../../src/rules/domains.js');
+  const { platformLabel, isRuleApplicable, PLATFORM_SENSE, PLATFORM_VIEW } = await import('../../src/rules/platforms.js');
+  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const file = resolve(dir, `Каталог правил ${stamp}.xlsx`);
+  const SEVERITY_LABELS: Record<string, string> = { error: 'Ошибка', warning: 'Предупреждение', info: 'Инфо' };
+  const CATEGORY_LABELS: Record<string, string> = {
+    Quality: 'Качество выражений', Resources: 'Ресурсы и данные',
+    Practices: 'Практики разработки', Script: 'Скрипт загрузки',
+  };
+  const rows = ALL_RULES
+    .map((r) => ({
+      code: r.id,
+      human: r.humanTitle ?? r.title,
+      category: CATEGORY_LABELS[r.category] ?? r.category,
+      severity: SEVERITY_LABELS[r.severity] ?? r.severity,
+      domain: (DOMAIN_LABELS as Record<string, string>)[domainForRule(r.id, r.category)] ?? '',
+      platforms: [platformLabel(PLATFORM_SENSE), platformLabel(PLATFORM_VIEW)]
+        .filter((_, i) => isRuleApplicable(r, i === 0 ? PLATFORM_SENSE : PLATFORM_VIEW))
+        .join(', '),
+      what: r.whatHappened ?? '',
+      description: r.description ?? '',
+      recommendation: r.recommendation ?? '',
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code))
+    .map((r) => [r.code, r.human, r.category, r.severity, r.domain, r.platforms, r.what, r.description, r.recommendation]);
+  writeFileSync(file, buildXlsx(
+    ['Код', 'Правило', 'Категория', 'Важность', 'Домен', 'Платформы', 'Что случилось', 'Описание', 'Рекомендация'],
+    rows, 'Правила',
+  ), 'utf8');
   return { path: file };
 });
 

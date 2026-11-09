@@ -69,6 +69,9 @@ export const SCOPE_BY_RULE = {
   P011: 'measures',
   P012: 'script',
   P013: 'dashboard',
+  R022: 'script',
+  R023: 'dashboard',
+  R024: 'dashboard',
 
   // --- Script ---
   S001: 'script',

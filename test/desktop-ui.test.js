@@ -88,9 +88,12 @@ test('styles.css: тёмная тема — заливки через --solid, �
   assert.ok(STYLES.includes('--link: #7fb3ff'), 'нет светлого --link для dark');
 });
 
-test('styles.css: sheetbar не переполняется, недостающие классы описаны', () => {
-  assert.ok(/\.sheetbar \{[^}]*overflow-x: auto/s.test(STYLES), 'sheetbar без горизонтального скролла');
-  assert.ok(/\.sheetbar \.tab \{[^}]*white-space: nowrap/s.test(STYLES), 'подписи вкладок заворачиваются');
+test('styles.css: сайдбар навигации слева, на узком окне складывается', () => {
+  // Регрессия 0.20.0: меню вкладок переехало в левый сайдбар.
+  assert.ok(/\.sidenav \{[^}]*flex-direction: column/s.test(STYLES), 'сайдбар вертикальный');
+  assert.ok(/\.sidenav \.tab \{[^}]*text-align: left/s.test(STYLES), 'вкладки выровнены влево');
+  assert.ok(/@media \(max-width: 900px\)/.test(STYLES), 'нет адаптации узкого окна');
+  assert.ok(STYLES.includes('.verbadge'), 'нет бейджа версии');
   for (const cls of ['.btn {', '.code {', '.num {', '.err {', '.ok {', '.checks {']) {
     assert.ok(STYLES.includes(cls), `нет класса ${cls}`);
   }

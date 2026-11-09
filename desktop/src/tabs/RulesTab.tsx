@@ -52,10 +52,12 @@ type Props = {
   onSave: (config: RulesConfig) => void;
   onExport: () => void;
   onImport: () => void;
+  /** Каталог всех правил в Excel. */
+  onExportCatalog: () => void;
 };
 
 export default function RulesTab(props: Props) {
-  const { ruleInfo, rulesConfig, countsByRule, onSave, onExport, onImport } = props;
+  const { ruleInfo, rulesConfig, countsByRule, onSave, onExport, onImport, onExportCatalog } = props;
   const [cat, setCat] = useState('all');
   // Фильтр по домену — «какая забота», а не «в каком файле лежит правило».
   const [domain, setDomain] = useState<'all' | DomainId>('all');
@@ -194,6 +196,7 @@ export default function RulesTab(props: Props) {
         <button className="primary" onClick={() => rulesConfig && onSave(rulesConfig)} disabled={!rulesConfig}>
           Сохранить настройки
         </button>
+        <button onClick={onExportCatalog}>Каталог правил (Excel)</button>
         <button onClick={onExport} disabled={!rulesConfig}>Экспорт в файл…</button>
         <button onClick={onImport}>Импорт из файла…</button>
         <span className="muted small">

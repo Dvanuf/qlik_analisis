@@ -71,6 +71,8 @@ declare global {
       exportSummary(payload: {
         totals: unknown; results: unknown; platform?: string;
       }): Promise<{ htmlPath: string; jsonPath: string }>;
+      /** Каталог правил в Excel (все правила с описаниями). */
+      exportRulesCatalog(): Promise<{ canceled: boolean; path?: string }>;
       rulesConfig(): Promise<unknown>;
       saveRulesConfig(config: unknown): Promise<{ path: string; config: unknown }>;
       exportRulesConfig(): Promise<{ canceled: boolean; path?: string }>;
@@ -668,6 +670,17 @@ export default function App() {
     }
   }
 
+  /** Каталог правил в Excel: все правила с кодами и описаниями. */
+  async function exportRulesCatalog() {
+    try {
+      const res = await window.qa.exportRulesCatalog();
+      if (res.canceled) return;
+      showToast(`Каталог правил сохранён: ${res.path}`);
+    } catch (err) {
+      showToast(`Не удалось сохранить каталог правил: ${String(err)}`);
+    }
+  }
+
   /** Экспорт настроек правил в файл. */
   async function exportRulesConfig() {
     try {
@@ -952,6 +965,9 @@ export default function App() {
       <div className="hub">
         <div className="qlmark" aria-hidden="true">Q</div>
         <div className="qlname">Qlik Анализатор</div>
+        <span className="verbadge" title={`Electron ${info?.electron ?? '—'} · Node ${info?.node ?? '—'}`}>
+          v{info?.appVersion ?? '…'}
+        </span>
         <div className="sep" />
         <div className="apppick" title={appTitle}>
           <span className="live" />
@@ -994,14 +1010,18 @@ export default function App() {
         </button>
       </div>
 
-      <nav className="sheetbar" aria-label="Разделы">
-        {TAB_GROUPS.flatMap((g) => [
-          <span key={`g-${g.label}`} className="grouplabel">{g.label}</span>,
-          ...g.tabs.map((id) => {
-            const i = TAB_ORDER.indexOf(id);
-            return (
+      <div className="body">
+      <nav className="sidenav" aria-label="Разделы">
+        {TAB_GROUPS.map((g) => (
+          <div key={g.label} className="navgroup" role="none">
+            <span className="grouplabel">{g.label}</span>
+            {g.tabs.map((id) => {
+              const i = TAB_ORDER.indexOf(id);
+              return (
           <button
             key={id}
+            role="tab"
+            aria-selected={tab === id}
             className={`tab${tab === id ? ' on' : ''}`}
             onClick={() => setTab(id)}
             title={`Ctrl+${i === 9 ? 0 : i + 1} — ${TAB_LABELS[id]}`}
@@ -1022,9 +1042,10 @@ export default function App() {
               <span className="cnt">{libraryFunctions.length}</span>
             ) : null}
           </button>
-            );
-          }),
-        ])}
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="wrap">
@@ -1164,6 +1185,7 @@ export default function App() {
           onSave={(c) => void saveRulesConfig(c)}
           onExport={() => void exportRulesConfig()}
           onImport={() => void importRulesConfig()}
+          onExportCatalog={() => void exportRulesCatalog()}
         />
       )}
 
@@ -1183,6 +1205,7 @@ export default function App() {
       {tab === 'refactor' && (
         <RefactorTab analysis={analysis} onNote={showToast} />
       )}
+      </div>
       </div>
     </div>
   );

@@ -452,25 +452,56 @@ p.small, .small { font-size: 0.75rem; }
 .zoomer button.on { background: var(--brand); color: #fff; font-weight: 600; }
 
 /* --- вкладки лентами листов --- */
-.sheetbar {
-  display: flex; gap: 2px; background: var(--panel-2);
-  border-bottom: 1px solid var(--line); padding: 0 12px;
-  position: sticky; top: 56px; z-index: 25;
-  overflow-x: auto;
+/* Каркас: шапка сверху, сайдбар слева, контент справа. */
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+.app .body { display: flex; flex: 1; align-items: stretch; min-width: 0; }
+/* Сайдбар навигации: группы разделов сверху вниз. */
+.sidenav {
+  width: 208px; flex: none; background: var(--panel-2);
+  border-right: 1px solid var(--line); padding: 10px 8px 24px;
+  display: flex; flex-direction: column; gap: 2px;
+  position: sticky; top: 56px; align-self: flex-start;
+  max-height: calc(100vh - 56px); overflow-y: auto;
 }
-.sheetbar .tab {
-  background: none; border: none; padding: 11px 16px; font-size: 0.875rem;
-  color: var(--fw); cursor: pointer; border-bottom: 3px solid transparent;
-  display: flex; align-items: center; gap: 8px; font-family: inherit;
-  white-space: nowrap; flex: none;
+.sidenav .navgroup { display: flex; flex-direction: column; gap: 2px; }
+.sidenav .grouplabel {
+  font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); padding: 12px 12px 4px;
 }
-.sheetbar .tab:hover { color: var(--text); background: var(--panel); }
-.sheetbar .tab.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
-.sheetbar .tab .cnt {
+.sidenav .tab {
+  background: none; border: none; border-left: 3px solid transparent;
+  padding: 8px 12px; font-size: 0.875rem; font-family: inherit;
+  color: var(--fw); cursor: pointer; border-radius: 0 8px 8px 0;
+  display: flex; align-items: center; gap: 8px; text-align: left; width: 100%;
+}
+.sidenav .tab:hover { color: var(--text); background: var(--panel); }
+.sidenav .tab.on {
+  color: var(--brand); background: var(--panel); font-weight: 600;
+  border-left-color: var(--brand);
+}
+.sidenav .tab .cnt {
   background: var(--panel-3); color: var(--fw); border-radius: 10px;
   padding: 1px 7px; font-size: 0.6875rem;
 }
-.sheetbar .tab.on .cnt { background: var(--bs); color: var(--brand); }
+.sidenav .tab.on .cnt { background: var(--bs); color: var(--brand); }
+/* Узкое окно: сайдбар складывается в горизонтальную строку сверху. */
+@media (max-width: 900px) {
+  .app .body { flex-direction: column; }
+  .sidenav {
+    width: auto; max-height: none; align-self: stretch;
+    flex-direction: row; flex-wrap: wrap; overflow-x: auto;
+    border-right: none; border-bottom: 1px solid var(--line);
+  }
+  .sidenav .navgroup { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .sidenav .grouplabel { padding: 4px 8px; }
+  .sidenav .tab { width: auto; border-left: none; border-bottom: 3px solid transparent; border-radius: 0; }
+  .sidenav .tab.on { border-bottom-color: var(--brand); }
+}
+/* Бейдж версии анализатора в шапке. */
+.verbadge {
+  font-size: 0.6875rem; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 10px; padding: 1px 8px; white-space: nowrap;
+}
 
 /* --- рабочая область --- */
 .wrap { padding: 16px; max-width: 1720px; margin: 0 auto; }
@@ -653,7 +684,7 @@ table.rq tr.pat { cursor: pointer; }
 .dom .st { display: grid; grid-template-columns: repeat(3, auto) 1fr; gap: 2px 10px; }
 .dom .st span { white-space: nowrap; }
 .dom .st span:last-child { justify-self: end; text-align: right; }
-.srclist { list-style: none; margin: 0; padding: 0; }
+.srclist { list-style: none; margin: 0; padding: 0;  max-height: 46vh; overflow-y: auto;}
 .srclist li {
   padding: 9px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer;
   display: flex; gap: 8px; align-items: flex-start; font-size: 0.78125rem;

@@ -72,7 +72,18 @@ export function analyze(graph, config = {}) {
   );
   const withLines = (list) => list.map((f) => {
     const { lines, total } = findingLines(f, scriptIndex, graph);
-    return lines.length ? { ...f, lines, linesTotal: total } : f;
+    const base = lines.length ? { ...f, lines, linesTotal: total } : f;
+    // Лист, на котором живёт объект находки: в панели паттерна видно,
+    // ГДЕ именно проблема (данные листов отдаёт Doc API и извлечение листов).
+    const kind = base.target?.kind;
+    if (['object', 'expression', 'measure', 'dimension', 'sheet'].includes(kind)) {
+      const obj = (graph.objects ?? []).find((o) => (base.target?.id && o.id === base.target?.id)
+        || (!base.target?.id && base.target?.name && String(o.name ?? '') === String(base.target.name)));
+      const sheetId = obj?.sheetId;
+      const sheet = sheetId ? (graph.sheets ?? []).find((sh) => sh.id === sheetId)?.name : '';
+      if (sheet) return { ...base, sheet };
+    }
+    return base;
   });
   const locatedFindings = withLines(findings);
   const locatedSuppressed = withLines(suppressed);

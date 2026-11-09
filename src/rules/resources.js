@@ -4,6 +4,7 @@
  * конкретное исправление скрипта (fix).
  */
 import { canonicalFieldName } from '../normalize.js';
+import { matchesExcludedTable } from './settings.js';
 
 /** Ключ для сравнения имён без квадратных скобок и в нижнем регистре. */
 function canon(name) {
@@ -21,7 +22,7 @@ export const resourceRules = [
     humanTitle: 'Поле не используется нигде',
     whatHappened: 'Поле загружено, но не нужно ни в объектах, ни в скрипте — можно убрать и освободить память.',
     description: 'Поле загружено в модель данных, но не используется ни в одном выражении объекта или переменной.',
-    recommendation: 'Удалить поле из модели данных — экономия оперативной памяти и лицензионной квоты Qlik Cloud.',
+    recommendation: 'Удалить поле из модели данных — освободится оперативная память.',
     run(ctx) {
       const findings = [];
       // Без данных фронт-енда нельзя доказать, что поле не используется.
@@ -38,6 +39,10 @@ export const resourceRules = [
         // Поле, которое участвует в выражениях скрипта, удалять нельзя:
         // «неиспользуемым» оно не является (см. R002).
         if (ctx.index.scriptUsage?.fields.has(canon(entry.name))) continue;
+        // Имя поля упомянуто в полном JSON свойств (условия показа и
+        // расчёта, действия кнопок, закладки, свойства расширений) —
+        // «неиспользуемым» оно не считается.
+        if (ctx.graph?.meta?.fieldNamesInProps?.includes(String(entry.name ?? ''))) continue;
         const meta = ctx.index.fieldMeta.get(entry.id);
         findings.push({
           ruleId: 'R001',
@@ -240,10 +245,16 @@ export const resourceRules = [
     recommendation: 'Использовать AutoNumber вместо исходного ключа: экономит память и ускоряет joins.',
     run(ctx) {
       const findings = [];
+      const excludedFields = ctx.config?.exclusions?.R007?.fields ?? [];
       for (const f of ctx.graph.fields ?? []) {
         if (!f.key || f.rows == null || f.distinct == null) continue;
         if (f.nonNulls != null && f.nonNulls !== f.rows) continue;
         if (f.distinct !== f.rows) continue;
+        // Ключ, который используется как измерение или в выражении, сжимать
+        // нельзя — пользователь увидит числа вместо значений.
+        const usage = ctx.index?.fieldUsage?.get(canon(f.name));
+        if (usage?.usedInFrontEnd) continue;
+        if (excludedFields.includes(f.name)) continue;
         // Имя нового ключевого поля: Key_<таблица> — так его узнать в модели данных.
         const keyName = `Key_${f.table ?? f.name}`;
         findings.push({
@@ -317,6 +328,53 @@ export const resourceRules = [
           message: `Поле «${f.name}» (${f.table}) содержит одно уникальное значение`,
           impact: { rows: f.rows ?? null },
           recommendation: 'Рассмотреть удаление поля из модели данных.',
+        });
+      }
+      return findings;
+    },
+  },
+
+  {
+    id: 'R022',
+    category: CATEGORY,
+    severity: 'info',
+    title: 'Связь многие ко многим',
+    humanTitle: 'Ключ неуникален в обеих связанных таблицах',
+    whatHappened: 'Общий ключ повторяется в обеих таблицах — строки перемножаются, цифры завышаются.',
+    description: 'Поле, связывающее две таблицы, неуникально в каждой из них: связь «многие ко многим» даёт декартово произведение строк в расчётах.',
+    recommendation: 'Проверить модель: завести мост-таблицу или перестроить связь, чтобы ключ был уникален хотя бы с одной стороны.',
+    run(ctx) {
+      const findings = [];
+      // Поле в нескольких таблицах: для связи смотрим уникальность в каждой.
+      const byName = new Map();
+      for (const f of ctx.graph.fields ?? []) {
+        if (f.rows == null || f.distinct == null) continue;
+        const key = canon(f.name);
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push(f);
+      }
+      const excludedTables = ctx.config?.exclusions?.R022?.tables ?? [];
+      for (const [key, entries] of byName) {
+        if (entries.length < 2) continue;
+        const tables = [...new Set(entries.map((f) => String(f.table ?? '')).filter(Boolean))];
+        if (tables.length < 2) continue;
+        // Неуникален в обеих связанных таблицах — вот признак M:N.
+        const nonUnique = [...new Set(entries.filter((f) => f.distinct < f.rows).map((f) => f.table))];
+        if (nonUnique.length < 2) continue;
+        // Мосты и link-таблицы — намеренные, список исключений.
+        if (tables.some((t) => matchesExcludedTable(t, excludedTables))) continue;
+        findings.push({
+          ruleId: 'R022',
+          category: CATEGORY,
+          severity: 'info',
+          title: 'Связь многие ко многим',
+          target: { kind: 'field', name: entries[0].name, id: key },
+          message: `Поле «${entries[0].name}» неуникально в таблицах «${nonUnique.join('» и «')}» — связь многие ко многим`,
+          detail: nonUnique.map((t) => {
+            const e = entries.find((x) => x.table === t);
+            return `${t}: ${e.distinct} из ${e.rows} уникальных`;
+          }).join(' · '),
+          recommendation: 'Перестроить связь: уникальный ключ в измерении или мост-таблица.',
         });
       }
       return findings;

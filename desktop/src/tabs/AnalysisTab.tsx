@@ -896,12 +896,18 @@ export default function AnalysisTab(props: Props) {
               </div>
               <table className="rq">
                 <thead>
-                  <tr><th>Объект</th><th>Таблица</th><th>Строка</th></tr>
+                  <tr>
+                    <th>Объект</th>
+                    {openPattern.places.some((pl) => pl.sheet) ? <th>Лист</th> : null}
+                    <th>Таблица</th>
+                    <th>Строка</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {openPattern.places.map((place, i) => (
                     <tr key={`${place.name}-${i}`}>
                       <td>{place.name || '—'}</td>
+                      {openPattern.places.some((pl) => pl.sheet) ? <td className="hint">{place.sheet || '—'}</td> : null}
                       <td className="hint">{place.table || '—'}</td>
                       <td className="hint">{place.line ?? '—'}</td>
                     </tr>

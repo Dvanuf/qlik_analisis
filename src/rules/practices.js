@@ -424,6 +424,41 @@ export const practiceRules = [
       return findings;
     },
   },
+
+  {
+    id: 'R023',
+    category: CATEGORY,
+    severity: 'info',
+    title: 'Мера и поле с одним именем',
+    humanTitle: 'Мастер-мера и поле называются одинаково',
+    whatHappened: 'Ссылка с таким именем неоднозначна: в выражении непонятно, что подставится — поле или мера.',
+    description: 'Имя мастер-меры (или мастер-измерения) совпадает с именем поля модели данных после нормализации и без учёта регистра.',
+    recommendation: 'Переименовать меру или поле, чтобы ссылки не были двусмысленными.',
+    run(ctx) {
+      const masters = ctx.graph.masterObjects ?? [];
+      if (!masters.length) {
+        return { findings: [], note: 'Пропущено: перечень мастер-элементов недоступен.' };
+      }
+      const findings = [];
+      const fieldNames = new Set((ctx.graph.fields ?? []).map((f) => canonicalFieldName(f.name)));
+      for (const m of masters) {
+        const name = String(m.name ?? '').trim();
+        if (!name) continue;
+        if (!fieldNames.has(canonicalFieldName(name))) continue;
+        findings.push({
+          ruleId: 'R023',
+          category: CATEGORY,
+          severity: 'info',
+          title: 'Мера и поле с одним именем',
+          target: { kind: 'measure', name, id: String(m.id ?? name) },
+          message: `Мастер-элемент «${name}» и поле модели называются одинаково`,
+          detail: 'Совпадение после нормализации имени и без учёта регистра.',
+          recommendation: 'Переименовать мастер-элемент или поле — ссылки станут однозначными.',
+        });
+      }
+      return findings;
+    },
+  },
 ];
 
 /** Максимальная глубина вложенности скобок. */

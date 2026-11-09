@@ -9,6 +9,19 @@ import { canonicalFieldName } from '../normalize.js';
 
 const CATEGORY = 'Resources';
 
+/** Штатные типы визуализаций Sense — всё остальное это расширения. */
+const NATIVE_VISUALIZATIONS = new Set([
+  'barchart', 'linechart', 'piechart', 'scatterplot', 'table', 'pivot-table',
+  'treemap', 'map', 'kpi', 'gauge', 'filterpane', 'listbox', 'text-image',
+  'container', 'sheet', 'story', 'slide', 'boxplot', 'distributionplot',
+  'histogram', 'waterfallchart', 'funnelchart', 'mekko', 'organicstrip',
+  'sankey', 'sunburst', 'variwidechart', 'wordcloudchart', 'networkchart',
+  'heatmapchart', 'rangeareaspline', 'stepchart', 'sn-grid-chart',
+  'sn-tabular', 'sn-org-chart', 'sn-treemap', 'sn-line-chart', 'sn-barchart',
+  'table-bundle', 'visualization', 'embed-webpage', 'action-button',
+  'sc-bullet-chart', 'qsVariable', 'SimpleKpi',
+]);
+
 /** Порог числа объектов на листе, выше которого лист считается тяжёлым. */
 export const SHEET_OBJECT_LIMIT = 15;
 
@@ -348,5 +361,41 @@ export const metadataRules = [
       return out;
     },
   },
+
+  {
+    id: 'R024',
+    category: CATEGORY,
+    severity: 'error',
+    title: 'Отсутствует расширение',
+    humanTitle: 'Объект использует расширение, которого нет на сервере',
+    whatHappened: 'Объект построен на расширении, не установленном на этом сервере, — вместо визуализации будет ошибка.',
+    description: 'Тип объекта — не штатная визуализация Sense, и его нет в списке расширений сервера. Частая причина — перенос приложения между средами.',
+    recommendation: 'Установить расширение на сервере или заменить объект на штатную визуализацию.',
+    run(ctx) {
+      const installed = ctx.graph?.meta?.extensionsInstalled;
+      if (installed == null) {
+        return { findings: [], note: 'Пропущено: перечень расширений сервера недоступен.' };
+      }
+      const installedSet = new Set(installed.map((n) => String(n).toLowerCase()));
+      const findings = [];
+      for (const obj of ctx.graph.objects ?? []) {
+        const type = String(obj.type ?? '');
+        if (!type || NATIVE_VISUALIZATIONS.has(type) || type === 'extension') continue;
+        if (installedSet.has(type.toLowerCase())) continue;
+        findings.push({
+          ruleId: 'R024',
+          category: CATEGORY,
+          severity: 'error',
+          title: 'Отсутствует расширение',
+          target: { kind: 'object', name: obj.name, id: obj.id },
+          message: `Объект «${obj.name}» типа «${type}» — расширение не установлено на сервере`,
+          detail: 'Перенесённое приложение не отрисует этот объект, пока расширение не установлено.',
+          recommendation: 'Установить расширение на сервере или заменить объект.',
+        });
+      }
+      return findings;
+    },
+  },
 ];
+
 

@@ -9,7 +9,10 @@
   },
   "scripts": {
     "analyze": "node bin/analyze.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "rules:export": "node tools/export-rules.mjs",
+    "ci:checkscript": "node scripts/ci-checkscript.mjs",
+    "silent:checkscript": "node tools/silent-checkscript.mjs"
   },
   "engines": {
     "node": ">=22"

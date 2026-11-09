@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.20.0 | [v0.20.0 — закрытие ROADMAP: R022/R023/R024, сайдбар слева, версия в шапке, CI GitLab](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.20.0) |
 | 0.19.1 | [v0.19.1 — P002 по формулам, а не подписям: реюз мастер-меры не флагается, имена объектов вместо GUID, исходная формула в панели](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.19.1) |
 | 0.19.0 | [v0.19.0 — ревизия каталога правил v2: 16 шумных выключены по умолчанию, новые P013 (смесь алфавитов) и S020 (секреты), NFC, cp1251](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.19.0) |
 | 0.18.9 | [v0.18.9 — качество находок Q002 на кириллице: голое слово не «поле», границы строк Unicode, операторы скрипта не выражения](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.9) |

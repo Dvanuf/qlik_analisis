@@ -354,6 +354,36 @@
    "nonNulls": 0,
    "distinct": 0,
    "hasNull": false
+  },
+  {
+   "name": "InvoiceNo",
+   "table": "Invoices",
+   "tags": [
+    "key"
+   ],
+   "key": true,
+   "rows": 5000,
+   "nonNulls": 5000,
+   "distinct": 5000,
+   "hasNull": false
+  },
+  {
+   "name": "Link",
+   "table": "Orders",
+   "tags": [],
+   "key": false,
+   "rows": 1000,
+   "nonNulls": 1000,
+   "distinct": 50
+  },
+  {
+   "name": "Link",
+   "table": "Shipment",
+   "tags": [],
+   "key": false,
+   "rows": 800,
+   "nonNulls": 800,
+   "distinct": 80
   }
  ],
  "tables": [
@@ -411,6 +441,35 @@
    "keyFields": [],
    "synthetic": false,
    "directDiscovery": false
+  },
+  {
+   "name": "Invoices",
+   "rows": 5000,
+   "fields": [
+    "InvoiceNo",
+    "Amount"
+   ],
+   "keyFields": [
+    "InvoiceNo"
+   ]
+  },
+  {
+   "name": "Orders",
+   "rows": 1000,
+   "fields": [
+    "Link",
+    "Sum"
+   ],
+   "keyFields": []
+  },
+  {
+   "name": "Shipment",
+   "rows": 800,
+   "fields": [
+    "Link",
+    "Weight"
+   ],
+   "keyFields": []
   }
  ],
  "bookmarks": [

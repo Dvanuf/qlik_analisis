@@ -152,7 +152,63 @@ test('Resources: найдена пустая таблица', () => {
 
 test('Resources: найден ключ, подходящий под AutoNumber', () => {
   assert.ok(ids.has('R007'));
-  assert.ok(byId('R007').some((f) => f.target.name === 'OrderID'));
+  // OrderID исключён: он используется в мере (ключ-как-измерение).
+  assert.ok(!byId('R007').some((f) => f.target.name === 'OrderID'));
+  assert.ok(byId('R007').some((f) => f.target.name === 'InvoiceNo'));
+});
+
+test('R022: связь многие ко многим по неуникальному общему ключу', () => {
+  const r022 = byId('R022');
+  assert.ok(r022.length === 1, `ожидалась одна связь M:N, найдено ${r022.length}`);
+  assert.match(r022[0].message, /Link/);
+  assert.match(r022[0].message, /Orders.*Shipment|Shipment.*Orders/);
+  // Уникальный с одной стороны — не M:N.
+  const oneSide = analyze({
+    fields: [
+      { name: 'K', table: 'Dim', key: true, rows: 100, distinct: 100 },
+      { name: 'K', table: 'Fact', key: false, rows: 500, distinct: 100 },
+    ],
+    tables: [{ name: 'Dim', rows: 100 }, { name: 'Fact', rows: 500 }],
+    objects: [],
+  }, {});
+  assert.ok(!oneSide.findings.some((f) => f.ruleId === 'R022'));
+});
+
+test('R023: мастер-элемент и поле с одним именем', () => {
+  const result = analyze({
+    fields: [{ name: 'Сумма продаж' }, { name: 'Год' }],
+    tables: [],
+    objects: [],
+    masterObjects: [
+      { id: 'm1', name: 'Сумма продаж', definition: 'Sum([Сумма продаж])' },
+      { id: 'm2', name: 'Другое', definition: '1' },
+    ],
+  }, {});
+  const r023 = result.findings.filter((f) => f.ruleId === 'R023');
+  assert.equal(r023.length, 1);
+  assert.match(r023[0].message, /Сумма продаж/);
+  // Без перечня мастер-элементов — пропуск с объяснением, не тишина.
+  const noMasters = analyze({ fields: [{ name: 'A' }], tables: [], objects: [] }, {});
+  const stat = noMasters.ruleStats.find((st) => st.id === 'R023');
+  assert.equal(stat.skipped, true);
+});
+
+test('R024: расширение отсутствует на сервере', () => {
+  const graph = {
+    meta: { extensionsInstalled: ['vega-lib'] },
+    fields: [], tables: [], objects: [
+      { id: 'o1', name: 'Сторонний объект', type: 'UniKPI', expressions: [] },
+      { id: 'o2', name: 'Штатный', type: 'barchart', expressions: [] },
+      { id: 'o3', name: 'Установленное', type: 'vega-lib', expressions: [] },
+    ],
+  };
+  const result = analyze(graph, { rules: { disabled: [] } });
+  const r024 = result.findings.filter((f) => f.ruleId === 'R024');
+  assert.equal(r024.length, 1);
+  assert.match(r024[0].message, /UniKPI/);
+  // Без перечня расширений — пропуск.
+  const noList = analyze({ fields: [], tables: [], objects: [{ id: 'o', name: 'x', type: 'UniKPI', expressions: [] }] }, {});
+  assert.equal(noList.ruleStats.find((st) => st.id === 'R024').skipped, true);
 });
 
 test('Resources: найден лист без объектов', () => {
@@ -212,7 +268,7 @@ test('сводка считает находки по категориям', () 
 });
 
 test('правила можно отключать', () => {
-  const only = analyze(fixture, { disabledRules: ['R001', 'R002', 'R003', 'R004', 'R005', 'R006', 'R007', 'R008', 'R009', 'R010', 'R011', 'R012', 'R013', 'R014', 'R015', 'R016', 'R017', 'R018', 'R019', 'R020', 'R021'] });
+  const only = analyze(fixture, { disabledRules: ['R001', 'R002', 'R003', 'R004', 'R005', 'R006', 'R007', 'R008', 'R009', 'R010', 'R011', 'R012', 'R013', 'R014', 'R015', 'R016', 'R017', 'R018', 'R019', 'R020', 'R021', 'R022', 'R023', 'R024'] });
   assert.equal(only.findings.some((f) => f.category === 'Resources'), false);
   const stat = only.ruleStats.find((s) => s.id === 'R001');
   assert.equal(stat.skipped, true);
