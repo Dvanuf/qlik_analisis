@@ -25,6 +25,32 @@ export const DEFAULT_THRESHOLDS = {
 export const DEFAULT_EXCLUDED_TABLES = ['Fields', 'Info', 'tmp_*', 'sys_*'];
 
 /**
+ * Правила, выключенные по умолчанию (ревизия каталога 0.19.0, сверка с
+ * каталогом правил v2): шумные («объект без описания» на каждом объекте),
+ * дублирующие или работающие только по предположениям. Из каталога не
+ * удаляются — включаются галочкой во вкладке «Правила». Явный список
+ * отключённых в rules.json заменяет дефолт целиком.
+ */
+export const DEFAULT_DISABLED_RULES = [
+  'Q006', // объект без описания — шум на больших приложениях
+  'Q007', // переменная без описания — шум
+  'R009', // поле-константа — часто легитимный флаг
+  'R011', // таблицы-дубликаты — ненадёжная эвристика
+  'R012', // неоптимальное хранение чисел — оценки без гарантий
+  'R013', // нет превью приложения — косметика
+  'R016', // тяжёлый объект без условия вычисления — замер даёт X-метрика позже
+  'R018', // объект без измерений — контейнеры и тексты
+  'R020', // поле-уникальное вне ключа — часто законный справочник
+  'R021', // CONCATENATE потерял ключ — редко оправдан
+  'S002', // загрузка без WHERE — норма для фактов
+  'S004', // CONCATENATE без NoConcatenate — авто-конкатенация часто задумана
+  'S006', // JOIN по неключевому полю — часто рабочий приём
+  'S011', // скрипт без комментариев — стилистика
+  'S012', // загрузка файла без формата — косметика
+  'S017', // скрипт засыпает — редко встречается
+];
+
+/**
  * Приводит настройки к единому виду.
  * @param {object} config — конфигурация анализа
  * @returns {{
@@ -36,7 +62,10 @@ export const DEFAULT_EXCLUDED_TABLES = ['Fields', 'Info', 'tmp_*', 'sys_*'];
 export function normalizeRuleSettings(config = {}) {
   const rules = config.rules ?? config;
   const enabled = rules.enabled ?? rules.enabledRules ?? config.enabledRules ?? null;
-  const disabled = rules.disabled ?? rules.disabledRules ?? config.disabledRules ?? null;
+  // Явный список отключённых заменяет дефолт целиком; без него действуют
+  // правила, выключенные по умолчанию (DEFAULT_DISABLED_RULES).
+  const userDisabled = rules.disabled ?? rules.disabledRules ?? config.disabledRules ?? null;
+  const disabled = userDisabled ? userDisabled : [...DEFAULT_DISABLED_RULES];
 
   const severity = {};
   for (const [id, value] of Object.entries(rules.severity ?? config.severity ?? {})) {
@@ -61,7 +90,7 @@ export function normalizeRuleSettings(config = {}) {
 
   return {
     enabled: enabled ? new Set(enabled) : null,
-    disabled: disabled ? new Set(disabled) : null,
+    disabled: new Set(disabled.map((id) => String(id).toUpperCase())),
     severity,
     thresholds,
     exclusions,

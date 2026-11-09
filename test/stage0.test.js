@@ -38,7 +38,7 @@ test('S010: удвоенная кавычка внутри строки не с�
   const { problems } = checkScriptStructure(script);
   assert.equal(problems.length, 0, `неожиданные проблемы: ${JSON.stringify(problems)}`);
 
-  const result = analyze(graphWithScript(script), {});
+  const result = analyze(graphWithScript(script), { rules: { disabled: [] } });
   assert.equal(result.findings.filter((f) => f.ruleId === 'S010').length, 0);
 });
 
@@ -53,7 +53,7 @@ test('S010: обрезанный скрипт понижает важность 
   const info = analyzeScriptIntegrity(script);
   assert.equal(info.truncated, true, 'скрипт без закрывающей кавычки считается обрезанным');
 
-  const result = analyze(graphWithScript(script), {});
+  const result = analyze(graphWithScript(script), { rules: { disabled: [] } });
   const s010 = result.findings.filter((f) => f.ruleId === 'S010');
   assert.equal(s010.length, 1);
   assert.equal(s010[0].severity, 'warning', 'важность понижается, если скрипт прочитан не полностью');
@@ -62,7 +62,7 @@ test('S010: обрезанный скрипт понижает важность 
 
 test('S010: целый скрипт даёт ошибку, а не предупреждение', () => {
   const script = "LOAD * FROM data.csv;\nSET a = 'строка';";
-  const result = analyze(graphWithScript(script), {});
+  const result = analyze(graphWithScript(script), { rules: { disabled: [] } });
   const s010 = result.findings.filter((f) => f.ruleId === 'S010');
   assert.equal(s010.length, 0);
 });
@@ -74,7 +74,7 @@ test('R007: AutoNumber формируется со строковым литер
     }],
     tables: [{ name: 'QvdTableHeader', rows: 100, fields: ['ID'], keyFields: ['ID'] }],
   });
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   const r007 = result.findings.filter((f) => f.ruleId === 'R007');
   assert.equal(r007.length, 1);
   assert.equal(r007[0].fix.kind, 'autoNumber');
@@ -107,7 +107,7 @@ test('дедупликация применяется в анализаторе,
       ],
     }],
   });
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   assert.ok(result.summary.findings.merged > 0, 'часть находок свёрнута');
   assert.equal(result.summary.findings.total, result.findings.length);
   const q001 = result.findings.filter((f) => f.ruleId === 'Q001');
@@ -151,7 +151,7 @@ test('подавление: глобальное исключение по пр�
 test('S002: служебные таблицы исключены из проверки «без WHERE»', () => {
   const script = "LOAD * FROM Fields;\nLOAD * FROM Sales;";
   const graph = graphWithScript(script);
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   const s002 = result.findings.filter((f) => f.ruleId === 'S002');
   assert.equal(s002.length, 1, 'только Sales, Fields исключён по умолчанию');
   assert.equal(s002[0].target.name, 'Sales');

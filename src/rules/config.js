@@ -10,7 +10,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { DEFAULT_THRESHOLDS, DEFAULT_EXCLUDED_TABLES } from './settings.js';
+import { DEFAULT_THRESHOLDS, DEFAULT_EXCLUDED_TABLES, DEFAULT_DISABLED_RULES } from './settings.js';
 import { DEFAULT_SCORING, normalizeScoring } from '../score/index.js';
 
 /** Имя файла конфигурации в каталоге данных приложения. */
@@ -20,7 +20,9 @@ export const RULES_CONFIG_FILE = 'rules.json';
 export function defaultRulesConfig() {
   return {
     rules: {
-      disabled: [],
+      // Шумные правила отключены по умолчанию; явный список пользователя
+      // (включая пустой) заменяет дефолт целиком.
+      disabled: [...DEFAULT_DISABLED_RULES],
       severity: {},
       thresholds: { ...DEFAULT_THRESHOLDS },
       exclusions: { S002: { tables: [...DEFAULT_EXCLUDED_TABLES] } },

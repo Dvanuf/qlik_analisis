@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.19.0 | [v0.19.0 — ревизия каталога правил v2: 16 шумных выключены по умолчанию, новые P013 (смесь алфавитов) и S020 (секреты), NFC, cp1251](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.19.0) |
 | 0.18.9 | [v0.18.9 — качество находок Q002 на кириллице: голое слово не «поле», границы строк Unicode, операторы скрипта не выражения](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.9) |
 | 0.18.8 | [v0.18.8 — колонка находок в «Скрипте загрузки» удвоена](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.8) |
 | 0.18.7 | [v0.18.7 — ложная находка «Поле «_» не найдено» на кириллице](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.7) |

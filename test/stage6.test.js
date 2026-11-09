@@ -279,7 +279,7 @@ test('R020: поле с уникальным значением на кажду�
       { name: 'Note', table: 'T', key: false, rows: 1000, distinct: 995 },
     ],
   };
-  const result = analyze(graph, { platform: 'auto' });
+  const result = analyze(graph, { platform: 'auto', rules: { disabled: [] } });
   const found = result.findings.filter((f) => f.ruleId === 'R020');
   assert.equal(found.length, 1);
   assert.match(found[0].message, /Note/);
@@ -291,7 +291,7 @@ test('R021: CONCATENATE без ключевых полей замечается'
     script, meta: {}, sheets: [], objects: [], variables: [], bookmarks: [], fields: [],
     tables: [{ name: 'B', rows: 10, fields: ['X'], keyFields: [] }],
   };
-  const result = analyze(graph, { platform: 'auto' });
+  const result = analyze(graph, { platform: 'auto', rules: { disabled: [] } });
   const found = result.findings.filter((f) => f.ruleId === 'R021');
   assert.ok(found.length >= 1, 'найдена таблица без ключа после CONCATENATE');
 });

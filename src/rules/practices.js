@@ -2,7 +2,7 @@
  * Правила категории Practices — качество проектирования: дубли выражений,
  * вычисляемые измерения, синтетические ключи, обращения к ключевым полям в выражениях.
  */
-import { canonicalize, extractReferences, canonicalFieldName } from '../normalize.js';
+import { canonicalize, extractReferences, canonicalFieldName, mixedScriptSegments, charCodes } from '../normalize.js';
 import { allExpressions } from '../graph.js';
 
 const CATEGORY = 'Practices';
@@ -374,6 +374,42 @@ export const practiceRules = [
           message: `Имя «${name}» не соответствует соглашению (${prefixes.join(', ')})`,
           recommendation: 'Переименовать объект согласно соглашению команды.',
         });
+      }
+      return findings;
+    },
+  },
+
+  {
+    id: 'P013',
+    category: CATEGORY,
+    severity: 'warning',
+    title: 'Смесь алфавитов в имени',
+    humanTitle: 'Латиница и кириллица в одном слове имени',
+    whatHappened: 'Внутри одного слова имени есть буквы обоих алфавитов — почти всегда ошибка ввода; такое поле «не найдено» при обращении по правильно набранному имени.',
+    description: 'В имени поля, таблицы или переменной внутри одного слова смешаны латиница и кириллица (например, латинская C в слове «Cумма»). Частая причина «поле не найдено» в кириллических приложениях.',
+    recommendation: 'Заменить символы чужого алфавита на один во всех местах использования.',
+    run(ctx) {
+      const findings = [];
+      // Имена из трёх источников: поля и таблицы модели, переменные.
+      const names = [];
+      for (const f of ctx.graph.fields ?? []) names.push({ name: f.name, kind: 'поле' });
+      for (const t of ctx.graph.tables ?? []) names.push({ name: t.name, kind: 'таблица' });
+      for (const v of ctx.graph.variables ?? []) names.push({ name: v.name, kind: 'переменная' });
+      for (const { name, kind } of names) {
+        const mixed = mixedScriptSegments(name);
+        if (!mixed.length) continue;
+        for (const { segment, chars } of mixed) {
+          findings.push({
+            ruleId: 'P013',
+            category: CATEGORY,
+            severity: 'warning',
+            title: 'Смесь алфавитов в имени',
+            target: { kind: 'field', name: String(name), id: String(name) },
+            message: `В ${kind === 'переменная' ? 'переменной' : kind === 'таблица' ? 'таблице' : 'поле'} «${name}» слово «${segment}» смешивает алфавиты: ${charCodes(chars.join(''))}`,
+            detail: `Символы: ${chars.join(' ')} — визуально совпадают с буквами другого алфавита (C/С, A/А, E/Е, O/О, P/Р, X/Х).`,
+            recommendation: 'Набрать слово одним алфавитом и исправить все ссылки на имя.',
+          });
+        }
       }
       return findings;
     },

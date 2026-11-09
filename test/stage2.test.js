@@ -43,7 +43,7 @@ function graphWithFixes() {
 }
 
 test('предлагаемые правки: AutoNumber показывается как «было / стало»', () => {
-  const result = analyze(graphWithFixes(), {});
+  const result = analyze(graphWithFixes(), { rules: { disabled: [] } });
   const fixes = buildFixes(result.findings, SCRIPT);
   const auto = fixes.find((f) => f.kind === 'autoNumber');
   assert.ok(auto, 'правка AutoNumber найдена');
@@ -53,7 +53,7 @@ test('предлагаемые правки: AutoNumber показывается
 });
 
 test('предлагаемые правки: DROP FIELD добавляется в конец скрипта', () => {
-  const result = analyze(graphWithFixes(), {});
+  const result = analyze(graphWithFixes(), { rules: { disabled: [] } });
   const fixes = buildFixes(result.findings, SCRIPT);
   const drop = fixes.find((f) => f.kind === 'dropField');
   assert.ok(drop, 'правка DROP FIELD найдена');
@@ -61,7 +61,7 @@ test('предлагаемые правки: DROP FIELD добавляется �
 });
 
 test('применение правок к копии скрипта не меняет исходный текст', () => {
-  const result = analyze(graphWithFixes(), {});
+  const result = analyze(graphWithFixes(), { rules: { disabled: [] } });
   const modified = applyPatchToScript(SCRIPT, result.patch);
   assert.ok(modified.startsWith(SCRIPT.trimEnd()), 'исходный скрипт сохранён в начале');
   assert.match(modified, /DROP FIELD Comment;/);
@@ -84,10 +84,12 @@ test('файл конфигурации правил: запись и чтени
 test('файл конфигурации правил: битый файл не ломает запуск', () => {
   const dir = mkdtempSync(join(tmpdir(), 'qa-rules-bad-'));
   const path = join(dir, 'rules.json');
-  // Заведомо неверный JSON.
+  // Заведомо неверный JSON — берётся дефолт, в том числе дефолтные
+  // отключения шумных правил (DEFAULT_DISABLED_RULES).
   writeFileSync(path, '{ это не json', 'utf8');
   const read = readRulesConfig(path);
-  assert.deepEqual(read.rules.disabled, []);
+  assert.ok(read.rules.disabled.length > 0, 'дефолтные отключения применены');
+  assert.ok(read.rules.disabled.includes('S002'));
 });
 
 test('конфигурация правил: неизвестные правила и значения отбрасываются', () => {
@@ -125,7 +127,7 @@ test('настройки правил применяются к анализу: 
 });
 
 test('скор приложения попадает в сводку', () => {
-  const result = analyze(graphWithFixes(), {});
+  const result = analyze(graphWithFixes(), { rules: { disabled: [] } });
   assert.equal(typeof result.summary.score, 'number');
   assert.ok(result.summary.score >= 0 && result.summary.score <= 100);
   assert.ok(result.summary.scoreDetails.formula.includes('100'));

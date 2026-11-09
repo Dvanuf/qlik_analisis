@@ -158,7 +158,7 @@ test('анализ отдаёт сводку по доменам и паттер
     bookmarks: [],
     meta: { platform: 'qlik-sense', capabilities: [] },
   };
-  const res = analyze(graph, {});
+  const res = analyze(graph, { rules: { disabled: [] } });
   const byDomain = res.summary.findings.byDomain;
   assert.ok(byDomain.model, 'нет домена «Модель данных»');
   assert.ok(byDomain.model.total > 0, 'в домене должны быть правила');

@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react';
 import type { DomainId, RuleInfo, RulesConfig } from '../types.js';
 import { ALL_RULES } from '../../../src/rules/index.js';
+import { DEFAULT_DISABLED_RULES } from '../../../src/rules/settings.js';
 
 /** Подписи доменов — как в остальном интерфейсе. */
 const DOMAIN_LABELS: Record<DomainId, string> = {
@@ -114,12 +115,14 @@ export default function RulesTab(props: Props) {
 
   const excludedTables = (id: string) => (rulesConfig?.rules.exclusions?.[id]?.tables ?? []).join(', ');
 
-  /** Пресет: Строгий — всё включено; Стандартный — дефолт; Только ошибки —
-   *  предупреждения и замечания выключены (по умолчанию важности правил). */
+  /** Пресет: Строгий — всё включено; Стандартный — дефолт (шумные выключены);
+   *  Только ошибки — предупреждения и замечания выключены. */
   const applyPreset = (name: 'strict' | 'standard' | 'errors-only') => {
     if (!rulesConfig) return;
     let disabled: string[] = [];
-    if (name === 'errors-only') {
+    if (name === 'standard') {
+      disabled = [...DEFAULT_DISABLED_RULES];
+    } else if (name === 'errors-only') {
       disabled = ALL_RULES.filter((r) => r.severity !== 'error').map((r) => r.id);
     }
     onSave({ ...rulesConfig, rules: { ...rulesConfig.rules, disabled } });

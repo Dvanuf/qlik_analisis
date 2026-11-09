@@ -105,7 +105,9 @@ export function tokenize(src) {
       continue;
     }
 
-    // Переменная: $var, ${var}, $(var)
+    // Переменная: $var, ${var}, $(var). Внутри $( ) может быть выражение
+    // с вложенной подстановкой — имя вычисляется в рантайме, статически
+    // его не определить; такие помечаются dynamic — проверка даёт «не проверено».
     if (c === '$') {
       let j = i + 1;
       let value = '';
@@ -124,7 +126,8 @@ export function tokenize(src) {
         while (j < s.length && /[A-Za-z0-9_]/.test(s[j])) { value += s[j]; j += 1; }
         closed = value.length > 0;
       }
-      tokens.push({ type: 'var', value, raw: s.slice(i, j), closed });
+      const dynamic = !closed || /[$(]/.test(value);
+      tokens.push({ type: 'var', value, raw: s.slice(i, j), closed, dynamic });
       i = j;
       continue;
     }
@@ -192,7 +195,9 @@ export function extractReferences(expr) {
     if (tk.type === 'field') {
       if (tk.value.trim()) fields.add(tk.value.trim());
     } else if (tk.type === 'var') {
-      if (tk.value.trim()) variables.add(tk.value.trim());
+      // Динамические имена $(v$(x)) вычисляются в рантайме — «не проверено»:
+      // в список ссылок не попадают и нарушением не считаются.
+      if (tk.value.trim() && !tk.dynamic) variables.add(tk.value.trim());
     } else if (tk.type === 'func') {
       // Функции Qlik — ASCII: голая кириллица со скобкой — не функция.
       if (/^\w+$/.test(tk.value)) functions.add(tk.value);
@@ -213,9 +218,38 @@ export function extractReferences(expr) {
   };
 }
 
-/** Нормализует имя поля: `Unit Cost` и `[Unit Cost]` — одно и то же поле. */
+/** Нормализует имя поля: `Unit Cost` и `[Unit Cost]` — одно и то же поле.
+ *  Перед сравнением имена приводятся к NFC: «й»/«ё» бывают в двух
+ *  юникод-формах (NFC и NFD), и без нормализации визуально одинаковые
+ *  имена не совпадут. */
 export function canonicalFieldName(name) {
-  return String(name).replace(/^\[|\]$/g, '').trim().toLowerCase();
+  return String(name ?? '').normalize('NFC').replace(/^\[|\]$/g, '').trim().toLowerCase();
+}
+
+/** Коды символов для сообщения о смеси алфавитов: «C» → U+0043. */
+export function charCodes(text) {
+  return [...String(text ?? '')].map((ch) => `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`).join(', ');
+}
+
+/**
+ * Сегменты имени, внутри которых смешаны латиница и кириллица.
+ * «Cумма» с латинской C → [{ segment: 'Cумма', chars: ['C'] }] —
+ * в chars попадают символы «чужого» алфавита (обычно ошибка ввода).
+ * Разделители (_ . - пробел, цифры) разбивают имя на слова:
+ * «owner_id_2_линия» — чистое имя.
+ */
+export function mixedScriptSegments(name) {
+  const s = String(name ?? '').normalize('NFC');
+  const out = [];
+  for (const m of s.matchAll(/\p{L}+/gu)) {
+    const segment = m[0];
+    const latin = [...segment].filter((ch) => /\p{Script=Latin}/u.test(ch));
+    const cyrillic = [...segment].filter((ch) => /\p{Script=Cyrillic}/u.test(ch));
+    if (latin.length && cyrillic.length) {
+      out.push({ segment, chars: latin.length <= cyrillic.length ? latin : cyrillic });
+    }
+  }
+  return out;
 }
 
 /**

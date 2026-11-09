@@ -13,7 +13,9 @@ import { renderHtml } from '../src/report/html.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(readFileSync(resolve(here, 'fixtures/app-graph.json'), 'utf8'));
 
-const result = analyze(fixture, {});
+// Правила включены явно: тесты проверяют логику каждого правила,
+// а не состав «включено по умолчанию» (часть правил выключена).
+const result = analyze(fixture, { rules: { disabled: [] } });
 const ids = new Set(result.findings.map((f) => f.ruleId));
 const byId = (id) => result.findings.filter((f) => f.ruleId === id);
 
@@ -81,6 +83,34 @@ test('Quality: куски скрипта Drop/NullAsValue/ApplyMap не дают
   }, {});
   const q002 = result.findings.filter((f) => f.ruleId === 'Q002');
   assert.deepEqual(q002, [], `ложные находки: ${q002.map((f) => f.message).join('; ')}`);
+});
+
+test('P013: смесь латиницы и кириллицы в имени поля — находка с кодом символа', () => {
+  const result = analyze({
+    fields: [{ name: 'Cумма продаж' }, { name: 'Обычное_поле' }], // C — латинская
+    tables: [],
+    objects: [],
+  }, {});
+  const p013 = result.findings.filter((f) => f.ruleId === 'P013');
+  assert.equal(p013.length, 1);
+  assert.match(p013[0].message, /U\+0043/);
+  assert.match(p013[0].message, /Cумма/);
+});
+
+test('настройки: шумные правила выключены по умолчанию и включаются явно', () => {
+  const graph = {
+    fields: [{ name: 'A', table: 'T', rows: 10 }],
+    tables: [{ name: 'T', rows: 10, fields: ['A'] }],
+    objects: [],
+    script: 'LOAD * FROM t.csv;',
+  };
+  // Дефолт: S002 («без WHERE») выключен.
+  const byDefault = analyze(graph, {});
+  assert.ok(!byDefault.findings.some((f) => f.ruleId === 'S002'), 'S002 не сработал по умолчанию');
+  assert.ok(byDefault.ruleStats.find((s) => s.id === 'S002').skipped, 'S002 помечен пропуском');
+  // Явный пустой список — все правила включены.
+  const allOn = analyze(graph, { rules: { disabled: [] } });
+  assert.ok(allOn.findings.some((f) => f.ruleId === 'S002'), 'S002 работает при disabled: []');
 });
 
 test('Quality: найдена ссылка на неопределённую переменную', () => {
@@ -310,12 +340,12 @@ test('под Qlik Sense правила фронт-енда выполняютс�
 
 test('платформа по умолчанию берётся из графа, а без неё фильтр не применяется', () => {
   // Офлайн-граф без meta.platform — платформа не определена, правила не отфильтровываются.
-  const offline = analyze(fixture, {});
+  const offline = analyze(fixture, { rules: { disabled: [] } });
   assert.equal(offline.summary.platform, PLATFORM_ANY);
   assert.ok(offline.findings.some((f) => f.ruleId === 'Q001'));
 
   // Граф с платформой в meta — она используется.
-  const withPlatform = analyze({ ...fixture, meta: { ...fixture.meta, platform: PLATFORM_VIEW } }, {});
+  const withPlatform = analyze({ ...fixture, meta: { ...fixture.meta, platform: PLATFORM_VIEW } }, { rules: { disabled: [] } });
   assert.equal(withPlatform.summary.platform, PLATFORM_VIEW);
   assert.equal(withPlatform.findings.some((f) => f.ruleId === 'Q001'), false);
 });

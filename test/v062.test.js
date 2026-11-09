@@ -61,7 +61,7 @@ export function graphWithStaging() {
 }
 
 test('таблица — источник другой таблицы не считается неиспользуемой', () => {
-  const result = analyze(graphWithStaging(), {});
+  const result = analyze(graphWithStaging(), { rules: { disabled: [] } });
   const r003 = result.findings.filter((f) => f.ruleId === 'R003');
   assert.deepEqual(r003.map((f) => f.target.name), [],
     'Staging используется в RESIDENT — её нельзя предлагать удалить');
@@ -75,7 +75,7 @@ test('таблица без использования — по-прежнему
     .replace('RESIDENT Staging;', 'DROP TABLE Staging;')
     .replace('LET vTotal = Sum([Amount]);', '');
   graph.variables = [];
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   const r003 = result.findings.filter((f) => f.ruleId === 'R003');
   assert.ok(r003.some((f) => f.target.name === 'Staging'),
     'таблица без ссылок должна попадать в R003');
@@ -86,7 +86,7 @@ test('поле, используемое в выражении скрипта, �
   // Поле Amount используется только в скрипте — во фронт-энде его нет.
   graph.script = graph.script.replace('RESIDENT Staging;', 'LET vSum = Sum([Amount]);');
   graph.variables = [];
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   const r001 = result.findings.filter((f) => f.ruleId === 'R001');
   assert.equal(r001.some((f) => f.target.name === 'Amount'), false,
     'Amount участвует в выражении скрипта — удалять нельзя');
@@ -104,7 +104,7 @@ test('анализ использования скрипта находит ис
 
 test('находка получает строки скрипта', () => {
   const graph = graphWithStaging();
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   const scriptIndex = buildScriptIndex(parseScript(graph.script));
 
   const variable = result.findings.find((f) => f.ruleId === 'R004');
@@ -116,7 +116,7 @@ test('находка получает строки скрипта', () => {
 
 test('строки находки перечисляются через запятую в интерфейсе', () => {
   const graph = graphWithStaging();
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   for (const f of result.findings) {
     if (f.lines?.length) {
       const text = f.lines.join(', ');
@@ -132,7 +132,7 @@ test('однотипные находки сворачиваются в одну
     { id: 'o2', name: 'ПростоF', type: 'chart', sheetId: 's1', description: '', expressions: [] },
     { id: 'o3', name: 'fact_Правильное', type: 'chart', sheetId: 's1', description: '', expressions: [] },
   ];
-  const result = analyze(graph, {});
+  const result = analyze(graph, { rules: { disabled: [] } });
   const p010 = result.findings.filter((f) => f.ruleId === 'P010');
   assert.equal(p010.length, 1, 'все находки P010 — одна запись');
   assert.deepEqual(p010[0].objects, ['ПростоЕ', 'ПростоF']);
@@ -152,7 +152,7 @@ test('группировка не трогает находки других п�
 });
 
 test('у каждой находки есть область', () => {
-  const result = analyze(graphWithStaging(), {});
+  const result = analyze(graphWithStaging(), { rules: { disabled: [] } });
   for (const f of result.findings) {
     assert.ok(SCOPES.includes(f.scope), `у находки ${f.ruleId} область ${f.scope}`);
   }

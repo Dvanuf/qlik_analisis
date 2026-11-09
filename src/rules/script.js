@@ -14,6 +14,7 @@ const SEVERITY = {
   S005: 'warning', S006: 'warning', S007: 'info', S008: 'info',
   S009: 'warning', S010: 'error', S011: 'info', S012: 'info', S013: 'info',
   S014: 'error', S015: 'warning', S016: 'warning', S017: 'info', S018: 'info', S019: 'error',
+  S020: 'error',
 };
 
 /**
@@ -600,4 +601,61 @@ export const scriptRules = [
       return out;
     },
   },
+
+  {
+    id: 'S020',
+    category: CATEGORY,
+    severity: SEVERITY.S020,
+    title: 'Секрет в тексте скрипта',
+    humanTitle: 'Пароль или токен открытым текстом',
+    whatHappened: 'В скрипте задан пароль, токен или ключ API открытым текстом — он попадает в выгрузки, отчёты и историю.',
+    description: 'В строках подключения и LET/SET встречается имя вида password/pwd/token/apikey/secret со значением-литералом. Секреты должны жить в Data Connection или переменных окружения CI.',
+    recommendation: 'Вынести секрет в Data Connection или окружение CI и сменить скомпрометированное значение.',
+    run(ctx) {
+      const out = [];
+      const lines = stripCommentsText(String(ctx.graph?.script ?? '')).split(/\r?\n/);
+      // Имя секрета: допускается префикс переменной v/v_ (vPassword, v_token).
+      const SECRET_NAME = /(?:^|[^\w])(?:v_?)?(?:password|passwd|pwd|userpassword|token|apikey|api[_-]?key|secret|secretofkey)(?:[^\w]|$)/i;
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (!SECRET_NAME.test(line)) continue;
+        // Значение: после «=» или «:» — строка в кавычках или длинный литерал без $( )-подстановки.
+        const m = /(?:=|:)\s*('?)([^'";]{4,})\1/.exec(line);
+        if (!m) continue;
+        const value = m[2].trim();
+        // Подстановки $(...), пустые и технические значения — не секрет.
+        if (!value || value.includes('$(')) continue;
+        if (/^(true|false|null|none|нет|test|демо)$/i.test(value)) continue;
+        out.push(finding('S020', 'Секрет в тексте скрипта',
+          { kind: 'app', name: 'скрипт загрузки', id: 'script' },
+          `Строка ${i + 1}: похоже, задан секрет открытым текстом (значение скрыто)`,
+          line.replace(m[2], '***').trim().slice(0, 160),
+          'Вынести секрет в Data Connection или окружение CI; сменить скомпрометированное значение.',
+          { line: i + 1 }));
+      }
+      return out;
+    },
+  },
 ];
+
+/** Убирает комментарии «//» и блочные — секреты в комментариях не флагаются. */
+function stripCommentsText(src) {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i] !== '\n') i += 1;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
+      i += 2;
+      continue;
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+}

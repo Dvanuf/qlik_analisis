@@ -166,7 +166,7 @@ test('score v2: домены, топ и прогноз доходят до summa
     ],
     variables: [], sheets: [], bookmarks: [], connections: [], masterObjects: [], stories: [],
   };
-  const { summary } = analyze(graph, {});
+  const { summary } = analyze(graph, { rules: { disabled: [] } });
   // Регрессия 0.15.2: домены и топ жили только внутри scoreDetails, вкладка
   // «Оценка» получала пустоту.
   assert.ok(Object.keys(summary.domains ?? {}).length > 0, 'summary.domains пуст');

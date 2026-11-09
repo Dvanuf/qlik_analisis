@@ -54,7 +54,7 @@ const graph = {
   bookmarks: [],
   extensions: [],
 };
-const result = analyze(graph, {});
+const result = analyze(graph, { rules: { disabled: [] } });
 const ids = new Set(result.findings.map((f) => f.ruleId));
 const byId = (id) => result.findings.filter((f) => f.ruleId === id);
 
@@ -109,7 +109,7 @@ test('S007: в скрипте нет DROP FIELD', () => {
 });
 
 test('S008: неиспользуемая переменная скрипта (когда есть данные фронт-енда)', () => {
-  const withFrontEnd = analyze({ ...graph, objects: [{ id: 'o1', name: 'o1', type: 'chart', expressions: [] }] }, {});
+  const withFrontEnd = analyze({ ...graph, objects: [{ id: 'o1', name: 'o1', type: 'chart', expressions: [] }] }, { rules: { disabled: [] } });
   const found = withFrontEnd.findings.filter((f) => f.ruleId === 'S008');
   assert.ok(found.length > 0);
   assert.ok(found.some((f) => f.target.name === 'vUnused'));
@@ -137,12 +137,12 @@ test('S012: загрузка файла без указания формата',
 });
 
 test('S010: структурная ошибка скрипта ловится', () => {
-  const broken = analyze({ ...graph, script: 'LOAD a FROM "b.csv;' }, {});
+  const broken = analyze({ ...graph, script: 'LOAD a FROM "b.csv;' }, { rules: { disabled: [] } });
   assert.ok(broken.findings.some((f) => f.ruleId === 'S010'));
 });
 
 test('без скрипта скриптовые правила пропускаются, а не падают', () => {
-  const noScript = analyze({ ...graph, script: '' }, {});
+  const noScript = analyze({ ...graph, script: '' }, { rules: { disabled: [] } });
   const scriptFindings = noScript.findings.filter((f) => f.category === 'Script');
   assert.equal(scriptFindings.length, 0);
   const stat = noScript.ruleStats.find((s) => s.id === 'S001');

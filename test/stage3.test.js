@@ -42,7 +42,7 @@ test('редактор правил: правило можно отключит�
 });
 
 test('редактор правил: важность правила переопределяется', () => {
-  const result = analyze(graph(), { rules: { severity: { R009: 'error' } } });
+  const result = analyze(graph(), { rules: { disabled: [], severity: { R009: 'error' } } });
   const r009 = result.findings.filter((f) => f.ruleId === 'R009');
   assert.equal(r009.length, 1);
   assert.equal(r009[0].severity, 'error');
@@ -50,11 +50,11 @@ test('редактор правил: важность правила перео�
 
 test('редактор правил: порог R009 (поле-константа) настраивается', () => {
   // По умолчанию поле-константа — одно уникальное значение.
-  const byDefault = analyze(graph(), {});
+  const byDefault = analyze(graph(), { rules: { disabled: [] } });
   assert.equal(byDefault.findings.filter((f) => f.ruleId === 'R009').length, 1);
 
   // Порог 0 — константой не считается ни одно поле.
-  const strict = analyze(graph(), { rules: { thresholds: { R009: { maxDistinct: 0 } } } });
+  const strict = analyze(graph(), { rules: { disabled: [], thresholds: { R009: { maxDistinct: 0 } } } });
   assert.equal(strict.findings.filter((f) => f.ruleId === 'R009').length, 0);
 
   // Порог 2 — константой считается и поле с двумя уникальными значениями.
@@ -64,17 +64,17 @@ test('редактор правил: порог R009 (поле-констант�
       { name: 'Region', table: 'Clients', key: false, rows: 100, distinct: 2, nonNulls: 100 },
     ],
   };
-  const relaxed = analyze(twoValues, { rules: { thresholds: { R009: { maxDistinct: 2 } } } });
+  const relaxed = analyze(twoValues, { rules: { disabled: [], thresholds: { R009: { maxDistinct: 2 } } } });
   assert.equal(relaxed.findings.filter((f) => f.ruleId === 'R009').length, 1);
 });
 
 test('редактор правил: порог R012 (плотное числовое поле) настраивается', () => {
   // По умолчанию нужно 1000 строк — поля на 100 строк не попадают.
-  const byDefault = analyze(graph(), {});
+  const byDefault = analyze(graph(), { rules: { disabled: [] } });
   assert.equal(byDefault.findings.filter((f) => f.ruleId === 'R012').length, 0);
 
   // С порогом 50 строк — попадает.
-  const relaxed = analyze(graph(), { rules: { thresholds: { R012: { minRows: 50 } } } });
+  const relaxed = analyze(graph(), { rules: { disabled: [], thresholds: { R012: { minRows: 50 } } } });
   assert.equal(relaxed.findings.filter((f) => f.ruleId === 'R012').length, 1);
 });
 
@@ -89,7 +89,7 @@ test('снижение шума: S002 не срабатывает на служ�
     ...graph(),
     script: "LOAD * FROM Fields;\nLOAD * FROM Sales;\n",
   };
-  const result = analyze(service, {});
+  const result = analyze(service, { rules: { disabled: [] } });
   const s002 = result.findings.filter((f) => f.ruleId === 'S002');
   assert.equal(s002.length, 1);
   assert.equal(s002[0].target.name, 'Sales');
@@ -100,7 +100,7 @@ test('снижение шума: список исключений S002 наст
     ...graph(),
     script: "LOAD * FROM Fields;\nLOAD * FROM Sales;\n",
   };
-  const result = analyze(service, { rules: { exclusions: { S002: { tables: ['Sales'] } } } });
+  const result = analyze(service, { rules: { disabled: [], exclusions: { S002: { tables: ['Sales'] } } } });
   const s002 = result.findings.filter((f) => f.ruleId === 'S002');
   assert.equal(s002.length, 1);
   assert.equal(s002[0].target.name, 'Fields');

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tokenize, extractReferences, canonicalize, checkStructure, canonicalFieldName,
-  isScriptFragment,
+  isScriptFragment, mixedScriptSegments, charCodes,
 } from '../src/normalize.js';
 import { lineMentions } from '../src/findings/locations.js';
 
@@ -133,4 +133,40 @@ test('lineMentions: границы слова Unicode — без совпаде�
   assert.ok(!lineMentions('ДатаРождения as x', 'Дата'), 'Дата внутри ДатаРождения');
   assert.ok(lineMentions('[Дата] загрузка', 'Дата'), 'отдельное слово находится');
   assert.ok(!lineMentions('OrderID as x', 'ID'), 'латинские границы сохранены');
+});
+
+test('canonicalFieldName приводит имена к NFC', () => {
+  // «ё» в NFC (U+0451) и NFD (е + U+0308) — разные байтовые
+  // последовательности; после нормализации сравнение совпадает.
+  const nfc = 'Вёрстка';
+  assert.equal(canonicalFieldName(nfc.normalize('NFD')), canonicalFieldName(nfc));
+});
+
+test('mixedScriptSegments находит смесь алфавитов и возвращает чужие символы', () => {
+  // Латинская C в кириллическом слове — типичная ошибка ввода.
+  const mixed = mixedScriptSegments('Cумма продаж'); // C — латинская
+  assert.equal(mixed.length, 1);
+  assert.equal(mixed[0].segment, 'Cумма');
+  assert.deepEqual(mixed[0].chars, ['C']);
+  // Кириллическое имя с подчёркиваниями и цифрами — чистое.
+  assert.deepEqual(mixedScriptSegments('owner_id_2_линия'), []);
+  assert.deepEqual(mixedScriptSegments('[Логин_владельца_2_линия]'), []);
+  // Обратная смесь: кириллическая буква в латинском слове.
+  const latin = mixedScriptSegments('DataСource');
+  assert.equal(latin.length, 1);
+  assert.ok(latin[0].chars.every((ch) => /\p{Script=Cyrillic}/u.test(ch)), 'возвращаются буквы меньшинства');
+});
+
+test('charCodes: коды символов для сообщения', () => {
+  assert.equal(charCodes('C'), 'U+0043');
+  assert.equal(charCodes('С'), 'U+0421');
+});
+
+test('extractReferences: динамические переменные $(v$(x)) не считаются ссылкой', () => {
+  // Имя вычисляется в рантайме — результат проверки «не проверено»,
+  // не «нарушение».
+  assert.deepEqual(extractReferences('$(v$(x))').variables, []);
+  assert.deepEqual(extractReferences('$(=Max(Год))').variables, []);
+  // Обычная переменная находится как прежде.
+  assert.deepEqual(extractReferences('$(vSales)').variables, ['vSales']);
 });

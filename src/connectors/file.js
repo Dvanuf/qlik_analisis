@@ -24,6 +24,31 @@ function looksLikeScript(text) {
 }
 
 /**
+ * Декодирует текст скрипта: BOM-признаки, затем UTF-8, затем cp1251.
+ *
+ * Экспорт из QlikView часто идёт в Windows-1251: чтение его как UTF-8
+ * даёт «кракозябры» — имена полей превращаются в мусор и все правила
+ * по именам дают ложные находки. Если UTF-8-декодирование содержит
+ * замещающие символы (U+FFFD), пробуем cp1251.
+ */
+export function decodeText(buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.subarray(3).toString('utf8');
+  }
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return buffer.subarray(2).toString('utf16le');
+  }
+  const utf8 = buffer.toString('utf8');
+  if (!utf8.includes('\uFFFD')) return utf8;
+  try {
+    const cp1251 = new TextDecoder('windows-1251').decode(buffer);
+    return cp1251;
+  } catch {
+    return utf8;
+  }
+}
+
+/**
  * Ищет текст скрипта внутри zip-контейнера .qvs.
  * @returns {{script: string, entry: string}|null}
  */
@@ -38,7 +63,7 @@ function findScriptInZip(buffer) {
     if (!/\.(xml|txt|qs|qvs|json)$/i.test(name) && !/script/i.test(name)) continue;
     let content = '';
     try {
-      content = entry.getData().toString('utf8');
+      content = decodeText(entry.getData());
     } catch {
       continue;
     }
@@ -136,7 +161,7 @@ export async function extractFromFile(target) {
   }
 
   // Текстовый скрипт (в т.ч. .qvs, если это экспорт скрипта)
-  const text = buffer.toString('utf8');
+  const text = decodeText(buffer);
   if (!looksLikeScript(text)) {
     graph.meta.skipped.push({
       capability: 'script',

@@ -68,6 +68,7 @@ export const SCOPE_BY_RULE = {
   P010: 'dashboard',
   P011: 'measures',
   P012: 'script',
+  P013: 'dashboard',
 
   // --- Script ---
   S001: 'script',
@@ -84,6 +85,7 @@ export const SCOPE_BY_RULE = {
   S012: 'script',
   S013: 'script',
   S014: 'script',
+  S020: 'script',
 };
 
 /**

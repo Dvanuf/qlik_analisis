@@ -482,7 +482,7 @@ test('R016: тяжёлый объект без условия вычислени
     // Простое измерение по полю — дёшево, ругаться не на что.
     { id: 'o3', name: 'Третий', type: 'table', expressions: [{ kind: 'dimension', expr: '[ID]' }], calcCondition: false },
   ]);
-  const result = analyze(graph, { platform: 'qlik-sense' });
+  const result = analyze(graph, { platform: 'qlik-sense', rules: { disabled: [] } });
   const r016 = result.findings.filter((f) => f.ruleId === 'R016');
   assert.equal(r016.length, 1);
   assert.match(r016[0].message, /Первый/);
@@ -513,7 +513,7 @@ test('R018: объект без измерений помечается', () => 
     { id: 'o1', name: 'Пустой', type: 'table', expressions: [] },
     { id: 'o2', name: 'С мерой', type: 'table', expressions: [{ kind: 'measure', expr: 'Sum([Amount])' }] },
   ]);
-  const result = analyze(graph, { platform: 'qlik-sense' });
+  const result = analyze(graph, { platform: 'qlik-sense', rules: { disabled: [] } });
   const r018 = result.findings.filter((f) => f.ruleId === 'R018');
   assert.equal(r018.length, 1);
   assert.match(r018[0].message, /Пустой/);
