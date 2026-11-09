@@ -383,6 +383,23 @@ export default function AiTab(props: Props) {
       : 'Режим конфиденциальности выключен.');
   }
 
+  /** Переопределение модели/адреса провайдера (ключ подписки Coding Plan).
+   *  Пустое поле возвращает значение по умолчанию. */
+  const saveOverride = (id: string, patch: { model?: string; baseUrl?: string }) => {
+    if (!status) return;
+    const clean: Record<string, { baseUrl?: string; model?: string }> = { ...(status.overrides ?? {}) };
+    const entry: { baseUrl?: string; model?: string } = { ...(clean[id] ?? {}) };
+    for (const [key, value] of Object.entries(patch)) {
+      const text = String(value ?? '').trim();
+      if (text) (entry as Record<string, string>)[key] = text;
+      else delete (entry as Record<string, string>)[key];
+    }
+    if (Object.keys(entry).length) clean[id] = entry;
+    else delete clean[id];
+    setStatus({ ...status, overrides: clean });
+    void api().aiSaveSettings({ providers: clean });
+  };
+
   const hasAnalysis = Boolean(analysis);
 
   return (
@@ -423,6 +440,53 @@ export default function AiTab(props: Props) {
                         </option>
                       ))}
                     </select>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Модель и адрес
+                    <div className="hint">для ключа подписки Personal Coding Plan</div>
+                  </td>
+                  <td>
+                    {(() => {
+                      const id = status.provider;
+                      const base = status.providers.find((p) => p.id === id);
+                      const ov = status.overrides?.[id] ?? {};
+                      return (
+                        <div className="row" style={{ gap: 8 }}>
+                          <input
+                            defaultValue={ov.model ?? base?.model ?? ''}
+                            placeholder={base?.model ?? 'модель'}
+                            title="Модель провайдера (например, glm-4.6 для Coding Plan)"
+                            style={{ width: 180 }}
+                            onBlur={(e) => saveOverride(id, { model: e.target.value })}
+                          />
+                          <input
+                            id="ai-base-url-input"
+                            defaultValue={ov.baseUrl ?? base?.baseUrl ?? ''}
+                            placeholder={base?.baseUrl ?? 'базовый URL'}
+                            title="Базовый URL. Для подписки Coding Plan: https://api.z.ai/api/coding/paas/v4"
+                            style={{ flex: 1, minWidth: 240 }}
+                            onBlur={(e) => saveOverride(id, { baseUrl: e.target.value })}
+                          />
+                          {id === 'zai' && (
+                            <button
+                              className="small"
+                              title="Вписать адрес подписки Personal Coding Plan в поле адреса"
+                              onClick={() => {
+                                const field = document.getElementById('ai-base-url-input') as HTMLInputElement | null;
+                                if (field) {
+                                  field.value = 'https://api.z.ai/api/coding/paas/v4';
+                                  field.dispatchEvent(new Event('blur'));
+                                }
+                              }}
+                            >
+                              Адрес Coding Plan
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
                 <tr>

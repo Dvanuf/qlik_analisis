@@ -1615,6 +1615,8 @@ ipcMain.handle('core:ai-status', async () => {
     providers,
     provider: settings.provider,
     fallback: settings.fallback,
+    // Переопределения модели/адреса (для ключа подписки Coding Plan).
+    overrides: settings.providers ?? {},
     // Итоговая цепочка: её реально обходит запрос при сбое основного.
     chain: providerChain(settings.provider, settings.fallback),
     // Цепочка, в которой есть хотя бы один готовый к работе провайдер:

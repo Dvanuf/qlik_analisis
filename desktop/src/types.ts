@@ -46,6 +46,8 @@ export type QrsStatus = {
 
 export type AiStatus = {
   providers: AiProviderInfo[];
+  /** Переопределения модели/адреса по провайдерам (Coding Plan). */
+  overrides?: Record<string, { baseUrl?: string; model?: string }>;
   provider: string;
   fallback: string[];
   /** Итоговая цепочка провайдеров: основной и резервные. */

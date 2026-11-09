@@ -9,6 +9,8 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.21.3 | [v0.21.3 — автоповтор при rate limit, поддержка ключа подписки Coding Plan](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.3) |
+| 0.21.3 | [v0.21.3 — автоповтор при rate limit провайдера ИИ (Retry-After)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.3) |
 | 0.21.2 | [v0.21.2 — «Запросить ИИ» в «Улучшенном скрипте» со статусом, ошибкой в панели и подсветкой изменений](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.2) |
 | 0.21.1 | [v0.21.1 — шрифт меню крупнее и масштабируется регулятором](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.1) |
 | 0.21.0 | [v0.21.0 — меню вкладок по образцу: поиск, сворачиваемые группы, иконки, рельса, статус сессии](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.0) |

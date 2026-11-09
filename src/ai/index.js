@@ -477,15 +477,32 @@ export async function analyze(prompt, data = {}, options = {}) {
 
     onEvent?.({ type: 'provider', provider: id, model: descriptor.model });
 
+    let deltaSent = false;
+    const onDeltaWrap = onDelta
+      ? (chunk) => { deltaSent = true; onDelta(chunk); }
+      : undefined;
     try {
-      const result = await callProvider(descriptor, {
-        messages,
-        apiKey,
-        signal,
-        stream,
-        onDelta,
-        temperature: options.temperature,
-      });
+      // Повтор при rate limit: провайдер просит подождать (Retry-After) или
+      // пауза 15 с — один раз на провайдера, пока ничего не начал стримить.
+      let result = null;
+      for (let attemptIn = 0; ; attemptIn += 1) {
+        try {
+          result = await callProvider(descriptor, {
+            messages,
+            apiKey,
+            signal,
+            stream,
+            onDelta: onDeltaWrap,
+            temperature: options.temperature,
+          });
+          break;
+        } catch (retryErr) {
+          const waitMs = nextRetryDelayMs(toAiError(retryErr, id), attemptIn, deltaSent);
+          if (waitMs <= 0) throw retryErr;
+          onEvent?.({ type: 'retry', provider: id, message: `Лимит частоты: повтор через ${Math.round(waitMs / 1000)} с.` });
+          await sleepMs(waitMs, signal);
+        }
+      }
       attempts += 1;
       limiter.record();
       const answer = {
@@ -547,3 +564,39 @@ export function chainError(failures = [], skipped = [], lastError = null) {
   });
 }
 
+
+
+/**
+ * Пауза перед повтором при rate limit.
+ *
+ * Повторяем только когда ещё ничего не ушло пользователю потоком
+ * (иначе текст задублируется), один раз на провайдера, не дольше 30 с.
+ * Приоритет — Retry-After провайдера, по умолчанию 15 секунд.
+ *
+ * @param {AiError} error — ошибка запроса
+ * @param {number} attemptIn — номер попытки внутри провайдера (0 — первая)
+ * @param {boolean} [streamed] — начал ли провайдер отдавать поток
+ * @returns {number} задержка в мс или 0, если повторять не нужно
+ */
+export function nextRetryDelayMs(error, attemptIn, streamed = false) {
+  if (streamed || attemptIn > 0) return 0;
+  if (error?.code !== AI_ERROR.RATE_LIMITED) return 0;
+  const retryAfter = Number(error.retryAfterMs ?? 0);
+  if (retryAfter > 0) return Math.min(retryAfter, 30000);
+  return 15000;
+}
+
+/** Пауза с поддержкой отмены (имя sleep уже занято). */
+function sleepMs(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new AiError(AI_ERROR.CANCELLED, 'Запрос отменён.'));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new AiError(AI_ERROR.CANCELLED, 'Запрос отменён.'));
+    }, { once: true });
+  });
+}
