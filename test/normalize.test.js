@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tokenize, extractReferences, canonicalize, checkStructure, canonicalFieldName,
+  isScriptFragment,
 } from '../src/normalize.js';
 
 test('токенайзер разбирает поле, функцию и переменную', () => {
@@ -77,4 +78,24 @@ test('checkStructure находит висящий оператор', () => {
 
 test('checkStructure не даёт ложных срабатываний на корректном выражении', () => {
   assert.deepEqual(checkStructure('Sum([Sales Amount]) / Sum([Quantity])'), []);
+});
+
+test('токенайзер распознаёт кириллические идентификаторы целиком', () => {
+  // Раньше «Основание_» распадалось: кириллица считалась пунктуацией,
+  // а хвостовой «_» — несуществующим «полем».
+  const tokens = tokenize('Основание_').map((t) => ({ type: t.type, value: t.value }));
+  assert.deepEqual(tokens, [{ type: 'ident', value: 'Основание_' }]);
+  const refs = extractReferences('Sum([Сумма продаж]) + Основание_');
+  assert.ok(refs.fields.includes('Основание_'));
+  assert.ok(!refs.fields.includes('_'), 'хвостовой «_» не должен стать отдельным полем');
+  assert.ok(refs.fields.includes('Сумма продаж'));
+});
+
+test('isScriptFragment: оператор загрузки — не выражение', () => {
+  const inline = 'Переключаемые_поля_измерения:\nLoad * Inline [\nИзмерение, Сортировка\nОснование_, 1\n];';
+  assert.ok(isScriptFragment(inline), 'Load * Inline [...] — скрипт-фрагмент');
+  assert.ok(isScriptFragment('Данные:\nLOAD * FROM [lib://data/x.qvd] (qvd);'), 'LOAD ... FROM — скрипт-фрагмент');
+  assert.ok(isScriptFragment('Таб:\nLOAD * Resident Таб2;'), 'LOAD ... Resident — скрипт-фрагмент');
+  assert.ok(!isScriptFragment('Sum([Сумма продаж]) + Основание_'), 'выражение объекта — не скрипт');
+  assert.ok(!isScriptFragment(''), 'пустая строка — не скрипт');
 });

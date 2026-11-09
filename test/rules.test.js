@@ -37,6 +37,28 @@ test('Quality: найдена ссылка на несуществующее п�
   assert.ok(byId('Q002').some((f) => f.message.includes('NoSuchField')));
 });
 
+test('Quality: скрипт-фрагмент в переменной не даёт ложных Q002', () => {
+  // Значение переменной — шаблон «Load * Inline [...]»: ключевые слова и
+  // данные inline-таблицы не являются полями, кириллические имена не
+  // распадаются на «_».
+  const result = analyze({
+    fields: [{ name: 'Сумма' }],
+    tables: [],
+    objects: [],
+    variables: [
+      {
+        name: 'vПереключаемыеПоля',
+        value: 'Переключаемые_поля_измерения:\nLoad * Inline [\nИзмерение, СортировкаИзмерения\nОснование_, 1\n];',
+      },
+      { name: 'vМера', value: 'NoSuchField + 1' },
+    ],
+  }, {});
+  const q002 = result.findings.filter((f) => f.ruleId === 'Q002');
+  assert.ok(q002.some((f) => f.message.includes('NoSuchField')), 'настоящая ошибка должна находиться');
+  assert.ok(!q002.some((f) => f.message.includes('«_»')), 'хвостовой «_» кириллицы не становится полем');
+  assert.ok(!q002.some((f) => f.message.includes('Load')), 'скрипт-фрагмент не сканируется как выражение');
+});
+
 test('Quality: найдена ссылка на неопределённую переменную', () => {
   assert.ok(ids.has('Q003'));
 });

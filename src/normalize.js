@@ -131,10 +131,13 @@ export function tokenize(src) {
       continue;
     }
 
-    // Идентификатор: имя поля, имя функции или ключевое слово
-    if (/[A-Za-z_]/.test(c)) {
+    // Идентификатор: имя поля, имя функции или ключевое слово.
+    // Буквы — любые Юникод-буквы (кириллица в именах полей приложений —
+    // обычное дело), а не только ASCII: иначе «Основание_» распадается,
+    // и хвостовой «_» становится несуществующим «полем».
+    if (/[\p{L}_]/u.test(c)) {
       let j = i;
-      while (j < s.length && /[A-Za-z0-9_]/.test(s[j])) j += 1;
+      while (j < s.length && /[\p{L}\p{N}_]/u.test(s[j])) j += 1;
       const value = s.slice(i, j);
       let k = j;
       while (k < s.length && /\s/.test(s[k])) k += 1;
@@ -198,6 +201,26 @@ export function extractReferences(expr) {
 /** Нормализует имя поля: `Unit Cost` и `[Unit Cost]` — одно и то же поле. */
 export function canonicalFieldName(name) {
   return String(name).replace(/^\[|\]$/g, '').trim().toLowerCase();
+}
+
+/**
+ * Похож ли текст на оператор скрипта загрузки, а не на выражение объекта.
+ *
+ * Значения переменных иногда хранят фрагменты скрипта (например, шаблоны
+ * «Load * Inline [...]» для $()-развёртывания). Ссылочные правила по ним
+ * дают ложные находки: ключевые слова «Load»/«Inline» и данные inline-таблицы
+ * распознаются как «поля», которых нет в модели.
+ */
+export function isScriptFragment(text) {
+  const s = String(text ?? '');
+  // Классические операторы загрузки: Load/Select с источником.
+  if (/\bload\b[^\n;]*\binline\s*\[/i.test(s)) return true;
+  if (/\bload\b[\s\S]{0,400}?\bfrom\s*\[/i.test(s)) return true;
+  if (/\bload\b[\s\S]{0,400}?\bresident\b/i.test(s)) return true;
+  if (/\bselect\b[\s\S]{0,400}?\bfrom\b/i.test(s)) return true;
+  // Оператор скрипта заканчивается «;» и содержит Load/Select.
+  if (/;\s*$/.test(s) && /\b(load|select)\b/i.test(s)) return true;
+  return false;
 }
 
 /**

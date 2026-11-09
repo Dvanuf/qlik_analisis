@@ -6,7 +6,7 @@
  *  - каждая переменная: где используется;
  *  - таблица поля, ключевые поля, признак синтетического ключа.
  */
-import { extractReferences, canonicalFieldName } from './normalize.js';
+import { extractReferences, canonicalFieldName, isScriptFragment } from './normalize.js';
 import { analyzeScriptUsage, emptyScriptUsage } from './script/usage.js';
 
 /**
@@ -54,12 +54,14 @@ export function buildIndex(graph, scriptModel = null) {
     }
   }
 
-  // 2. Переменные: их определения и использование
+  // 2. Переменные: их определения и использование. Фрагменты скрипта в
+  //    значениях (шаблоны Load ... Inline) — не выражения: их «поля» не
+  //    помечаются как используемые во фронт-энде.
   for (const v of graph.variables ?? []) {
     const entry = touchVariable(v.name);
     entry.value = v.value ?? '';
     entry.description = v.description ?? '';
-    if (v.value) {
+    if (v.value && !isScriptFragment(v.value)) {
       const refs = extractReferences(v.value);
       for (const f of refs.fields) {
         const fe = touchField(f);
@@ -187,16 +189,21 @@ function frontEndUsageKnown(graph, fieldUsage) {
   return (graph.fields ?? []).length === 0;
 }
 
-/** Утилита: список выражений приложения с указанием владельца. */
+/** Утилита: список выражений приложения с указанием владельца.
+ *  Фрагменты скрипта (шаблоны Load ... Inline в переменных) — не выражения:
+ *  ссылочные правила по ним дают ложные находки. */
 export function allExpressions(graph) {
   const list = [];
   for (const obj of graph.objects ?? []) {
     for (const e of obj.expressions ?? []) {
+      if (isScriptFragment(e.expr)) continue;
       list.push({ owner: obj, kind: e.kind, expr: e.expr });
     }
   }
   for (const v of graph.variables ?? []) {
-    if (v.value) list.push({ owner: { id: v.name, name: v.name, type: 'variable' }, kind: 'variable', expr: v.value });
+    if (v.value && !isScriptFragment(v.value)) {
+      list.push({ owner: { id: v.name, name: v.name, type: 'variable' }, kind: 'variable', expr: v.value });
+    }
   }
   return list;
 }

@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.18.7 | [v0.18.7 — ложная находка «Поле «_» не найдено» на кириллице](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.7) |
 | 0.18.6 | [v0.18.6 — исправление desKey7 (NTLMv1-ответы по вектору MS-NLMP)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.6) |
 | 0.18.5 | [v0.18.5 — NTLMv2-ответы по MS-NLMP](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.5) |
 | 0.18.4 | [v0.18.4 — NTLM: пустое LM-поле](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.18.4) |
