@@ -63,3 +63,11 @@
 - **«Улучшенный скрипт»: общая прокрутка панелей** — «было» и «стало»
   скроллятся синхронно (одна позиция, строки на одном уровне); переключатель
   «синхронизация вкл/выкл» рядом с поиском.
+- **Системные переменные — норма, не находка.** Базовые настройки среды
+  (`SET ThousandSep/DecimalSep/MoneySep/MoneyFormat/TimeFormat/DateFormat/
+  TimestampFormat/FirstWeekDay/BrokenWeeks/ReferenceDay/FirstMonthOfYear/
+  CollationLocale/CreateSearchIndexOnReload/MonthNames/LongMonthNames/
+  DayNames/LongDayNames/NumericalAbbreviation` и близкие) не флагуются
+  правилами «переменная не используется» (R004/U004/S008) и «SET/LET» —
+  сейчас так и есть; зафиксировать системный список в ядре и тест-регрессию,
+  чтобы поведение не сломалось при будущих правках правил.
