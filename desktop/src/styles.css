@@ -596,11 +596,12 @@ p.small, .small { font-size: 0.75rem; }
 .menu.is-collapsed .nav-item__label,
 .menu.is-collapsed .nav-item__badge,
 .menu.is-collapsed .menu__foot span:last-child { display: none; }
-.menu.is-collapsed .menu__head { padding: 14px 0 8px; justify-content: center; }
-.menu.is-collapsed .menu__toggle {
-  position: absolute; top: 16px; right: -13px; z-index: 2;
-  background: var(--panel); border: 1px solid var(--line);
+/* Рельса: логотип по центру, кнопка разворота — под ним, колонкой. */
+.menu.is-collapsed .menu__head {
+  padding: 12px 0 6px; justify-content: center;
+  flex-direction: column; gap: 8px;
 }
+.menu.is-collapsed .menu__toggle { position: static; }
 .menu.is-collapsed .group { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); }
 .menu.is-collapsed .group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .menu.is-collapsed .nav-item { justify-content: center; padding: 9px 0; }
