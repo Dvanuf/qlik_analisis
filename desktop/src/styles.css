@@ -454,6 +454,8 @@ p.small, .small { font-size: 0.75rem; }
 /* --- вкладки лентами листов --- */
 /* Каркас: шапка сверху, сайдбар слева, контент справа. */
 .app { display: flex; flex-direction: column; min-height: 100vh; }
+/* Общая строка с зазорами: число и подпись (балл + «слабо») не склеиваются. */
+.row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .app .body { display: flex; flex: 1; align-items: stretch; min-width: 0; }
 /* Сайдбар навигации: группы разделов сверху вниз. */
 .sidenav {

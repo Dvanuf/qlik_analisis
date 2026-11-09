@@ -94,6 +94,8 @@ test('styles.css: сайдбар навигации слева, на узком 
   assert.ok(/\.sidenav \.tab \{[^}]*text-align: left/s.test(STYLES), 'вкладки выровнены влево');
   assert.ok(/@media \(max-width: 900px\)/.test(STYLES), 'нет адаптации узкого окна');
   assert.ok(STYLES.includes('.verbadge'), 'нет бейджа версии');
+  // Регрессия 0.20.1: без .row число и слово домена склеивались («44слабо»).
+  assert.ok(/\.row \{[^}]*display: flex/s.test(STYLES), 'нет утилиты .row (склейка балла и вердикта)');
   for (const cls of ['.btn {', '.code {', '.num {', '.err {', '.ok {', '.checks {']) {
     assert.ok(STYLES.includes(cls), `нет класса ${cls}`);
   }
