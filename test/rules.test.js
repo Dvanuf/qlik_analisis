@@ -59,6 +59,30 @@ test('Quality: скрипт-фрагмент в переменной не даё
   assert.ok(!q002.some((f) => f.message.includes('Load')), 'скрипт-фрагмент не сканируется как выражение');
 });
 
+test('Quality: куски скрипта Drop/NullAsValue/ApplyMap не дают ложных Q002', () => {
+  // Регрессия 0.18.9: переменные с хвостами LOAD (ApplyMap...), DROP Table
+  // и NullAsValue-списками порождали «поля» «Кол», «в», «DROP», «as».
+  const script = [
+    ",ApplyMap('Логины', owner_id_2_линия, 'отсутствует') as [Логин_владельца_2_линия]",
+    'DROP Table Продажи;',
+    'NullAsValue\n[initiator_id_2_линия],\n[owner_id_2_линия];',
+    'Количество as [Кол_во]',
+  ].join('\n');
+  const result = analyze({
+    fields: [
+      { name: 'Логин_владельца_2_линия' },
+      { name: 'initiator_id_2_линия' },
+      { name: 'owner_id_2_линия' },
+      { name: 'Кол_во' },
+    ],
+    tables: [],
+    objects: [],
+    variables: [{ name: 'vСкрипт', value: script }],
+  }, {});
+  const q002 = result.findings.filter((f) => f.ruleId === 'Q002');
+  assert.deepEqual(q002, [], `ложные находки: ${q002.map((f) => f.message).join('; ')}`);
+});
+
 test('Quality: найдена ссылка на неопределённую переменную', () => {
   assert.ok(ids.has('Q003'));
 });

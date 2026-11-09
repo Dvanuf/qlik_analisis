@@ -4,6 +4,7 @@ import {
   tokenize, extractReferences, canonicalize, checkStructure, canonicalFieldName,
   isScriptFragment,
 } from '../src/normalize.js';
+import { lineMentions } from '../src/findings/locations.js';
 
 test('токенайзер разбирает поле, функцию и переменную', () => {
   const tokens = tokenize('Sum([Sales Amount]) / $(vSales)');
@@ -81,14 +82,15 @@ test('checkStructure не даёт ложных срабатываний на к
 });
 
 test('токенайзер распознаёт кириллические идентификаторы целиком', () => {
-  // Раньше «Основание_» распадалось: кириллица считалась пунктуацией,
-  // а хвостовой «_» — несуществующим «полем».
+  // «Основание_» — один токен: без этого распадалось на пунктуацию,
+  // а хвостовой «_» становился несуществующим «полем».
   const tokens = tokenize('Основание_').map((t) => ({ type: t.type, value: t.value }));
   assert.deepEqual(tokens, [{ type: 'ident', value: 'Основание_' }]);
   const refs = extractReferences('Sum([Сумма продаж]) + Основание_');
-  assert.ok(refs.fields.includes('Основание_'));
-  assert.ok(!refs.fields.includes('_'), 'хвостовой «_» не должен стать отдельным полем');
   assert.ok(refs.fields.includes('Сумма продаж'));
+  assert.ok(!refs.fields.includes('_'), 'хвостовой «_» не должен стать отдельным полем');
+  // Голая кириллица — не ссылка (неквотированное имя может быть только ASCII).
+  assert.ok(!refs.fields.includes('Основание_'));
 });
 
 test('isScriptFragment: оператор загрузки — не выражение', () => {
@@ -98,4 +100,37 @@ test('isScriptFragment: оператор загрузки — не выраже�
   assert.ok(isScriptFragment('Таб:\nLOAD * Resident Таб2;'), 'LOAD ... Resident — скрипт-фрагмент');
   assert.ok(!isScriptFragment('Sum([Сумма продаж]) + Основание_'), 'выражение объекта — не скрипт');
   assert.ok(!isScriptFragment(''), 'пустая строка — не скрипт');
+});
+
+test('extractReferences: голая кириллица — не ссылка на поле', () => {
+  // Регрессия 0.18.9: русские слова из скрипт-фрагментов в переменных
+  // превращались в несуществующие «поля» («Кол», «в», «Продажи»).
+  assert.deepEqual(extractReferences('Кол-во продаж').fields, [], 'Кол-во продаж');
+  assert.deepEqual(extractReferences('значения в таблице').fields, [], 'текст целиком');
+  assert.deepEqual(extractReferences('DROP Table Продажи;').fields, [], 'DROP Table');
+  // Смешанное ASCII+кириллица имя — неквотированное, в Qlik невалидно: не ссылка.
+  assert.deepEqual(extractReferences("ApplyMap('Логины', owner_id_2_линия, 'нет') as [Логин]").fields, ['Логин'], 'скобки остаются полем');
+  // Чистый ASCII-идентификатор — настоящая ссылка на поле.
+  assert.deepEqual(extractReferences("ApplyMap('Логины', x_id, 'нет') as [Логин]").fields, ['x_id', 'Логин'], 'ASCII-идентификатор — поле');
+  assert.deepEqual(extractReferences('Sum([Количество])').fields, ['Количество'], 'кириллица в скобках — поле');
+  assert.deepEqual(extractReferences('ApplyMap(Т, Ф, Д)').functions, ['ApplyMap'], 'функция ASCII');
+  assert.deepEqual(extractReferences('РусскаяФункция(X)').functions, [], 'кириллическая «функция» — не функция');
+});
+
+test('isScriptFragment: операторы Drop/NullAsValue/Store — не выражения', () => {
+  assert.ok(isScriptFragment('DROP Table Продажи;'), 'DROP Table');
+  assert.ok(isScriptFragment('NullAsValue\n[a],\n[b];'), 'NullAsValue');
+  assert.ok(isScriptFragment('STORE Таб INTO [lib://x.qvd];'), 'STORE INTO');
+  assert.ok(isScriptFragment('Rename Table Таб to Таб2;'), 'Rename Table');
+  assert.ok(!isScriptFragment('Sum([Количество]) as Кол'), 'выражение не оператор');
+});
+
+test('lineMentions: границы слова Unicode — без совпадений внутри слов', () => {
+  // Регрессия 0.18.9: \w в JS — только ASCII, кириллические границы не
+  // работали: «Кол» совпадал в «Количество», «в» — в «владельца».
+  assert.ok(!lineMentions('Количество as [Кол_во]', 'Кол'), 'Кол внутри Количество');
+  assert.ok(!lineMentions('[Логин_владельца_2_линия]', 'в'), 'в внутри владельца');
+  assert.ok(!lineMentions('ДатаРождения as x', 'Дата'), 'Дата внутри ДатаРождения');
+  assert.ok(lineMentions('[Дата] загрузка', 'Дата'), 'отдельное слово находится');
+  assert.ok(!lineMentions('OrderID as x', 'ID'), 'латинские границы сохранены');
 });

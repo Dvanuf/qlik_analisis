@@ -7,10 +7,20 @@
  *    (аналог проверки «совпадающие меры»).
  */
 
-/** Ключевые слова языка выражений Qlik — они не являются полями. */
+/** Ключевые слова языка выражений Qlik — они не являются полями.
+ *  Сюда же входят ключевые слова скрипта загрузки: значения переменных
+ *  иногда хранят фрагменты скрипта, и слова вроде «as», «drop», «table»
+ *  не должны распознаваться как «поля». */
 export const KEYWORDS = new Set([
   'and', 'or', 'not', 'in', 'like', 'between', 'asc', 'desc',
   'mapping', 'when', 'then', 'else', 'end', 'true', 'false', 'null', 'mod', 'div',
+  // Скрипт загрузки.
+  'as', 'select', 'load', 'from', 'where', 'group', 'by', 'order', 'resident',
+  'inline', 'autogenerate', 'join', 'keep', 'left', 'right', 'inner', 'outer',
+  'full', 'concatenate', 'into', 'let', 'set', 'drop', 'rename', 'store',
+  'table', 'tables', 'field', 'fields', 'nullasvalue', 'using', 'distinct',
+  'noconcatenate', 'exit', 'sub', 'call', 'include', 'trace', 'binary',
+  'connect', 'directory', 'do', 'loop', 'for', 'next', 'while', 'until',
 ]);
 
 /** Убирает комментарии /* ... *\/ и // ... */
@@ -184,10 +194,15 @@ export function extractReferences(expr) {
     } else if (tk.type === 'var') {
       if (tk.value.trim()) variables.add(tk.value.trim());
     } else if (tk.type === 'func') {
-      functions.add(tk.value);
+      // Функции Qlik — ASCII: голая кириллица со скобкой — не функция.
+      if (/^\w+$/.test(tk.value)) functions.add(tk.value);
     } else if (tk.type === 'ident') {
+      // Неквотированное имя в выражении Qlik может быть только ASCII —
+      // кириллические имена обязаны стоять в [скобках] или "строке".
+      // Голая кириллица — это текст (фрагмент скрипта в переменной,
+      // подпись), а не ссылка: «Кол-во продаж» не порождает полей.
       const low = tk.value.toLowerCase();
-      if (!KEYWORDS.has(low)) fields.add(tk.value);
+      if (!KEYWORDS.has(low) && /^\w+$/.test(tk.value)) fields.add(tk.value);
     }
   }
 
@@ -220,6 +235,9 @@ export function isScriptFragment(text) {
   if (/\bselect\b[\s\S]{0,400}?\bfrom\b/i.test(s)) return true;
   // Оператор скрипта заканчивается «;» и содержит Load/Select.
   if (/;\s*$/.test(s) && /\b(load|select)\b/i.test(s)) return true;
+  // Другие операторы скрипта: ключевое слово в начале строки
+  // (Drop Table, NullAsValue, Store, Rename, Let/Set, Sub, For/Next…).
+  if (/^[ \t]*(drop|rename|nullasvalue|store|binary|connect|directory|let|set|trace|call|sub|do|for)\b/im.test(s)) return true;
   return false;
 }
 

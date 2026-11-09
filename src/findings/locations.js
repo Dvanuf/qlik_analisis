@@ -15,8 +15,10 @@ import { namesInStatement } from '../script/usage.js';
 /**
  * Ищет имя в строке скрипта как отдельное слово.
  *
- * Границы слова: перед именем не должно быть буквы/цифры/подчёркивания.
- * Это отсекает совпадения вроде `OrderID` для имени `ID`.
+ * Границы слова — Unicode: перед именем не должно быть буквы/цифры/
+ * подчёркивания, в том числе кириллической. Иначе короткие имена
+ * совпадают внутри соседних слов: «Кол» — в «Количество»,
+ * «в» — в «владельца», «Дата» — в «ДатаРождения».
  *
  * @param {string} line — строка скрипта
  * @param {string} name — искомое имя
@@ -26,7 +28,7 @@ export function lineMentions(line, name) {
   const target = String(name ?? '').trim();
   if (!target) return false;
   const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(?<![\\w])${escaped}(?![\\w])`, 'i');
+  const re = new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'iu');
   return re.test(line);
 }
 
