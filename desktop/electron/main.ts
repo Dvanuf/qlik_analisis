@@ -109,7 +109,7 @@ async function runSmokeCheck(): Promise<void> {
         // Открываем вкладку «Правила» — там каталог с описаниями и рекомендациями.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('Правила') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -135,7 +135,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Каталог функций»: записи с сигнатурами и кодом.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('Каталог функций') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -156,7 +156,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Подключение»: пошаговый сценарий и главная кнопка.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('Подключение') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -237,7 +237,7 @@ async function runSmokeCheck(): Promise<void> {
         }
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('Анализ') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -267,7 +267,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Скрипт загрузки»: строки с номерами и находки.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('Скрипт загрузки') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -306,7 +306,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «Модель данных»: разделы модели и поиск по ним.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('Модель данных') === 0; })[0];
             if (btn) btn.click();
             return true;
@@ -326,7 +326,7 @@ async function runSmokeCheck(): Promise<void> {
         // Вкладка «ИИ-чат»: поле вопроса, кнопка настроек, подсказки.
         await win.webContents.executeJavaScript(`
           (function () {
-            var btn = Array.prototype.slice.call(document.querySelectorAll('.sidenav .tab'))
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
               .filter(function (b) { return b.textContent.indexOf('ИИ-чат') === 0; })[0];
             if (btn) btn.click();
             return true;

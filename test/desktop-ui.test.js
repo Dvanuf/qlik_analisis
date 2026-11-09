@@ -88,12 +88,16 @@ test('styles.css: тёмная тема — заливки через --solid, �
   assert.ok(STYLES.includes('--link: #7fb3ff'), 'нет светлого --link для dark');
 });
 
-test('styles.css: сайдбар навигации слева, на узком окне складывается', () => {
-  // Регрессия 0.20.0: меню вкладок переехало в левый сайдбар.
-  assert.ok(/\.sidenav \{[^}]*flex-direction: column/s.test(STYLES), 'сайдбар вертикальный');
-  assert.ok(/\.sidenav \.tab \{[^}]*text-align: left/s.test(STYLES), 'вкладки выровнены влево');
+test('styles.css: меню-сайдбар по образцу (рельса, группы, поиск)', () => {
+  // 0.21.0: меню по образцу пользователя — шапка с брендом, поиск,
+  // сворачиваемые группы, рельса 68px, подвал со статусом.
+  assert.ok(/\.menu \{[^}]*--nav-w: 272px/s.test(STYLES), 'нет ширины меню');
+  assert.ok(/\.menu\.is-collapsed \{ width: var\(--rail-w\)/.test(STYLES), 'нет рельсы');
+  assert.ok(/\.nav-item \{[^}]*text-align: left/s.test(STYLES), 'пункты выровнены влево');
+  assert.ok(/\.group\.is-closed \.group__list \{ display: none; \}/.test(STYLES), 'нет сворачивания групп');
+  assert.ok(STYLES.includes('.menu__search'), 'нет поиска по разделам');
+  assert.ok(STYLES.includes('.menu__foot'), 'нет подвала со статусом');
   assert.ok(/@media \(max-width: 900px\)/.test(STYLES), 'нет адаптации узкого окна');
-  assert.ok(STYLES.includes('.verbadge'), 'нет бейджа версии');
   // Регрессия 0.20.1: без .row число и слово домена склеивались («44слабо»).
   assert.ok(/\.row \{[^}]*display: flex/s.test(STYLES), 'нет утилиты .row (склейка балла и вердикта)');
   for (const cls of ['.btn {', '.code {', '.num {', '.err {', '.ok {', '.checks {']) {

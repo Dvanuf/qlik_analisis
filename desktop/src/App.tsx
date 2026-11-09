@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
 import { stageLabel } from '../../src/extract/progress.js';
 import { SCOPE_LABELS } from '../../src/rules/scopes.js';
@@ -164,6 +165,26 @@ const TAB_LABELS: Record<Tab, string> = {
   ai: 'ИИ-чат',
 };
 
+/** Иконки вкладок меню (штриховые, как в образце сайдбара). */
+const ICON = (inner: ReactElement) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {inner}
+  </svg>
+);
+const TAB_ICONS: Record<Tab, ReactElement> = {
+  score: ICON(<><path d="M3.5 17a9 9 0 1 1 17 0" /><path d="M12 13l4.2-4.2" /><circle cx="12" cy="13" r="1.6" /></>),
+  summary: ICON(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></>),
+  analysis: ICON(<><path d="M4 19V11M10 19V5M16 19v-5" /><path d="M3 21h18" /></>),
+  script: ICON(<><path d="M12 3v12" /><path d="M7 11l5 5 5-5" /><path d="M4 21h16" /></>),
+  refactor: ICON(<><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7z" /><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></>),
+  model: ICON(<><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>),
+  ai: ICON(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z" />),
+  library: ICON(<><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z" /><path d="M4 19a2 2 0 0 1 2-2h13" /></>),
+  connect: ICON(<><path d="M9 3v6M15 3v6" /><path d="M6 9h12v3a6 6 0 0 1-12 0z" /><path d="M12 18v3" /></>),
+  rules: ICON(<><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M9 12l2 2 4-4" /></>),
+};
+
 const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
   { id: 'auto', label: 'Определить автоматически', hint: 'По типам объектов приложения — так надёжнее' },
   { id: 'qlik-sense', label: 'Qlik Sense', hint: 'QIX App API: объекты, master items, закладки' },
@@ -259,6 +280,17 @@ export default function App() {
   // Прогоны по анализируемому приложению: из них сводка берёт динамику.
   const [aiRuns, setAiRuns] = useState<HistoryRun[]>([]);
   const [onlyNew, setOnlyNew] = useState(false);
+  // Меню-сайдбар: рельса (только иконки), свёрнутые группы, поиск по разделам.
+  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('qa.nav.collapsed') === '1');
+  const [closedGroups, setClosedGroups] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('qa.nav.closed') ?? '[]') as string[]; } catch { return []; }
+  });
+  const [navQuery, setNavQuery] = useState('');
+  useEffect(() => { localStorage.setItem('qa.nav.collapsed', navCollapsed ? '1' : '0'); }, [navCollapsed]);
+  useEffect(() => { localStorage.setItem('qa.nav.closed', JSON.stringify(closedGroups)); }, [closedGroups]);
+  const toggleGroup = (label: string) => setClosedGroups((prev) => prev.includes(label)
+    ? prev.filter((g) => g !== label)
+    : [...prev, label]);
 
   // Настройки подключения живут между запусками: без этого после перезапуска
   // поле URL возвращается к заглушке и список приложений не грузится.
@@ -383,6 +415,11 @@ export default function App() {
   const appIdFromUrl = useMemo(() => {
     const m = String(url).match(/\/app\/([^/?#]+)/);
     return m ? m[1] : '';
+  }, [url]);
+
+  /** Хост текущего сервера — для подвала меню. */
+  const navHost = useMemo(() => {
+    try { return new URL(url).hostname; } catch { return 'сервер не указан'; }
   }, [url]);
 
   /** Вход в хаб: открывается окно, пользователь вводит доменный пароль. */
@@ -963,12 +1000,6 @@ export default function App() {
   return (
     <div className="app">
       <div className="hub">
-        <div className="qlmark" aria-hidden="true">Q</div>
-        <div className="qlname">Qlik Анализатор</div>
-        <span className="verbadge" title={`Electron ${info?.electron ?? '—'} · Node ${info?.node ?? '—'}`}>
-          v{info?.appVersion ?? '…'}
-        </span>
-        <div className="sep" />
         <div className="apppick" title={appTitle}>
           <span className="live" />
           {appTitle}
@@ -1011,41 +1042,95 @@ export default function App() {
       </div>
 
       <div className="body">
-      <nav className="sidenav" aria-label="Разделы">
-        {TAB_GROUPS.map((g) => (
-          <div key={g.label} className="navgroup" role="none">
-            <span className="grouplabel">{g.label}</span>
-            {g.tabs.map((id) => {
-              const i = TAB_ORDER.indexOf(id);
-              return (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            className={`tab${tab === id ? ' on' : ''}`}
-            onClick={() => setTab(id)}
-            title={`Ctrl+${i === 9 ? 0 : i + 1} — ${TAB_LABELS[id]}`}
-          >
-            {TAB_LABELS[id]}
-            {id === 'analysis' && analysis ? (
-              <span className="cnt">{analysis.summary.findings.total}</span>
-            ) : null}
-            {id === 'script' && scriptFindings ? (
-              <span className="cnt">{scriptFindings}</span>
-            ) : null}
-            {id === 'refactor' && refactorCount ? (
-              <span className="cnt">{refactorCount}</span>
-            ) : null}
-            {id === 'summary' && batch ? <span className="cnt">{batch.totals.apps}</span> : null}
-            {id === 'rules' && ruleInfo ? <span className="cnt">{ruleInfo.total}</span> : null}
-            {id === 'library' && libraryFunctions.length ? (
-              <span className="cnt">{libraryFunctions.length}</span>
-            ) : null}
-          </button>
-              );
-            })}
+      <nav className={`menu${navCollapsed ? ' is-collapsed' : ''}`} aria-label="Разделы">
+        <div className="menu__head">
+          <div className="menu__logo" aria-hidden="true">Q</div>
+          <div className="menu__title">
+            <b>Qlik Анализатор</b>
+            <span className="menu__ver" title={`Electron ${info?.electron ?? '—'} · Node ${info?.node ?? '—'}`}>
+              v{info?.appVersion ?? '…'}
+            </span>
           </div>
-        ))}
+          <button
+            className="menu__toggle"
+            onClick={() => setNavCollapsed((v) => !v)}
+            aria-label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            title={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
+          </button>
+        </div>
+
+        <div className="menu__search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+          <input
+            value={navQuery}
+            onChange={(e) => setNavQuery(e.target.value)}
+            type="search"
+            placeholder="Поиск по разделам"
+            aria-label="Поиск по разделам"
+          />
+        </div>
+
+        <div className="menu__nav">
+          {TAB_GROUPS.map((g) => {
+            const q = navQuery.trim().toLowerCase();
+            const tabs = q
+              ? g.tabs.filter((id) => TAB_LABELS[id].toLowerCase().includes(q))
+              : g.tabs;
+            if (!tabs.length) return null;
+            const closed = !q && closedGroups.includes(g.label);
+            return (
+              <div key={g.label} className={`group${closed ? ' is-closed' : ''}`}>
+                <button
+                  className="group__head"
+                  type="button"
+                  aria-expanded={!closed}
+                  onClick={() => toggleGroup(g.label)}
+                >
+                  {g.label}
+                </button>
+                <ul className="group__list">
+                  {tabs.map((id) => {
+                    const i = TAB_ORDER.indexOf(id);
+                    const cnt = id === 'analysis' && analysis ? analysis.summary.findings.total
+                      : id === 'script' && scriptFindings ? scriptFindings
+                      : id === 'refactor' && refactorCount ? refactorCount
+                      : id === 'summary' && batch ? batch.totals.apps
+                      : id === 'rules' && ruleInfo ? ruleInfo.total
+                      : id === 'library' && libraryFunctions.length ? libraryFunctions.length
+                      : null;
+                    return (
+                      <li key={id}>
+                        <button
+                          role="tab"
+                          aria-selected={tab === id}
+                          className={`nav-item${tab === id ? ' is-active' : ''}`}
+                          onClick={() => setTab(id)}
+                          data-badge={cnt != null ? '' : undefined}
+                          title={`${TAB_LABELS[id]}${cnt != null ? ` — ${cnt}` : ''} · Ctrl+${i === 9 ? 0 : i + 1}`}
+                        >
+                          {TAB_ICONS[id]}
+                          <span className="nav-item__label nav-item__label--wrap">{TAB_LABELS[id]}</span>
+                          {cnt != null && (
+                            <span className={`nav-item__badge${id === 'refactor' ? ' nav-item__badge--warn' : ''}`}>
+                              {cnt}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="menu__foot" title={hubStatus ?? ''}>
+          <span className={`menu__dot${cookie ? '' : ' off'}`} />
+          <span><b>{navHost}</b> · {cookie ? 'сессия активна' : 'нет сессии'}</span>
+        </div>
       </nav>
 
       <div className="wrap">
