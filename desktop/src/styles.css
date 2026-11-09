@@ -643,7 +643,8 @@ table.rq tr.rule td { background: var(--panel-2); font-weight: 600; }
 table.rq tr.pat { cursor: pointer; }
 
 /* --- список находок и просмотр скрипта --- */
-.split2 { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 12px; align-items: start; }
+/* Колонка находок удвоена (320 → 640): текст находки читается без сжатия. */
+.split2 { display: grid; grid-template-columns: 640px minmax(0, 1fr); gap: 12px; align-items: start; }
 /* Чек-лист проверок слева, находки — справа. */
 .split { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 12px; align-items: start; }
 /* Карточка внутри grid-трека не должна раздуваться под длинный неразрывный текст. */

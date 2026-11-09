@@ -98,6 +98,13 @@ test('styles.css: sheetbar не переполняется, недостающи
   assert.ok(/\.hub \.apppick \{[^}]*text-overflow: ellipsis/s.test(STYLES), 'apppick без ellipsis');
 });
 
+test('styles.css: колонка находок в «Скрипте загрузки» удвоена', () => {
+  // Регрессия 0.18.8: при 320px текст находки сжимался до нечитаемости.
+  assert.ok(/\.split2 \{[^}]*grid-template-columns: 640px minmax\(0, 1fr\)/s.test(STYLES),
+    'колонка находок .split2 не 640px');
+  assert.ok(!/grid-template-columns: 320px/.test(STYLES), 'осталась старая ширина 320px');
+});
+
 test('AnalysisTab: переключатель подавленных жив, мёртвый selected удалён', () => {
   assert.ok(ANALYSIS_TAB.includes('setShowSuppressed((v) => !v)'), 'нет переключателя подавленных');
   assert.ok(!ANALYSIS_TAB.includes('setSelected'), 'остался мёртвый selected');
