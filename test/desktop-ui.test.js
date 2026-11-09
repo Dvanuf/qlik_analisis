@@ -120,6 +120,18 @@ test('AnalysisTab: переключатель подавленных жив, м�
   assert.ok(!ANALYSIS_TAB.includes('const [selected'), 'объявление selected не удалено');
 });
 
+test('RefactorTab: запрос ИИ со статусом, ошибкой в панели и подсветкой изменений', () => {
+  // Регрессия 0.21.2: «Запросить ИИ» выглядел как «ничего не происходит» —
+  // панель молчала до ответа, ошибка исчезала тостом, дифф не подсвечивался.
+  assert.ok(REFACTOR_TAB.includes("role=\"status\""), 'нет видимого статуса запроса');
+  assert.ok(REFACTOR_TAB.includes('role="alert"'), 'ошибка ИИ не показывается постоянно');
+  assert.ok(REFACTOR_TAB.includes('aiAddedSet'), 'изменения ИИ-версии не подсвечиваются');
+  assert.ok(REFACTOR_TAB.includes('Повторить'), 'нет повтора после ошибки');
+  // Источник переключается только по факту ответа, тумблер блокируется до него.
+  assert.ok(/setSource\('ai'\);\n        onNote/.test(REFACTOR_TAB), 'источник переключается до ответа');
+  assert.ok(REFACTOR_TAB.includes("disabled={aiLoading || !aiResult?.ok}"), 'тумблер ИИ активен без ответа');
+});
+
 test('AiTab: дубль подписи «Конфиденциальность» убран, чекбоксы в ряду', () => {
   const count = (AI_TAB.match(/Конфиденциальность<\/td>/g) ?? []).length;
   assert.equal(count, 1, `ячейка «Конфиденциальность» встречается ${count} раз`);

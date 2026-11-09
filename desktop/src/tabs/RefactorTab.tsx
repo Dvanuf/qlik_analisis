@@ -52,6 +52,9 @@ export default function RefactorTab(props: Props) {
   const [source, setSource] = useState<'rules' | 'ai'>('rules');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AiRefactorResult | null>(null);
+  // Последняя ошибка запроса: показывается в панели постоянно, а не только
+  // тостом (тост исчезает за 5 секунд — «непонятно, что делается»).
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const rules = useMemo<{ script: string; changes: RefactorChange[]; added: number[] }>(
     () => buildRefactoredScript(script, analysis?.findings ?? [], { disabled: off }) as {
@@ -95,9 +98,7 @@ export default function RefactorTab(props: Props) {
     });
     return (computeScore(remaining, { totalRows }) as { score: number }).score;
   }, [analysis, off]);
-  const added = source === 'ai' ? [] : rules.added;
   const rightLines = useMemo(() => proposed.split(/\r?\n/), [proposed]);
-  const addedSet = useMemo(() => new Set(added), [added]);
 
   const anchorLines = useMemo(
     () => new Set(rules.changes.map((c: RefactorChange) => c.line).filter((n): n is number => n != null)),
@@ -136,7 +137,7 @@ export default function RefactorTab(props: Props) {
   /** Запрос предложения у ИИ — единственный путь, которым скрипт уходит наружу. */
   const askAi = async () => {
     setAiLoading(true);
-    setSource('ai');
+    setAiError(null);
     try {
       const res = await window.qa.aiRefactor({
         script,
@@ -145,16 +146,54 @@ export default function RefactorTab(props: Props) {
       }) as AiRefactorResult;
       setAiResult(res);
       if (res.ok) {
+        // Версию ИИ показываем только по факту ответа: до него панель
+        // остаётся на версии правил — иначе выглядит, будто «ничего не делается».
+        setSource('ai');
         onNote(`Предложение ИИ получено: ${res.provider ?? ''} ${res.model ?? ''}`.trim());
       } else {
+        setAiError(res.error ?? 'неизвестная ошибка');
         onNote(`ИИ не ответил: ${res.error ?? 'неизвестная ошибка'}`);
       }
     } catch (err) {
       setAiResult({ ok: false, error: String(err) });
+      setAiError(String(err));
       onNote(`ИИ не ответил: ${String(err)}`);
     }
     setAiLoading(false);
   };
+
+  /** Строковый diff версии ИИ против текущего скрипта: сколько строк добавлено/убрано. */
+  const aiDiff = useMemo(() => {
+    if (source !== 'ai' || !aiResult?.ok) return null;
+    const counts = (arr: string[]) => {
+      const m = new Map<string, number>();
+      for (const l of arr) m.set(l, (m.get(l) ?? 0) + 1);
+      return m;
+    };
+    const a = counts(script.split(/\r?\n/));
+    const b = counts(proposed.split(/\r?\n/));
+    let added = 0;
+    let removed = 0;
+    for (const [l, n] of b) added += Math.max(0, n - (a.get(l) ?? 0));
+    for (const [l, n] of a) removed += Math.max(0, n - (b.get(l) ?? 0));
+    return { added, removed };
+  }, [source, aiResult, proposed, script]);
+
+  /** Строки версии ИИ, которых нет в текущем скрипте, — для подсветки. */
+  const aiAddedSet = useMemo(() => {
+    const set = new Set<number>();
+    if (source !== 'ai' || !aiResult?.ok) return set;
+    const rest = new Map<string, number>();
+    for (const l of script.split(/\r?\n/)) rest.set(l, (rest.get(l) ?? 0) + 1);
+    rightLines.forEach((l, i) => {
+      const n = rest.get(l) ?? 0;
+      if (n > 0) rest.set(l, n - 1);
+      else set.add(i + 1);
+    });
+    return set;
+  }, [source, aiResult, script, rightLines]);
+  const added = source === 'ai' ? [...aiAddedSet].sort((x, y) => x - y) : rules.added;
+  const addedSet = useMemo(() => new Set(added), [added]);
 
   if (!analysis || !script.trim()) {
     return (
@@ -237,9 +276,12 @@ export default function RefactorTab(props: Props) {
           Предложенная версия
           <span className="grow" />
           <span className="hint">
-            {source === 'ai' && aiResult?.ok
-              ? `предложение ИИ · ${aiResult.provider ?? ''} ${aiResult.model ?? ''}`.trim()
-              : `правила · ${rules.changes.length} правок`}
+            {aiLoading
+              ? 'запрос к ИИ… обычно 10–60 секунд'
+              : source === 'ai' && aiResult?.ok
+                ? `предложение ИИ · ${aiResult.provider ?? ''} ${aiResult.model ?? ''}`.trim()
+                  + (aiDiff ? ` · +${aiDiff.added}/−${aiDiff.removed} строк` : '')
+                : `правила · ${rules.changes.length} правок`}
           </span>
         </h3>
 
@@ -253,9 +295,9 @@ export default function RefactorTab(props: Props) {
           </button>
           <button
             className={`small${source === 'ai' ? ' on' : ''}`}
-            onClick={() => setSource('ai')}
-            disabled={aiLoading}
-            title={aiResult?.ok ? 'Показать предложение ИИ' : 'Скрипт будет отправлен провайдеру — запросите предложение'}
+            onClick={() => { if (aiResult?.ok) setSource('ai'); }}
+            disabled={aiLoading || !aiResult?.ok}
+            title={aiResult?.ok ? 'Показать предложение ИИ' : 'Сначала запросите предложение — кнопка «Запросить ИИ»'}
           >
             Предложение ИИ
           </button>
@@ -265,10 +307,20 @@ export default function RefactorTab(props: Props) {
         </div>
 
         {aiLoading && (
-          <p className="muted">
-            Запрос к провайдеру… Скрипт уходит наружу — это единственный случай,
-            когда данные покидают приложение.
-          </p>
+          <div className="ailoading" role="status">
+            <span className="spin" aria-hidden="true">⟳</span>
+            <span>
+              Запрос к ИИ-провайдеру — до минуты. Скрипт уходит наружу, это
+              единственный случай передачи данных; результат появится на этой панели.
+            </span>
+          </div>
+        )}
+
+        {aiError && !aiLoading && (
+          <div className="aierr" role="alert">
+            <span>ИИ не ответил: {aiError}</span>
+            <button className="small" onClick={() => void askAi()}>Повторить</button>
+          </div>
         )}
 
         {!aiLoading && source === 'rules' && !aiResult?.ok && rules.changes.length === 0 && (
@@ -290,7 +342,7 @@ export default function RefactorTab(props: Props) {
 
         <div className="codeview senseview">
           {highlightScript(proposed).map((parts: Token[], i) => (
-            <div key={i} className={`l${addedSet.has(i + 1) ? ' added' : ''}`}>
+            <div key={i} className={`l${(source === 'ai' ? aiAddedSet : addedSet).has(i + 1) ? ' added' : ''}`}>
               <span className="n">{i + 1}</span>
               <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
             </div>
@@ -308,7 +360,9 @@ export default function RefactorTab(props: Props) {
           <button className="small" onClick={copy}>Копировать</button>
           <button className="small" onClick={() => void exportQvs()}>Экспорт .qvs</button>
           <span className="hint">
-            добавлено строк: {added.length} · экспортируется показанная версия
+            {source === 'ai' && aiDiff
+              ? `+${aiDiff.added}/−${aiDiff.removed} строк · экспортируется показанная версия`
+              : `добавлено строк: ${added.length} · экспортируется показанная версия`}
           </span>
         </div>
       </div>

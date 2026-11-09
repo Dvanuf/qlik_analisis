@@ -560,6 +560,20 @@ p.small, .small { font-size: 0.75rem; }
 }
 .nav-item__badge--warn { background: var(--warning-soft, rgba(245, 166, 35, .15)); color: var(--warn, #f5b84d); }
 
+/* Запрос к ИИ в «Улучшенном скрипте»: видимый статус вместо тихого абзаца. */
+.ailoading {
+  display: flex; gap: 10px; align-items: center;
+  background: var(--accent-soft); color: var(--navy);
+  padding: 8px 12px; border-radius: 8px; margin: 8px 0;
+}
+.aierr {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  background: var(--panel); border-left: 3px solid var(--danger);
+  padding: 8px 12px; border-radius: 8px; margin: 8px 0;
+}
+.spin { display: inline-block; animation: ais 1.1s linear infinite; }
+@keyframes ais { to { transform: rotate(360deg); } }
+
 .menu__foot {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; border-top: 1px solid var(--line);
