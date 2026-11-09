@@ -551,7 +551,10 @@ export default function AiTab(props: Props) {
             <h3>Ключи провайдеров</h3>
             <p className="muted small">
               Ключ хранится в зашифрованном виде на вашем компьютере и не попадает в интерфейс.
-              Для Z.ai нужен Standard API Key (бесплатная модель glm-4.5-flash).
+              Для Z.ai нужен Standard API Key (консоль z.ai). Модель по умолчанию —
+              бесплатная glm-4.5-flash с низкими лимитами частоты; любую другую впишите
+              в поле «Модель» выше (платные работают при пополненном балансе), а для ключа
+              подписки Personal Coding Plan нажмите «Адрес Coding Plan» и укажите модель подписки.
             </p>
             <div className="form">
               <label>

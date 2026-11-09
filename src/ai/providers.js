@@ -28,7 +28,7 @@
 export const PROVIDERS = {
   zai: {
     id: 'zai',
-    label: 'Z.ai — GLM-4.5-Flash',
+    label: 'Z.ai',
     // Бесплатный тариф: модель glm-4.5-flash не тарифицируется.
     // glm-4.7-flash тоже бесплатна, но часто отвечает «модель перегружена».
     baseUrl: 'https://api.z.ai/api/paas/v4',

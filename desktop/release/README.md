@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.21.4 | [v0.21.4 — подсказка ключей Z.ai без привязки к бесплатной модели](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.4) |
 | 0.21.3 | [v0.21.3 — автоповтор при rate limit, поддержка ключа подписки Coding Plan](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.3) |
 | 0.21.3 | [v0.21.3 — автоповтор при rate limit провайдера ИИ (Retry-After)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.3) |
 | 0.21.2 | [v0.21.2 — «Запросить ИИ» в «Улучшенном скрипте» со статусом, ошибкой в панели и подсветкой изменений](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.21.2) |
