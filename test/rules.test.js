@@ -358,3 +358,42 @@ test('этап 4: у каждого правила есть humanTitle и whatHa
     assert.ok(!/[<>]/.test(rule.whatHappened), `${rule.id}: whatHappened содержит HTML`);
   }
 });
+
+test('P002: реюз одной мастер-меры — не дублирование, подписи не сравниваются', () => {
+  // Два объекта ссылаются на ОДНУ мастер-меру (общий qLibraryId):
+  // формулы совпадают, но это переиспользование — находки нет.
+  const reuse = analyze({
+    fields: [{ name: 'Сумма' }],
+    tables: [],
+    objects: [
+      { id: 'o1', name: 'Диаграмма 1', type: 'chart', expressions: [{ kind: 'measure', expr: 'Sum([Сумма]) * 1.2', libraryId: 'mLib' }] },
+      { id: 'o2', name: 'Таблица 1', type: 'table', expressions: [{ kind: 'measure', expr: 'sum([сумма])*1.2', libraryId: 'mLib' }] },
+    ],
+  }, {});
+  assert.ok(!reuse.findings.some((f) => f.ruleId === 'P002'), 'реюз мастер-меры не флагается');
+
+  // Одинаковая ПОДПИСЬ у разных формул — не «две меры считают одно и то же».
+  const labels = analyze({
+    fields: [{ name: 'A' }, { name: 'B' }],
+    tables: [],
+    objects: [
+      { id: 'o1', name: 'Первый', type: 'chart', expressions: [{ kind: 'measure', expr: 'Sum([A]) + 1' }] },
+      { id: 'o2', name: 'Второй', type: 'table', expressions: [{ kind: 'measure', expr: 'Sum([B]) + 2' }] },
+    ],
+  }, {});
+  assert.ok(!labels.findings.some((f) => f.ruleId === 'P002'), 'разные формулы не дубликат');
+
+  // Два РАЗНЫХ мастер-репликаса с одинаковой формулой — находка есть.
+  const dup = analyze({
+    fields: [{ name: 'A' }],
+    tables: [],
+    objects: [
+      { id: 'o1', name: 'Первый', type: 'chart', expressions: [{ kind: 'measure', expr: 'Sum([A]) * 3 + 7', libraryId: 'libA' }] },
+      { id: 'o2', name: 'Второй', type: 'table', expressions: [{ kind: 'measure', expr: 'sum( [a] ) * 3 + 7', libraryId: 'libB' }] },
+    ],
+  }, {});
+  const p002 = dup.findings.filter((f) => f.ruleId === 'P002');
+  assert.equal(p002.length, 1, 'дубликат мастер-мер найден');
+  // В detail — исходная формула для панели.
+  assert.match(p002[0].detail, /Выражение:\s*Sum\(\[A\]\) \* 3 \+ 7/);
+});

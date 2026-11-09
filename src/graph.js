@@ -197,12 +197,12 @@ export function allExpressions(graph) {
   for (const obj of graph.objects ?? []) {
     for (const e of obj.expressions ?? []) {
       if (isScriptFragment(e.expr)) continue;
-      list.push({ owner: obj, kind: e.kind, expr: e.expr });
+      list.push({ owner: obj, kind: e.kind, expr: e.expr, libraryId: e.libraryId ?? null });
     }
   }
   for (const v of graph.variables ?? []) {
     if (v.value && !isScriptFragment(v.value)) {
-      list.push({ owner: { id: v.name, name: v.name, type: 'variable' }, kind: 'variable', expr: v.value });
+      list.push({ owner: { id: v.name, name: v.name, type: 'variable' }, kind: 'variable', expr: v.value, libraryId: null });
     }
   }
   return list;

@@ -15,7 +15,7 @@ import { extractViaDocApi } from './docapi.js';
 import { PLATFORM_SENSE } from '../rules/platforms.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
 import { maskUrl } from '../logging/mask.js';
-import { fetchObjects, OBJECT_TYPES } from './objects.js';
+import { fetchObjects, displayObjectName, OBJECT_TYPES } from './objects.js';
 import { fetchAssociations } from './associations.js';
 import { fetchScriptErrors } from './script-errors.js';
 // Схема встраивается в бандл: в собранном приложении node_modules нет,
@@ -68,6 +68,10 @@ function collectExpressions(node, out = [], seen = new Set()) {
   for (const [key, value] of Object.entries(node)) {
     if (key === 'qDef' && typeof value === 'string') {
       out.push({ kind: 'measure', expr: value });
+    } else if (key === 'qDef' && value && typeof value === 'object' && typeof value.qDef === 'string') {
+      // HyperCubeMeasureqDef: { qDef: 'формула', qLibraryId } — формула меры
+      // и ссылка на мастер-меру (для отличия реюза от дублирования).
+      out.push({ kind: 'measure', expr: value.qDef, libraryId: value.qLibraryId ?? null });
     } else if ((key === 'qFormula' || key === 'qExpr' || key === 'qExpression') && typeof value === 'string') {
       out.push({ kind: 'dimension', expr: value });
     } else if (key === 'qFieldDefs' && Array.isArray(value)) {
@@ -342,7 +346,7 @@ export async function extractFromEngine(config) {
         unique.push(e);
       }
       graph.objects.push({
-        id, name: meta.name || id, type,
+        id, name: meta.name || displayObjectName(type, id), type,
         description: meta.description, expressions: unique, layoutMs: null,
       });
     }

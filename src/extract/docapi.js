@@ -9,7 +9,7 @@ import { parseLoadScript } from './loadscript.js';
 import { PLATFORM_VIEW } from '../rules/platforms.js';
 import { analyzeScriptIntegrity } from '../script/integrity.js';
 import { fetchAssociations } from './associations.js';
-import { fetchObjects, fetchLayout, fetchSheetChildren, hasCalcCondition, OBJECT_TYPES } from './objects.js';
+import { fetchObjects, fetchLayout, fetchSheetChildren, hasCalcCondition, displayObjectName, OBJECT_TYPES } from './objects.js';
 import { detectPlatform } from '../rules/platforms.js';
 import {
   fetchInventory, fetchDataConnections, readObjectTitle, readObjectDefinition,
@@ -221,7 +221,7 @@ export async function buildGraphFromDoc(app, appId, log = () => {}) {
       unique.push(e);
     }
     graph.objects.push({
-      id, name: meta.name || info.name || id, type,
+      id, name: meta.name || info.name || displayObjectName(type, id), type,
       description: meta.description || info.description,
       expressions: unique, layoutMs: null,
       // Признак тяжёлого объекта: без условия вычисления он пересчитывается

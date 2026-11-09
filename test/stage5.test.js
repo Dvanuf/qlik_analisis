@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeCredentials, isSessionUsable, parseCredentials } from '../src/session/credentials.js';
-import { fetchObjects, fetchSheetChildren, normalizeObjectItem, chunk } from '../src/extract/objects.js';
+import { fetchObjects, fetchSheetChildren, normalizeObjectItem, chunk, displayObjectName } from '../src/extract/objects.js';
 import { fetchAssociations } from '../src/extract/associations.js';
 import { describeMissingObjects } from '../src/cli/doctor.js';
 import { checkScriptStructure, analyzeScriptIntegrity } from '../src/script/integrity.js';
@@ -542,15 +542,25 @@ test('разбор выражений: измерения listbox читаютс
 });
 
 test('разбор выражений: меры читаются из qMeasureInfo', () => {
+  // Формула — в qDef (строка или объект), qFallbackTitle — подпись, не формула.
   const ex = extractObjectExpressions({
     qHyperCube: {
       qDimensionInfo: [],
-      qMeasureInfo: [{ qFallbackTitle: 'count(distinct assignee)' }],
+      qMeasureInfo: [
+        { qFallbackTitle: 'подпись', qDef: { qDef: 'count(distinct assignee)', qLibraryId: 'mLib1' } },
+        { qFallbackTitle: 'вторая', qDef: 'Sum(1 + 2)' },
+        { qFallbackTitle: 'только подпись' },
+      ],
     },
   });
   assert.equal(ex.hasMeasures, true);
   assert.equal(ex.hasDimensions, false);
-  assert.match(ex.expressions[0].expr, /count\(distinct assignee\)/);
+  const exprs = ex.expressions.map((e) => e.expr);
+  assert.ok(exprs.includes('count(distinct assignee)'), 'формула из qDef-объекта');
+  assert.ok(exprs.includes('Sum(1 + 2)'), 'формула из qDef-строки');
+  assert.ok(!exprs.includes('подпись') && !exprs.includes('только подпись'), 'подпись не считается выражением');
+  const withLib = ex.expressions.find((e) => e.expr === 'count(distinct assignee)');
+  assert.equal(withLib.libraryId, 'mLib1', 'ссылка на мастер-меру сохранена');
 });
 
 test('разбор выражений: поле с пробелами оформляется ссылкой', () => {
@@ -691,4 +701,12 @@ END SUB`);
   assert.equal(subs.length, 2);
   assert.deepEqual(subs[0].params, ['Path']);
   assert.deepEqual(subs[1].params, ['a', 'b']);
+});
+
+test('displayObjectName: вместо голого GUID — «тип · короткий id»', () => {
+  assert.equal(displayObjectName('table', 'eb4c0d45-9885-4903-bfbf-a9fcf65d4a2b'), 'table · eb4c0d45');
+  // Короткий id не портится.
+  assert.equal(displayObjectName('chart', 'MYnFuvR'), 'MYnFuvR');
+  // Имя от сервера приоритетнее — хелпер только для fallback.
+  assert.equal(displayObjectName('', 'x1'), 'x1');
 });

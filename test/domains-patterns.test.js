@@ -168,3 +168,16 @@ test('анализ отдаёт сводку по доменам и паттер
     assert.ok(f.domain, `у находки ${f.ruleId} нет домена`);
   }
 });
+
+test('паттерн показывает исходную формулу, а не нормализованную форму', () => {
+  const patterns = buildPatterns([
+    {
+      ruleId: 'P002', category: 'Practices', severity: 'warning',
+      title: 'Совпадающие меры', message: 'м',
+      detail: 'Нормализованная форма: sum(([a])*1.2\nВыражение: Sum([A]) * 1.2',
+      target: { kind: 'measure', name: 'X', id: 'x' },
+    },
+  ]);
+  assert.equal(patterns.length, 1);
+  assert.equal(patterns[0].expression, 'Sum([A]) * 1.2');
+});

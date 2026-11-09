@@ -57,15 +57,19 @@ export function causeKey(finding) {
 /**
  * Выражение, к которому относится паттерн.
  *
+ * Приоритет — исходное выражение из приложения («Выражение: …»), а не
+ * нормализованная форма: пользователь видит формулу так, как она
+ * написана, и может понять, как мера считается.
+ *
  * @param {object} finding — находка
  * @returns {string} выражение или нормализованная форма, '' если нет
  */
 export function patternExpression(finding) {
+  // «Выражение: …» — исходная формула (в том числе вторая строка detail).
+  const expr = String(finding?.detail ?? '').match(/^Выражение:\s*([^\n]+)/m);
+  if (expr) return expr[1].trim();
   const normalized = String(finding?.detail ?? '').match(NORMALIZED_RE);
   if (normalized) return normalized[1].trim();
-  // «Выражение: ...» — выражение из detail.
-  const expr = String(finding?.detail ?? '').match(/^Выражение:\s*(.+)$/);
-  if (expr) return expr[1].trim();
   return '';
 }
 

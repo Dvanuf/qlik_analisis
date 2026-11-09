@@ -36,6 +36,9 @@ export function isWorthReporting(canon, thresholds = {}) {
   if (!text) return false;
   // Ссылка на одно поле или на поле в выражении без вычислений.
   if (/^\[[^\]]+\]$/.test(text)) return false;
+  // Простая агрегация одного поля (Sum([Сумма]), Count(ID)) повторяется
+  // в объектах естественно — сообщать о ней бессмысленно.
+  if (/^(sum|count|avg|min|max|only|firstsortedvalue|stdev)\(\[[^\]]+\]\)$/.test(text)) return false;
   const minLength = thresholds?.minLength ?? 8;
   return text.length >= minLength;
 }
@@ -103,6 +106,8 @@ export const practiceRules = [
       const buckets = new Map();
       for (const item of allExpressions(ctx.graph)) {
         if (item.kind !== 'measure') continue;
+        // Простые агрегаты Sum/Count(Поле) совпадают сплошь и рядом — шум.
+        if (isSimpleAggregate(item.expr)) continue;
         const canon = canonicalize(item.expr, { variableMap: vmap, expandVariables: true });
         if (!canon) continue;
         if (!buckets.has(canon)) buckets.set(canon, []);
@@ -110,8 +115,13 @@ export const practiceRules = [
       }
       for (const [canon, items] of buckets) {
         if (items.length < 2) continue;
+        // Ссылки на ОДНУ мастер-меру (общий qLibraryId) — переиспользование,
+        // а не дублирование: сводить нечего.
+        const libIds = new Set(items.map((i) => i.libraryId).filter(Boolean));
+        if (libIds.size === 1 && items.every((i) => i.libraryId)) continue;
         const names = items.map((i) => i.owner.name);
         if (new Set(names).size < 2) continue; // одинаковые имена — это P001
+        const originals = [...new Set(items.map((i) => i.expr.trim()))];
         findings.push({
           ruleId: 'P002',
           category: CATEGORY,
@@ -119,7 +129,7 @@ export const practiceRules = [
           title: 'Совпадающие меры с разными именами',
           target: { kind: 'measure', name: names[0], id: items[0].owner.id },
           message: `Меры «${names.join('» и «')}» вычисляют одно и то же`,
-          detail: `Нормализованная форма: ${canon.slice(0, 160)}`,
+          detail: `Нормализованная форма: ${canon.slice(0, 160)}\nВыражение: ${originals.join(' | ').slice(0, 200)}`,
           // Меры с одинаковой формулой — места одной причины.
           objects: names,
           recommendation: 'Свести к одной мере и ссылаться на неё.',
@@ -425,4 +435,13 @@ function maxParenDepth(expr) {
     else if (ch === ')') depth -= 1;
   }
   return max;
+}
+
+/**
+ * Простая агрегация одного поля: Sum([Сумма]), Count(ID), Avg(...)…
+ * Такие выражения совпадают в разных объектах сплошь и рядом —
+ * для P002/P001 это шум, а не дублирование расчёта.
+ */
+function isSimpleAggregate(expr) {
+  return /^(sum|count|avg|min|max|only|firstsortedvalue|stdev)\s*\(\s*(distinct\s+)?\[?[^\(\)]+\]?\s*\)\s*$/i.test(String(expr ?? '').trim());
 }

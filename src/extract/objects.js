@@ -55,6 +55,18 @@ export function chunk(list, n) {
 }
 
 /**
+ * Читаемое имя объекта, когда сервер не отдал названия: у встроенных
+ * объектов листов qMeta.qName часто пуст — вместо голого GUID в отчётах
+ * показываем «тип · короткий id» («table · eb4c0d45»).
+ */
+export function displayObjectName(type, id) {
+  const rawId = String(id ?? '');
+  if (!rawId) return String(type ?? '');
+  if (rawId.length <= 12) return rawId;
+  return `${String(type ?? 'object')} · ${rawId.slice(0, 8)}`;
+}
+
+/**
  * Запрашивает у движка список объектов указанных типов.
  *
  * @param {object} app — объект App QIX или документ Doc API (умеет getObjects)

@@ -5,7 +5,8 @@
  * от типа объекта:
  *  - listbox:      qListObject.qDimensionInfo.qGroupFieldDefs — поля измерения;
  *  - table/pivot:  qHyperCube.qDimensionInfo[] — поля измерения;
- *  - меры:         qHyperCube.qMeasureInfo[].qFallbackTitle — текст выражения.
+ *  - меры:         qHyperCube.qMeasureInfo[].qDef — формула (строка или
+ *    объект { qDef, qLibraryId }); qFallbackTitle — подпись, не формула.
  *
  * Раньше читался только qDef строкой, поэтому у объектов с мерами в
  * qMeasureInfo выражений не было вовсе — и правила на «объект без
@@ -35,6 +36,31 @@ function asList(node) {
 }
 
 /**
+ * Формула меры и ссылка на мастер-меру из записи qMeasureInfo.
+ *
+ * В layout QIX qMeasureInfo[].qDef бывает:
+ *  - строкой — сама формула;
+ *  - объектом HyperCubeMeasureqDef { qDef: 'формула', qLibraryId, qLabel }.
+ * qFallbackTitle — подпись с единицами измерения, формулой не является.
+ *
+ * @param {object} entry — запись qMeasureInfo
+ * @returns {{formula: string, libraryId: string|null}}
+ */
+function measureFormula(entry) {
+  if (!entry || typeof entry !== 'object') return { formula: '', libraryId: null };
+  const qd = entry.qDef;
+  if (typeof qd === 'string') {
+    return { formula: qd, libraryId: entry.qLibraryId ?? null };
+  }
+  if (qd && typeof qd === 'object') {
+    const formula = typeof qd.qDef === 'string' ? qd.qDef : '';
+    const libraryId = qd.qLibraryId ?? entry.qLibraryId ?? null;
+    return { formula, libraryId: libraryId ? String(libraryId) : null };
+  }
+  return { formula: '', libraryId: entry.qLibraryId ? String(entry.qLibraryId) : null };
+}
+
+/**
  * Выражения объекта: измерения и меры.
  *
  * @param {object} layout — layout объекта
@@ -43,13 +69,13 @@ function asList(node) {
 export function extractObjectExpressions(layout) {
   const expressions = [];
   const seen = new Set();
-  const add = (kind, expr) => {
+  const add = (kind, expr, libraryId = null) => {
     const text = String(expr ?? '').trim();
     if (!text) return;
     const key = `${kind}:${text}`;
     if (seen.has(key)) return;
     seen.add(key);
-    expressions.push({ kind, expr: text });
+    expressions.push(libraryId ? { kind, expr: text, libraryId } : { kind, expr: text });
   };
 
   // Измерения: поля, на которых объект построен.
@@ -69,7 +95,9 @@ export function extractObjectExpressions(layout) {
     }
   }
 
-  // Меры: текст выражения хранится в qFallbackTitle.
+  // Меры: формула лежит в qDef (строка или объект { qDef, qLibraryId }).
+  // qFallbackTitle — это ПОДПИСЬ («количество, шт.»), не выражение: две
+  // меры с одинаковой подписью — не «две меры считают одно и то же».
   const measureRoots = [
     layout?.qListObject?.qMeasureInfo,
     layout?.qHyperCube?.qMeasureInfo,
@@ -77,7 +105,8 @@ export function extractObjectExpressions(layout) {
   ];
   for (const root of measureRoots) {
     for (const entry of asList(root)) {
-      add('measure', entry?.qFallbackTitle ?? entry?.qDef ?? '');
+      const { formula, libraryId } = measureFormula(entry);
+      add('measure', formula, libraryId);
     }
   }
 
