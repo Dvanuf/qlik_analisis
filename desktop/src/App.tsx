@@ -46,6 +46,8 @@ declare global {
         user?: string; password?: string; insecure?: boolean; platform?: string;
         /** Подложенные включаемые файлы (путь → содержимое). */
         includes?: Record<string, string>;
+        /** Папка клона репозитория: включения ищутся по именам автоматически. */
+        repoFolder?: string;
       }): Promise<AnalysisResult>;
       openHub(opts: { hubUrl: string; appId?: string; insecure?: boolean; loginUrl?: string; platform?: 'sense' | 'qv' }): Promise<{
         cookie?: string; xrfKey?: string; csrfToken?: string; wsUrl?: string;
@@ -79,6 +81,8 @@ declare global {
       exportRulesCatalog(): Promise<{ canceled: boolean; path?: string }>;
       /** Содержимое включаемого файла (utf8/cp1251). */
       readTextFile(path: string): Promise<string>;
+      /** Выбор папки репозитория (диалог). */
+      pickFolder(): Promise<string | null>;
       rulesConfig(): Promise<unknown>;
       saveRulesConfig(config: unknown): Promise<{ path: string; config: unknown }>;
       exportRulesConfig(): Promise<{ canceled: boolean; path?: string }>;
@@ -587,6 +591,16 @@ export default function App() {
     catch { return {}; }
   };
 
+  /** Папка клона репозитория приложения — авто-раскрытие include по именам. */
+  const repoFolderFor = (id: string): string => localStorage.getItem(`qa.repoFolder.${id}`) ?? '';
+  async function pickRepoFolder(targetAppId: string) {
+    const folder = await window.qa.pickFolder();
+    if (!folder) return;
+    localStorage.setItem(`qa.repoFolder.${targetAppId}`, folder);
+    showToast('Папка репозитория задана — включения раскрываются автоматически');
+    await analyzeSelected(targetAppId);
+  }
+
   /** Подложить включаемый файл (клон Git-репозитория) и переанализировать. */
   async function pickInclude(targetAppId: string, path: string) {
     const file = await window.qa.openDialog();
@@ -608,7 +622,7 @@ export default function App() {
     setBusy('Анализ приложения…');
     setAnalyzeStage(null);
     try {
-      const res = await window.qa.analyzeApp({ ...conn, appId: target, platform, includes: includesFor(target) });
+      const res = await window.qa.analyzeApp({ ...conn, appId: target, platform, includes: includesFor(target), repoFolder: repoFolderFor(target) });
       setAnalysis(res);
       // ТЗ «Оценка»: вкладка «Оценка» открывается автоматически после анализа.
       setTab('score');
@@ -1320,7 +1334,9 @@ export default function App() {
         <ScriptTab
           analysis={analysis}
           includesMap={includesFor(analysis?.appId ?? appId)}
+          repoFolder={repoFolderFor(analysis?.appId ?? appId)}
           onPickInclude={(path) => void pickInclude(analysis?.appId ?? appId, path)}
+          onPickFolder={() => void pickRepoFolder(analysis?.appId ?? appId)}
         />
       )}
 

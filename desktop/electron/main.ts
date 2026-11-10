@@ -5,7 +5,7 @@
  * только данные через IPC и не имеет прямого доступа к файловой системе.
  */
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync, renameSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync, renameSync, readdirSync, Dirent} from 'node:fs';
 import { resolve as resolvePath, resolve } from 'node:path';
 import enigma from 'enigma.js';
 import NodeWebSocket from 'ws';
@@ -1544,17 +1544,79 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   // Включаемые файлы: скрипт-заглушка «$(Must_Include=…)» раскрывается
   // в полный текст — правила видят реальную логику. Файлы подкладывает
   // пользователь (клон Git-репозитория), ключ — includeKey(path).
-  const includes = (opts as { includes?: Record<string, string> }).includes ?? {};
-  if (Object.keys(includes).length && graph.script) {
-    const { resolveIncludes, includeKey } = await import('../../src/extract/includes.js');
+  const incOpts = (opts as { includes?: Record<string, string>; repoFolder?: string });
+  const includes = incOpts.includes ?? {};
+  const includeNotes: string[] = [];
+  if (graph.script) {
+    const { resolveIncludes, includeKey, parseIncludeLines } = await import('../../src/extract/includes.js');
+    const { decodeText } = await import('../../src/connectors/file.js');
     const map: Record<string, string> = {};
     for (const [path, content] of Object.entries(includes)) {
       map[includeKey(path)] = content as string;
     }
-    const merged = resolveIncludes(graph.script as string, map);
-    if (merged.resolved.length) {
-      graph.script = merged.script;
-      sendProgress('includes', `Раскрыты включения: ${merged.resolved.length}`);
+    // Папка репозитория: include-файлы ищутся по имени автоматически.
+    const repoFolder = incOpts.repoFolder;
+    const repoFiles = repoFolder ? walkScriptFiles(repoFolder) : [];
+    // Пути подключений из QRS: если файл виден с этой машины (общий ресурс),
+    // включение читается само — папку репозитория указывать не нужно.
+    const qrsSettings_ = qrsSettings();
+    let qrsConnection: ((name: string) => Promise<{ ok: boolean; path?: string; note: string }>) | null = null;
+    if (qrsSettings_?.host) {
+      const { fetchQrsConnectionPath } = await import('../../src/extract/qrs.js');
+      const cache = new Map<string, { ok: boolean; path?: string; note: string }>();
+      qrsConnection = async (name: string) => {
+        if (!cache.has(name)) {
+          cache.set(name, await fetchQrsConnectionPath({
+            host: qrsSettings_.host, name,
+            port: qrsSettings_.port, certPath: qrsSettings_.certPath,
+            keyPath: qrsSettings_.keyPath,
+          }));
+        }
+        return cache.get(name)!;
+      };
+    }
+    let cur = graph.script as string;
+    for (let iter = 0; iter < 6; iter += 1) {
+      for (const inc of parseIncludeLines(cur)) {
+        const key = includeKey(inc.path);
+        if (map[key]) continue;
+        // 1) Файл из папки репозитория.
+        const file = key.split('/').pop() ?? '';
+        const hit = repoFiles.find((f) => f.replace(/\\/g, '/').toLowerCase().endsWith(`/${file}`));
+        if (hit) { map[key] = decodeText(readFileSync(hit)); continue; }
+        // 2) Путь подключения из QRS: имя коннекции → путь на сервере →
+        //    попытка прочитать файл, если путь виден с этой машины.
+        if (qrsConnection && inc.path.toLowerCase().startsWith('lib://')) {
+          const name = inc.path.slice(6).split('/')[0];
+          const q = await qrsConnection(name);
+          if (q.ok && q.path) {
+            const candidates = [
+              `${q.path.replace(/\\/g, '/').replace(/\/+$/, '')}/${file}`,
+              `${q.path.replace(/\\+$/, '')}\\${file}`,
+            ];
+            let read = false;
+            for (const candidate of candidates) {
+              try {
+                if (existsSync(candidate)) { map[key] = decodeText(readFileSync(candidate)); read = true; break; }
+              } catch { /* путь недоступен с этой машины */ }
+            }
+            if (!read) includeNotes.push(`${name} → ${q.path}: путь недоступен с этого компьютера — подключите общий ресурс или укажите папку репозитория`);
+          } else {
+            includeNotes.push(`${name}: ${q.note}`);
+          }
+        }
+      }
+      const merged = resolveIncludes(cur, map);
+      if (merged.script === cur) break;
+      cur = merged.script;
+    }
+    const resolvedCount = Object.keys(map).length;
+    if (cur !== graph.script) {
+      graph.script = cur;
+      sendProgress('includes', `Раскрыты включения: ${resolvedCount}`);
+    }
+    if (includeNotes.length && (graph as { meta?: object }).meta) {
+      (graph as { meta: { includeNotes?: string[] } }).meta.includeNotes = includeNotes;
     }
   }
   sendProgress('rules', 'Проверка правил');
@@ -1729,6 +1791,29 @@ ipcMain.handle('core:ai-status', async () => {
 });
 
 /** Сохранение настроек ИИ: провайдер, лимиты, режим конфиденциальности. */
+/** Выбор папки репозитория (для авто-раскрытия включений). */
+ipcMain.handle('core:pick-folder', async () => {
+  const res = await dialog.showOpenDialog(mainWindow!, {
+    title: 'Папка клона репозитория скриптов',
+    properties: ['openDirectory'],
+  });
+  return res.canceled ? null : res.filePaths[0];
+});
+
+/** Рекурсивный список файлов папки (расширения скриптов, глубина 8). */
+function walkScriptFiles(dir: string, depth = 0): string[] {
+  if (depth > 8) return [];
+  const out: string[] = [];
+  let entries: Dirent[];
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  for (const e of entries) {
+    const full = resolve(dir, e.name);
+    if (e.isDirectory()) out.push(...walkScriptFiles(full, depth + 1));
+    else if (/\.(qvs|txt|qvsx)$/i.test(e.name)) out.push(full);
+  }
+  return out;
+}
+
 /** Чтение текстового файла включения (utf8 с BOM/cp1251-fallback). */
 ipcMain.handle('core:read-text-file', async (_e, path: string) => {
   const { decodeText } = await import('../../src/connectors/file.js');

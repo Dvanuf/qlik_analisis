@@ -16,6 +16,10 @@ type Props = {
   includesMap?: Record<string, string>;
   /** Выбрать файл включения и переанализировать. */
   onPickInclude?: (path: string) => void;
+  /** Папка клона репозитория (включения раскрываются автоматически). */
+  repoFolder?: string;
+  /** Выбрать папку репозитория и переанализировать. */
+  onPickFolder?: () => void;
 };
 
 /** Находки, у которых известны строки скрипта. */
@@ -24,7 +28,7 @@ function scriptFindings(findings: Finding[]): Finding[] {
 }
 
 export default function ScriptTab(props: Props) {
-  const { analysis, includesMap, onPickInclude } = props;
+  const { analysis, includesMap, onPickInclude, repoFolder, onPickFolder } = props;
   const script = analysis?.script ?? '';
   const lines = useMemo(() => script.split(/\r?\n/), [script]);
 
@@ -160,9 +164,17 @@ export default function ScriptTab(props: Props) {
           <div className="inclbox">
             <b>Включаемые файлы ({includeFiles.length})</b>
             <p className="hint" style={{ margin: '4px 0 8px' }}>
-              Скрипт — заглушка: логика живёт в подключаемых файлах. Подложите их
-              (клон Git-репозитория) — анализ раскроет включения в общий скрипт.
+              Скрипт — заглушка: логика живёт в подключаемых файлах. Укажите
+              папку клона Git-репозитория — включения найдутся и раскроются
+              автоматически, или подложите файлы по одному.
             </p>
+            <div className="inclrow">
+              <span className="grow" />
+              <span className="hint">{repoFolder ? `папка: ${repoFolder.split(/[\\/]/).pop()}` : 'папка репозитория не указана'}</span>
+              <button className="small" onClick={() => onPickFolder?.()}>
+                {repoFolder ? 'Заменить папку' : 'Указать папку репозитория'}
+              </button>
+            </div>
             {includeFiles.map((inc, i) => {
               const key = includeKey(inc.path);
               const chosen = Object.keys(includesMap ?? {}).some((k) => includeKey(k) === key);

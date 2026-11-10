@@ -244,3 +244,45 @@ export async function fetchQrsVersion({
     };
   }
 }
+
+/**
+ * Путь подключения по имени (для раскрытия lib:// include-файлов).
+ *
+ * QRS отдаёт определение подключения: для папочных — путь на сервере
+ * (qConnectionString). Содержимое файла по API не отдаётся, но путь
+ * позволяет прочитать файл, если он виден с этой машины (общий ресурс,
+ * смонтированный share, локальный запуск).
+ *
+ * @param {{ host?: string, name?: string, port?: number|string,
+ *   certPath?: string, certPassword?: string, keyPath?: string,
+ *   insecure?: boolean }} options
+ * @returns {Promise<{ok: boolean, path?: string, note: string}>}
+ */
+export async function fetchQrsConnectionPath({
+  host, name, port = QRS_PORT, certPath, certPassword, keyPath, insecure = true,
+} = {}) {
+  const base = qrsBase({ host, port });
+  if (!base) return { ok: false, note: 'не задан хост репозитория QRS' };
+  if (!name) return { ok: false, note: 'не задано имя подключения' };
+  const cert = readQrsCertificate({ certPath, certPassword, keyPath });
+  if (cert.note) return { ok: false, note: cert.note };
+
+  const filter = encodeURIComponent(`Name eq '${name}'`);
+  const target = `${base}/qrs/dataconnection?filter=${filter}`;
+  try {
+    const payload = await httpGetJson(target, {
+      insecure,
+      pfx: cert.pfx,
+      passphrase: cert.passphrase,
+      cert: cert.cert,
+      key: cert.key,
+    });
+    const list = Array.isArray(payload) ? payload : [];
+    if (!list.length) return { ok: false, note: `подключение «${name}» в QRS не найдено` };
+    const path = String(list[0]?.qConnectionString ?? list[0]?.connectionString ?? '').trim();
+    if (!path) return { ok: false, note: `подключение «${name}» без пути` };
+    return { ok: true, path, note: `${maskUrl(target)} → путь получен` };
+  } catch (err) {
+    return { ok: false, note: String(err?.message ?? err) };
+  }
+}

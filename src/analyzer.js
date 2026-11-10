@@ -202,6 +202,8 @@ export function analyze(graph, config = {}) {
     },
     capabilities: graph.meta?.capabilities ?? [],
     skipped: graph.meta?.skipped ?? [],
+    // Диагностика раскрытия включений (пути подключений QRS и т.д.).
+    includeNotes: graph.meta?.includeNotes ?? [],
     // Ошибки скрипта по данным сервера — с номером строки и колонки.
     scriptErrors: graph.meta?.scriptErrors ?? [],
     ruleErrors: errors,

@@ -308,6 +308,8 @@ export type AnalysisResult = {
     };
   };
   skipped?: { capability: string; reason: string }[];
+  /** Диагностика раскрытия включений (QRS-пути). */
+  includeNotes?: string[];
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
     count: number; skipped: boolean; note: string | null; domain?: DomainId;
