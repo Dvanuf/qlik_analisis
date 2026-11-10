@@ -1528,7 +1528,7 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     } as never;
   }
   sendProgress('connect', 'Подключение к движку');
-  const graph = await extractFromEngine({
+  const graph = (await extractFromEngine({
     onProgress: (p: { stage: string; detail?: string }) => sendProgress(p.stage, p.detail),
     // Адрес строго под выбранное приложение: в URL из поля может стоять
     // идентификатор другого приложения — открылось бы не то.
@@ -1540,7 +1540,23 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     user: opts.user,
     password: opts.password,
     insecure: opts.insecure,
-  });
+  })) as Record<string, unknown> & { script?: string };
+  // Включаемые файлы: скрипт-заглушка «$(Must_Include=…)» раскрывается
+  // в полный текст — правила видят реальную логику. Файлы подкладывает
+  // пользователь (клон Git-репозитория), ключ — includeKey(path).
+  const includes = (opts as { includes?: Record<string, string> }).includes ?? {};
+  if (Object.keys(includes).length && graph.script) {
+    const { resolveIncludes, includeKey } = await import('../../src/extract/includes.js');
+    const map: Record<string, string> = {};
+    for (const [path, content] of Object.entries(includes)) {
+      map[includeKey(path)] = content as string;
+    }
+    const merged = resolveIncludes(graph.script as string, map);
+    if (merged.resolved.length) {
+      graph.script = merged.script;
+      sendProgress('includes', `Раскрыты включения: ${merged.resolved.length}`);
+    }
+  }
   sendProgress('rules', 'Проверка правил');
   const result = analyze(graph as never, { platform: opts.platform, rules: currentRules() });
   sendProgress('report', 'Формирование отчёта');
@@ -1713,6 +1729,12 @@ ipcMain.handle('core:ai-status', async () => {
 });
 
 /** Сохранение настроек ИИ: провайдер, лимиты, режим конфиденциальности. */
+/** Чтение текстового файла включения (utf8 с BOM/cp1251-fallback). */
+ipcMain.handle('core:read-text-file', async (_e, path: string) => {
+  const { decodeText } = await import('../../src/connectors/file.js');
+  return decodeText(readFileSync(resolve(path)));
+});
+
 ipcMain.handle('core:ai-settings-save', (_e, payload: Record<string, unknown>) => {
   const current = readAiConfig();
   writeAiConfig({ ...current, ...(payload ?? {}) });

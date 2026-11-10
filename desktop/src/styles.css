@@ -976,6 +976,14 @@ table.rq tr.pat { cursor: pointer; }
 .scorehero-counts .num { font-size: 24px; font-weight: 700; }
 /* --- «Оценка» как аналитическая карточка --- */
 /* Плитки находок: всего / ошибки / предупреждения / замечания. */
+/* Включаемые файлы в «Скрипте загрузки» */
+.inclbox {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; margin: 8px 0;
+}
+.inclrow { display: flex; gap: 10px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+.inclrow code { font-size: 0.8125rem; }
+
 .scoretiles { display: flex; gap: 10px; align-items: stretch; flex: none; }
 .scoretiles .tile {
   min-width: 86px; padding: 8px 12px; border-radius: 10px;

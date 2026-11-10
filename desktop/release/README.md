@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.23.0 | [v0.23.0 — раскрытие включаемых файлов: анализ скриптов-заглушек $(Must_Include)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.0) |
 | 0.22.4 | [v0.22.4 — тепловые ячейки «Оценок по доменам» в сводном отчёте](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.22.4) |
 | 0.22.3 | [v0.22.3 — один отмеченный отсчёт ведёт в «Оценку», кнопка рельсы строкой](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.22.3) |
 | 0.22.2 | [v0.22.2 — рельса меню: без «пустых» групп, кнопка по центру, иконки 18px, адаптивный шрифт](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.22.2) |

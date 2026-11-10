@@ -193,3 +193,12 @@ test('SummaryTab: тепловые ячейки «Оценок по домена
   assert.ok(/\.heat\.r \{[^}]*background: color-mix/s.test(STYLES), 'нет заливки красной зоны');
   assert.ok(/\.heat\.g \{[^}]*var\(--success\)/s.test(STYLES), 'нет заливки зелёной зоны');
 });
+
+test('ScriptTab: включаемые файлы — разметка и подложка', () => {
+  const SCRIPT_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ScriptTab.tsx'), 'utf8');
+  const APP2 = APP;
+  assert.ok(SCRIPT_TAB.includes('parseIncludeLines'), 'нет разбора include-строк');
+  assert.ok(SCRIPT_TAB.includes('Включаемые файлы'), 'нет блока включений');
+  assert.ok(APP2.includes('includes: includesFor(target)'), 'includes не передаются в анализ');
+  assert.ok(APP2.includes('pickInclude'), 'нет подкладывания файла');
+});

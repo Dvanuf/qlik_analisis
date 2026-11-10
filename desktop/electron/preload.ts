@@ -32,6 +32,8 @@ const api = {
     fileName?: string;
   }) => ipcRenderer.invoke('core:export-data-model', payload),
   exportRulesCatalog: () => ipcRenderer.invoke('core:export-rules-catalog'),
+  /** Содержимое включаемого файла (utf8/cp1251). */
+  readTextFile: (path: string) => ipcRenderer.invoke('core:read-text-file', path) as Promise<string>,
   rules: () => ipcRenderer.invoke('core:rules'),
   /** Каталог готовых функций скрипта: список, выгрузка в .qvs, разбор своей библиотеки. */
   library: () => ipcRenderer.invoke('core:library'),

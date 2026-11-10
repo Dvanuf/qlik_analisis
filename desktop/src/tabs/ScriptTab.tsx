@@ -8,9 +8,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AnalysisResult, Finding } from '../types.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
+import { includeKey, parseIncludeLines } from '../../../src/extract/includes.js';
 
 type Props = {
   analysis: AnalysisResult | null;
+  /** Подложенные включаемые файлы (ключ includeKey → содержимое). */
+  includesMap?: Record<string, string>;
+  /** Выбрать файл включения и переанализировать. */
+  onPickInclude?: (path: string) => void;
 };
 
 /** Находки, у которых известны строки скрипта. */
@@ -19,7 +24,7 @@ function scriptFindings(findings: Finding[]): Finding[] {
 }
 
 export default function ScriptTab(props: Props) {
-  const { analysis } = props;
+  const { analysis, includesMap, onPickInclude } = props;
   const script = analysis?.script ?? '';
   const lines = useMemo(() => script.split(/\r?\n/), [script]);
 
@@ -33,6 +38,7 @@ export default function ScriptTab(props: Props) {
   const [mIdx, setMIdx] = useState(0);
 
   const findings = useMemo(() => scriptFindings(analysis?.findings ?? []), [analysis]);
+  // Включения в тексте скрипта: $(Must_Include=…) / $(include=…).
   const [highlight, setHighlight] = useState<Set<number>>(new Set());
 
   /** Номера строк (с единицы), содержащих искомую подстроку. */
@@ -47,6 +53,7 @@ export default function ScriptTab(props: Props) {
   }, [query, lines]);
 
   const matchSet = useMemo(() => new Set(matches), [matches]);
+  const includeFiles = useMemo(() => parseIncludeLines(script), [script]);
 
   // Подсветка строк выбранной находки.
   useEffect(() => {
@@ -146,6 +153,32 @@ export default function ScriptTab(props: Props) {
             {active ? 'подсвечены строки выбранной находки' : `${lines.length} строк`}
           </span>
         </h3>
+
+        {/* Скрипт-заглушка: вся логика в $(Must_Include=…). Файлы подкладываются
+            из клона Git-репозитория и раскрываются в общий скрипт при анализе. */}
+        {includeFiles.length > 0 && (
+          <div className="inclbox">
+            <b>Включаемые файлы ({includeFiles.length})</b>
+            <p className="hint" style={{ margin: '4px 0 8px' }}>
+              Скрипт — заглушка: логика живёт в подключаемых файлах. Подложите их
+              (клон Git-репозитория) — анализ раскроет включения в общий скрипт.
+            </p>
+            {includeFiles.map((inc, i) => {
+              const key = includeKey(inc.path);
+              const chosen = Object.keys(includesMap ?? {}).some((k) => includeKey(k) === key);
+              return (
+                <div className="inclrow" key={`${inc.path}-${i}`}>
+                  <code>{inc.path}</code>
+                  <span className="grow" />
+                  <span className={`pill ${chosen ? 'ok' : 'mute'}`}>{chosen ? 'подложено' : 'не выбрано'}</span>
+                  <button className="small" onClick={() => onPickInclude?.(inc.path)}>
+                    {chosen ? 'Заменить файл' : 'Выбрать файл'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Поиск по скрипту: Enter — следующее, Shift+Enter — предыдущее, Esc — очистить. */}
         <div className="lnfind">

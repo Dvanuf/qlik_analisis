@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
+import { includeKey, parseIncludeLines } from '../../src/extract/includes.js';
 import { stageLabel } from '../../src/extract/progress.js';
 import { SCOPE_LABELS } from '../../src/rules/scopes.js';
 import ConnectTab from './tabs/ConnectTab.js';
@@ -43,6 +44,8 @@ declare global {
       analyzeApp(opts: {
         url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
         user?: string; password?: string; insecure?: boolean; platform?: string;
+        /** Подложенные включаемые файлы (путь → содержимое). */
+        includes?: Record<string, string>;
       }): Promise<AnalysisResult>;
       openHub(opts: { hubUrl: string; appId?: string; insecure?: boolean; loginUrl?: string; platform?: 'sense' | 'qv' }): Promise<{
         cookie?: string; xrfKey?: string; csrfToken?: string; wsUrl?: string;
@@ -74,6 +77,8 @@ declare global {
       }): Promise<{ htmlPath: string; jsonPath: string }>;
       /** Каталог правил в Excel (все правила с описаниями). */
       exportRulesCatalog(): Promise<{ canceled: boolean; path?: string }>;
+      /** Содержимое включаемого файла (utf8/cp1251). */
+      readTextFile(path: string): Promise<string>;
       rulesConfig(): Promise<unknown>;
       saveRulesConfig(config: unknown): Promise<{ path: string; config: unknown }>;
       exportRulesConfig(): Promise<{ canceled: boolean; path?: string }>;
@@ -576,13 +581,34 @@ export default function App() {
     setBusy('');
   }
 
+  /** Подложенные включаемые файлы приложения (localStorage). */
+  const includesFor = (id: string): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem(`qa.includes.${id}`) ?? '{}') as Record<string, string>; }
+    catch { return {}; }
+  };
+
+  /** Подложить включаемый файл (клон Git-репозитория) и переанализировать. */
+  async function pickInclude(targetAppId: string, path: string) {
+    const file = await window.qa.openDialog();
+    if (!file) return;
+    try {
+      const content = await window.qa.readTextFile(file);
+      const next = { ...includesFor(targetAppId), [path]: content };
+      localStorage.setItem(`qa.includes.${targetAppId}`, JSON.stringify(next));
+      showToast(`Включение подложено: ${file.split(/[\\/]/).pop()}`);
+      await analyzeSelected(targetAppId);
+    } catch (err) {
+      showToast(`Не удалось прочитать файл: ${String(err)}`);
+    }
+  }
+
   async function analyzeSelected(targetId?: string) {
     const target = targetId ?? appId;
     if (!target) return;
     setBusy('Анализ приложения…');
     setAnalyzeStage(null);
     try {
-      const res = await window.qa.analyzeApp({ ...conn, appId: target, platform });
+      const res = await window.qa.analyzeApp({ ...conn, appId: target, platform, includes: includesFor(target) });
       setAnalysis(res);
       // ТЗ «Оценка»: вкладка «Оценка» открывается автоматически после анализа.
       setTab('score');
@@ -1291,7 +1317,11 @@ export default function App() {
       )}
 
       {tab === 'script' && (
-        <ScriptTab analysis={analysis} />
+        <ScriptTab
+          analysis={analysis}
+          includesMap={includesFor(analysis?.appId ?? appId)}
+          onPickInclude={(path) => void pickInclude(analysis?.appId ?? appId, path)}
+        />
       )}
 
       {tab === 'refactor' && (
