@@ -1011,6 +1011,28 @@ table.rq tr.pat { cursor: pointer; }
 .tailcard .trow { display: flex; gap: 12px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
 .tailcard .trow:last-of-type { border-bottom: none; }
 .tailcard .trow b { min-width: 56px; text-align: right; font-size: 1.05rem; }
+
+/* Тепловые ячейки «Оценок по доменам»: заливка цветом зоны, как в примере. */
+.heat {
+  display: inline-block; min-width: 44px; padding: 4px 10px;
+  border-radius: 8px; text-align: center; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.heat.r {
+  background: color-mix(in srgb, var(--danger) 26%, transparent);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 38%, transparent);
+}
+.heat.y {
+  background: color-mix(in srgb, var(--warn, #e0a33e) 24%, transparent);
+  color: var(--warn, #e0a33e);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn, #e0a33e) 36%, transparent);
+}
+.heat.g {
+  background: color-mix(in srgb, var(--success) 22%, transparent);
+  color: var(--success);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 34%, transparent);
+}
 .scorehero-counts .num.err { color: var(--danger); }
 .scorehero-counts .num.warn { color: var(--warning); }
 .howformula { margin: 8px 0 0; }

@@ -186,3 +186,10 @@ test('App: один отмеченный отсчёт — полный анал�
   assert.ok(APP.includes('if (appIds && appIds.length === 1)'), 'нет делегирования одиночного выбора');
   assert.ok(APP.includes('await analyzeSelected(appIds[0])'), 'одиночный выбор не идёт в полный анализ');
 });
+
+test('SummaryTab: тепловые ячейки «Оценок по доменам» (заливка зоны)', () => {
+  const SUMMARY_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'SummaryTab.tsx'), 'utf8');
+  assert.ok(SUMMARY_TAB.includes('className={`heat ${zoneOf'), 'ячейки не залиты цветом зоны');
+  assert.ok(/\.heat\.r \{[^}]*background: color-mix/s.test(STYLES), 'нет заливки красной зоны');
+  assert.ok(/\.heat\.g \{[^}]*var\(--success\)/s.test(STYLES), 'нет заливки зелёной зоны');
+});

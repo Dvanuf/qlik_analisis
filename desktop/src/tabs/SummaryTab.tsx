@@ -437,14 +437,14 @@ export default function SummaryTab(props: Props) {
               return (
                 <tr key={r.appId} className="clickable" onClick={() => onAnalyzeApp(r.appId)}>
                   <td style={{ textAlign: 'left' }}><b>{r.title}</b></td>
-                  <td><span className={`pill ${zoneOf(r.summary?.score ?? 100)}`}>{r.summary?.score ?? '—'}</span></td>
+                  <td><span className={`heat ${zoneOf(r.summary?.score ?? 100)}`}>{r.summary?.score ?? '—'}</span></td>
                   {DOMAIN_ORDER.map((id) => {
                     const v = v2Info(r).domains?.[id]?.score;
                     return (
                       <td key={id}>
                         {v == null
                           ? <span className="muted">—</span>
-                          : <span className={`pill ${zoneOf(v)}`}>{v}</span>}
+                          : <span className={`heat ${zoneOf(v)}`}>{v}</span>}
                       </td>
                     );
                   })}
@@ -454,10 +454,10 @@ export default function SummaryTab(props: Props) {
             })}
             <tr>
               <td style={{ textAlign: 'left' }}><b>Среднее по группе</b></td>
-              <td><span className={`pill ${group.avg == null ? 'mute' : zoneOf(group.avg)}`}>{group.avg ?? '—'}</span></td>
+              <td><span className={`heat ${group.avg == null ? 'g' : zoneOf(group.avg)}`}>{group.avg ?? '—'}</span></td>
               {DOMAIN_ORDER.map((id) => {
                 const v = domainAvgs[id];
-                return <td key={id}>{v == null ? <span className="muted">—</span> : <span className={`pill ${zoneOf(v)}`}>{v}</span>}</td>;
+                return <td key={id}>{v == null ? <span className="muted">—</span> : <span className={`heat ${zoneOf(v)}`}>{v}</span>}</td>;
               })}
               <td>{monthChange == null ? '—' : monthChange > 0 ? `+${monthChange}` : monthChange}</td>
             </tr>
