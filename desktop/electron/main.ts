@@ -1556,30 +1556,39 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     }
     // Папка репозитория: include-файлы ищутся по имени автоматически.
     const repoFolder = incOpts.repoFolder;
+    if (repoFolder) {
+      // Обновляем клон из Git перед анализом: клонирование — один раз,
+      // дальше только pull (быстро, без терминала). Сбой сети не мешает:
+      // анализируем то, что есть локально.
+      try {
+        const { execFile } = await import('node:child_process');
+        const { promisify } = await import('node:util');
+        const { stdout } = await promisify(execFile)('git', ['-C', repoFolder, 'pull', '--ff-only'], { timeout: 20000 });
+        if (stdout.trim()) includeNotes.push(`git pull: ${stdout.trim().split('\n')[0].slice(0, 120)}`);
+      } catch (err) {
+        includeNotes.push(`git pull не выполнен: ${String((err as Error).message ?? err).slice(0, 140)}`);
+      }
+    }
     const repoFiles = repoFolder ? walkScriptFiles(repoFolder) : [];
     // Пути подключений из QRS: если файл виден с этой машины (общий ресурс),
     // включение читается само — папку репозитория указывать не нужно.
+    // QRS доступен и без сертификатов: сессия хаба работает через прокси
+    // (/qrs по cookie сессии), сертификаты 4242 — запасной путь.
     const qrsSettings_ = qrsSettings();
-    let qrsConnection: ((name: string) => Promise<{ ok: boolean; path?: string; note: string }>) | null = null;
-    if (!qrsSettings_?.host) {
-      // Без QRS путь подключения не запрашивается — не оставляем пользователя
-      // в неведении: почему include не раскрылся сам.
-      includeNotes.push('QRS не настроен (Подключение → репозиторий): путь подключения не запрашивается. Укажите папку репозитория — включения раскроются из клона Git.');
-    }
-    if (qrsSettings_?.host) {
-      const { fetchQrsConnectionPath } = await import('../../src/extract/qrs.js');
-      const cache = new Map<string, { ok: boolean; path?: string; note: string }>();
-      qrsConnection = async (name: string) => {
-        if (!cache.has(name)) {
-          cache.set(name, await fetchQrsConnectionPath({
-            host: qrsSettings_.host, name,
-            port: qrsSettings_.port, certPath: qrsSettings_.certPath,
-            keyPath: qrsSettings_.keyPath,
-          }));
-        }
-        return cache.get(name)!;
-      };
-    }
+    const hubHost = (() => { try { return new URL(opts.url).hostname; } catch { return ''; } })();
+    const { fetchQrsConnectionPath } = await import('../../src/extract/qrs.js');
+    const cache = new Map<string, { ok: boolean; path?: string; note: string }>();
+    const qrsConnection = async (name: string) => {
+      if (!cache.has(name)) {
+        cache.set(name, await fetchQrsConnectionPath({
+          host: hubHost || qrsSettings_?.host || '', name,
+          port: qrsSettings_?.port, certPath: qrsSettings_?.certPath,
+          keyPath: qrsSettings_?.keyPath,
+          cookie: opts.cookie, xrfKey: opts.xrfKey,
+        }));
+      }
+      return cache.get(name)!;
+    };
     let cur = graph.script as string;
     for (let iter = 0; iter < 6; iter += 1) {
       for (const inc of parseIncludeLines(cur)) {

@@ -255,34 +255,56 @@ export async function fetchQrsVersion({
  *
  * @param {{ host?: string, name?: string, port?: number|string,
  *   certPath?: string, certPassword?: string, keyPath?: string,
- *   insecure?: boolean }} options
+ *   insecure?: boolean, cookie?: string, xrfKey?: string }} options
  * @returns {Promise<{ok: boolean, path?: string, note: string}>}
  */
 export async function fetchQrsConnectionPath({
   host, name, port = QRS_PORT, certPath, certPassword, keyPath, insecure = true,
+  cookie, xrfKey,
 } = {}) {
-  const base = qrsBase({ host, port });
-  if (!base) return { ok: false, note: 'не задан хост репозитория QRS' };
   if (!name) return { ok: false, note: 'не задано имя подключения' };
-  const cert = readQrsCertificate({ certPath, certPassword, keyPath });
-  if (cert.note) return { ok: false, note: cert.note };
-
   const filter = encodeURIComponent(`Name eq '${name}'`);
-  const target = `${base}/qrs/dataconnection?filter=${filter}`;
-  try {
-    const payload = await httpGetJson(target, {
-      insecure,
-      pfx: cert.pfx,
-      passphrase: cert.passphrase,
-      cert: cert.cert,
-      key: cert.key,
-    });
-    const list = Array.isArray(payload) ? payload : [];
-    if (!list.length) return { ok: false, note: `подключение «${name}» в QRS не найдено` };
-    const path = String(list[0]?.qConnectionString ?? list[0]?.connectionString ?? '').trim();
-    if (!path) return { ok: false, note: `подключение «${name}» без пути` };
-    return { ok: true, path, note: `${maskUrl(target)} → путь получен` };
-  } catch (err) {
-    return { ok: false, note: String(err?.message ?? err) };
+  const attempts = [];
+
+  // Путь 1: через прокси по сессии хаба — тот же вход, что у QMC в браузере.
+  // Сертификаты не нужны: аутентификация cookie сессии + XrfKey.
+  if (cookie && host) {
+    const xrf = xrfKey || 'qlikanalyzer1';
+    const target = `https://${host}/qrs/dataconnection?filter=${filter}&xrfkey=${xrf}`;
+    attempts.push({ target, headers: { Cookie: cookie, 'X-Qlik-Xrfkey': xrf }, tls: {} });
   }
+
+  // Путь 2: напрямую в QRS по клиентскому сертификату (порт 4242).
+  const base = qrsBase({ host, port });
+  if (base) {
+    const cert = readQrsCertificate({ certPath, certPassword, keyPath });
+    if (!cert.note) {
+      attempts.push({
+        target: `${base}/qrs/dataconnection?filter=${filter}`,
+        headers: {},
+        tls: { pfx: cert.pfx, passphrase: cert.passphrase, cert: cert.cert, key: cert.key },
+      });
+    }
+  }
+
+  if (!attempts.length) {
+    return { ok: false, note: 'ни сессии хаба, ни настроенного QRS — путь подключения не получить' };
+  }
+
+  const notes = [];
+  for (const a of attempts) {
+    try {
+      const payload = await httpGetJson(a.target, {
+        insecure, headers: a.headers, ...a.tls,
+      });
+      const list = Array.isArray(payload) ? payload : [];
+      if (!list.length) return { ok: false, note: `подключение «${name}» в QRS не найдено` };
+      const path = String(list[0]?.qConnectionString ?? list[0]?.connectionString ?? '').trim();
+      if (!path) return { ok: false, note: `подключение «${name}» без пути` };
+      return { ok: true, path, note: `${maskUrl(a.target)} → путь получен` };
+    } catch (err) {
+      notes.push(`${maskUrl(a.target)} → ${String(err?.message ?? err).slice(0, 120)}`);
+    }
+  }
+  return { ok: false, note: notes.join('; ') };
 }

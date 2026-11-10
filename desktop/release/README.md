@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.23.3 | [v0.23.3 — QRS по сессии хаба (без сертификатов), авто-pull клона перед анализом](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.3) |
 | 0.23.2 | [v0.23.2 — явная диагностика «QRS не настроен» в блоке включений](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.2) |
 | 0.23.1 | [v0.23.1 — include-файлы: путь подключения из QRS, авточтение при доступном ресурсе](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.1) |
 | 0.23.0 | [v0.23.0 — раскрытие включаемых файлов: анализ скриптов-заглушек $(Must_Include)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.0) |
