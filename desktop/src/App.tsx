@@ -576,12 +576,13 @@ export default function App() {
     setBusy('');
   }
 
-  async function analyzeSelected() {
-    if (!appId) return;
+  async function analyzeSelected(targetId?: string) {
+    const target = targetId ?? appId;
+    if (!target) return;
     setBusy('Анализ приложения…');
     setAnalyzeStage(null);
     try {
-      const res = await window.qa.analyzeApp({ ...conn, appId, platform });
+      const res = await window.qa.analyzeApp({ ...conn, appId: target, platform });
       setAnalysis(res);
       // ТЗ «Оценка»: вкладка «Оценка» открывается автоматически после анализа.
       setTab('score');
@@ -620,6 +621,12 @@ export default function App() {
 
   /** Пакетный анализ: всех приложений сервера или только выбранных. */
   async function analyzeAll(appIds?: string[]) {
+    // Один отмеченный отсчёт — это полный анализ приложения с вкладкой
+    // «Оценка», а не пакет: сводный отчёт для него пуст и вводит в заблуждение.
+    if (appIds && appIds.length === 1) {
+      await analyzeSelected(appIds[0]);
+      return;
+    }
     setBatchRunning(true);
     setBatchProgress(null);
     setBusy('Пакетный анализ запущен…');

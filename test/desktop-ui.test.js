@@ -177,7 +177,12 @@ test('styles.css: рельса без «пустых» групп, иконки 
   // Регрессия 0.22.2: свёрнутые группы в рельсе оставляли «пустые» линии,
   // кнопка разворота уезжала вправо (margin-left:auto), иконки мелкие.
   assert.ok(STYLES.includes('.menu.is-collapsed .group.is-closed .group__list { display: flex; }'), 'группы в рельсе не раскрыты');
-  assert.ok(/\.menu\.is-collapsed \.menu__toggle \{ position: static; margin-left: 0; \}/.test(STYLES), 'кнопка рельсы уезжает вправо');
+  assert.ok(/\.menu\.is-collapsed \.menu__toggle \{[^}]*width: calc\(100% - 16px\)/s.test(STYLES), 'кнопка рельсы не на всю строку');
   assert.ok(/\.nav-item svg \{[^}]*width: 18px/s.test(STYLES), 'иконки не увеличены');
   assert.ok(/\.nav-item \{[^}]*font-size: clamp/s.test(STYLES), 'шрифт пунктов не адаптивный');
+});
+
+test('App: один отмеченный отсчёт — полный анализ с «Оценкой», не пакет', () => {
+  assert.ok(APP.includes('if (appIds && appIds.length === 1)'), 'нет делегирования одиночного выбора');
+  assert.ok(APP.includes('await analyzeSelected(appIds[0])'), 'одиночный выбор не идёт в полный анализ');
 });

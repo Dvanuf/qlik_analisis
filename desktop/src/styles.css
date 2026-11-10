@@ -596,12 +596,19 @@ p.small, .small { font-size: 0.75rem; }
 .menu.is-collapsed .nav-item__label,
 .menu.is-collapsed .nav-item__badge,
 .menu.is-collapsed .menu__foot span:last-child { display: none; }
-/* Рельса: логотип по центру, кнопка разворота — под ним, колонкой. */
+/* Рельса: логотип по центру, кнопка разворота — отдельной строкой на всю
+   ширину рельсы (как пункт меню, без наездов на соседние элементы). */
 .menu.is-collapsed .menu__head {
   padding: 12px 0 6px; justify-content: center;
-  flex-direction: column; gap: 8px;
+  flex-direction: column; gap: 6px;
 }
-.menu.is-collapsed .menu__toggle { position: static; margin-left: 0; }
+.menu.is-collapsed .menu__toggle {
+  position: static; margin: 0 auto;
+  width: calc(100% - 16px); height: 36px;
+  display: grid; place-items: center;
+  border-radius: 8px;
+}
+.menu.is-collapsed .menu__toggle:hover { background: var(--panel); color: var(--text); }
 .menu.is-collapsed .group { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); }
 .menu.is-collapsed .group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 /* В рельсе группы всегда раскрыты: свёрнутая группа — «пустая» линия. */
