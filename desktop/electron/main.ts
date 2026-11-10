@@ -1561,6 +1561,11 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     // включение читается само — папку репозитория указывать не нужно.
     const qrsSettings_ = qrsSettings();
     let qrsConnection: ((name: string) => Promise<{ ok: boolean; path?: string; note: string }>) | null = null;
+    if (!qrsSettings_?.host) {
+      // Без QRS путь подключения не запрашивается — не оставляем пользователя
+      // в неведении: почему include не раскрылся сам.
+      includeNotes.push('QRS не настроен (Подключение → репозиторий): путь подключения не запрашивается. Укажите папку репозитория — включения раскроются из клона Git.');
+    }
     if (qrsSettings_?.host) {
       const { fetchQrsConnectionPath } = await import('../../src/extract/qrs.js');
       const cache = new Map<string, { ok: boolean; path?: string; note: string }>();
