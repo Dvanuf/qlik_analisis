@@ -172,3 +172,12 @@ test('ScoreTab: обращения до раннего выхода — optional
   assert.ok(SCORE_TAB.includes('| null)?.ruleStats ?? []'), 'ruleStats читается без защиты от null');
   assert.ok(SCORE_TAB.includes('summary?.findings?.bySeverity'), 'bySeverity без второй optional-цепочки');
 });
+
+test('styles.css: рельса без «пустых» групп, иконки 18, кнопка по центру', () => {
+  // Регрессия 0.22.2: свёрнутые группы в рельсе оставляли «пустые» линии,
+  // кнопка разворота уезжала вправо (margin-left:auto), иконки мелкие.
+  assert.ok(STYLES.includes('.menu.is-collapsed .group.is-closed .group__list { display: flex; }'), 'группы в рельсе не раскрыты');
+  assert.ok(/\.menu\.is-collapsed \.menu__toggle \{ position: static; margin-left: 0; \}/.test(STYLES), 'кнопка рельсы уезжает вправо');
+  assert.ok(/\.nav-item svg \{[^}]*width: 18px/s.test(STYLES), 'иконки не увеличены');
+  assert.ok(/\.nav-item \{[^}]*font-size: clamp/s.test(STYLES), 'шрифт пунктов не адаптивный');
+});

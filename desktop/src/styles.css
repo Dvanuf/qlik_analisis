@@ -513,7 +513,7 @@ p.small, .small { font-size: 0.75rem; }
   width: 100%; display: flex; align-items: center;
   padding: 6px 8px; border: 0; border-radius: 7px; background: 0 0; cursor: pointer;
   color: var(--muted); font-family: inherit;
-  font-size: 0.71875rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase;
+  font-size: clamp(0.625rem, 0.25vw + 0.5625rem, 0.71875rem); font-weight: 650; letter-spacing: .1em; text-transform: uppercase;
 }
 .group__head:hover { color: var(--text); }
 .group__head::after {
@@ -530,10 +530,10 @@ p.small, .small { font-size: 0.75rem; }
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border: 0; border-radius: 8px;
   background: transparent; color: var(--fw);
-  font: inherit; font-size: 0.9375rem; text-align: left; cursor: pointer;
+  font: inherit; font-size: clamp(0.8125rem, 0.35vw + 0.75rem, 0.9375rem); text-align: left; cursor: pointer;
   transition: background .14s, color .14s;
 }
-.nav-item svg { flex: 0 0 16px; color: var(--muted); transition: color .14s; }
+.nav-item svg { flex: 0 0 18px; width: 18px; height: 18px; color: var(--muted); transition: color .14s; }
 .nav-item:hover { background: var(--panel); color: var(--text); }
 .nav-item:hover svg { color: var(--text); }
 .nav-item:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: -2px; }
@@ -601,9 +601,11 @@ p.small, .small { font-size: 0.75rem; }
   padding: 12px 0 6px; justify-content: center;
   flex-direction: column; gap: 8px;
 }
-.menu.is-collapsed .menu__toggle { position: static; }
+.menu.is-collapsed .menu__toggle { position: static; margin-left: 0; }
 .menu.is-collapsed .group { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); }
 .menu.is-collapsed .group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+/* В рельсе группы всегда раскрыты: свёрнутая группа — «пустая» линия. */
+.menu.is-collapsed .group.is-closed .group__list { display: flex; }
 .menu.is-collapsed .nav-item { justify-content: center; padding: 9px 0; }
 .menu.is-collapsed .nav-item.is-active::before { display: none; }
 .menu.is-collapsed .menu__foot { justify-content: center; }
