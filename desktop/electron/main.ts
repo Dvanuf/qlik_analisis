@@ -83,6 +83,14 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
+  // Падение процесса рендера (в т.ч. из-за устаревшего Code Cache после
+  // обновления) делало окно пустым — перезагружаем содержимое.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    if (details.reason !== 'clean-exit') {
+      mainWindow?.webContents.reload();
+    }
+  });
+
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -101,6 +109,11 @@ app.whenReady().then(() => {
 async function runSmokeCheck(): Promise<void> {
   const win = mainWindow;
   if (!win) return;
+  // Ошибки рендера: падение любой вкладки делает окно пустым — фиксируем.
+  const consoleErrors: string[] = [];
+  win.webContents.on('console-message', (_e, level, message) => {
+    if (level >= 2) consoleErrors.push(message.slice(0, 300));
+  });
   win.webContents.once('did-finish-load', () => {
     void (async () => {
       try {
@@ -263,6 +276,43 @@ async function runSmokeCheck(): Promise<void> {
             });
           })()
         `);
+
+        // Загружаем полный анализ (smoke-перехват) и открываем «Оценку».
+        await win.webContents.executeJavaScript(`
+          (function () {
+            return window.qa.analyzeApp({
+              url: 'wss://smoke.invalid/app/smoke-fixture', appId: 'smoke-fixture', platform: 'qlik-sense',
+            }).then(function (r) { return JSON.stringify({ ok: true, score: r.summary && r.summary.score }); })
+              .catch(function (e) { return JSON.stringify({ ok: false, error: String(e) }); });
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 600));
+
+        // Вкладка «Оценка»: аналитическая карточка на реальном анализе.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
+              .filter(function (b) { return b.textContent.indexOf('Оценка') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 700));
+        const scoreTab = await win.webContents.executeJavaScript(`
+          (function () {
+            return JSON.stringify({
+              tiles: document.querySelectorAll('.scoretiles .tile').length,
+              comp: document.querySelectorAll('.comp-track i').length,
+              domRows: document.querySelectorAll('table.findings tbody tr').length,
+              tail: document.querySelectorAll('.tailcard .trow').length,
+              heroHead: ((document.querySelector('.scorehero .verdict') || {}).textContent || '').slice(0, 80),
+            });
+          })()
+        `);
+        const scoreParsed = JSON.parse(String(scoreTab)) as { tiles: number; comp: number; heroHead: string };
+        if (!scoreParsed.tiles || !scoreParsed.heroHead) {
+          throw new Error(`Вкладка «Оценка» не отрисовалась: ${String(scoreTab)}; ошибки консоли: ${consoleErrors.join(' | ').slice(0, 800)}`);
+        }
 
         // Вкладка «Скрипт загрузки»: строки с номерами и находки.
         await win.webContents.executeJavaScript(`
@@ -512,6 +562,8 @@ async function runSmokeCheck(): Promise<void> {
           aiSettings: JSON.parse(String(aiSettings)),
           aiPrompt: aiPromptParsed,
           aiChat: aiChatParsed,
+          scoreTab: scoreParsed,
+          consoleErrors: consoleErrors.slice(0, 5),
           fontScale: fontParsed,
           screenshot: resolve(out, 'smoke.png'),
         }, null, 2));
@@ -1444,6 +1496,37 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   const sendProgress = (stage: string, detail?: string) => {
     mainWindow?.webContents.send('analyze:progress', { stage, detail, appId: opts.appId });
   };
+  // Smoke: appId=smoke-fixture → синтетический v2-анализ (домены, топ-5,
+  // хвост) без сервера — проверка вкладки «Оценка» на полных данных.
+  if (process.env.QA_SMOKE && opts.appId === 'smoke-fixture') {
+    const dom = (score: number, findings: number, word: string, verdict: string) => ({ score, findings, word, verdict });
+    return {
+      appName: 'Smoke Fixture', appId: 'smoke-fixture', script: 'LOAD * FROM x;',
+      summary: {
+        score: 10, verdict: 'Критично', forecast: 60, candidates: 217,
+        domains: {
+          model: dom(44, 20, 'слабо', 'Критично'),
+          script: dom(66, 0, 'средне', 'Требует внимания'),
+          dash: dom(90, 0, 'отлично', 'Хорошо'),
+          expr: dom(70, 3, 'средне', 'Требует внимания'),
+          vars: dom(100, 0, 'отлично', 'Отлично'),
+          conn: dom(90, 0, 'отлично', 'Хорошо'),
+        },
+        top: [
+          { ruleId: 'R001', title: 'Неиспользуемое поле', severity: 'warning', domain: 'model', count: 2, gain: 20, hasFix: true },
+          { ruleId: 'Q002', title: 'Ссылка на несуществующее поле', severity: 'error', domain: 'expr', count: 3, gain: 10, hasFix: false },
+        ],
+        findings: { total: 227, byCategory: {}, bySeverity: { error: 3, warning: 23, info: 201 }, merged: [], suppressed: [] },
+        scoreDetails: { formula: 'smoke' },
+      },
+      findings: [], patch: { script: '' }, ruleStats: [
+        { id: 'R001', domain: 'model', skipped: false },
+        { id: 'S002', domain: 'script', skipped: true },
+        { id: 'R018', domain: 'dash', skipped: true },
+      ],
+      dataModel: [],
+    } as never;
+  }
   sendProgress('connect', 'Подключение к движку');
   const graph = await extractFromEngine({
     onProgress: (p: { stage: string; detail?: string }) => sendProgress(p.stage, p.detail),
