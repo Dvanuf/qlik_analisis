@@ -86,13 +86,15 @@ export default function ScoreTab(props: Props) {
   }, [domains]);
 
   // --- Аналитическая карточка: состав находок, план, хвост ---
-  const sev = summary?.findings.bySeverity ?? {};
+  const sev = summary?.findings?.bySeverity ?? {};
   const counts = {
     error: sev.error ?? 0, warning: sev.warning ?? 0, info: sev.info ?? 0,
   };
   const totalFindings = counts.error + counts.warning + counts.info;
   const infoShare = totalFindings ? Math.round((counts.info / totalFindings) * 100) : 0;
-  const ruleStats = (analysis as { ruleStats?: { skipped: boolean; domain?: string }[] }).ruleStats ?? [];
+  // analysis бывает null (вкладка открыта до анализа) — все обращения до
+  // раннего выхода только через optional chaining.
+  const ruleStats = (analysis as { ruleStats?: { skipped: boolean; domain?: string }[] } | null)?.ruleStats ?? [];
   const skippedCount = ruleStats.filter((st) => st.skipped).length;
 
   /** Заголовок-вывод: почему балл такой, одним предложением. */

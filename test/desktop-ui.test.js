@@ -164,3 +164,11 @@ test('ScoreTab: аналитическая карточка по макету', 
   assert.ok(SCORE_TAB.includes('задачи перезагрузки'), 'нет футера-предупреждения');
   assert.ok(!SCORE_TAB.includes('scorehero-counts'), 'старые счётчики не убраны');
 });
+
+test('ScoreTab: обращения до раннего выхода — optional chaining (null-анализ не падает)', () => {
+  // Регрессия 0.22.1: клик «Оценка» до анализа делал пустое окно —
+  // analysis.ruleStats читался до проверки if (!analysis).
+  const SCORE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ScoreTab.tsx'), 'utf8');
+  assert.ok(SCORE_TAB.includes('| null)?.ruleStats ?? []'), 'ruleStats читается без защиты от null');
+  assert.ok(SCORE_TAB.includes('summary?.findings?.bySeverity'), 'bySeverity без второй optional-цепочки');
+});
