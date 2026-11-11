@@ -16,6 +16,7 @@ import { DEFAULT_SCORING, normalizeScoring } from '../score/index.js';
 /** Настройки форматирования «Улучшенного скрипта» по умолчанию. */
 export const DEFAULT_FORMATTING = {
   indent: 4, cleanSpaces: true, alignAs: false, extraBlocks: [],
+  commaStyle: 'leading', maxDepth: 8, oneFieldPerLine: true,
 };
 
 /** Приводит раздел formatting к допустимому виду (битый/частичный — к дефолту). */
@@ -29,6 +30,10 @@ function sanitizeFormatting(raw) {
   if (Array.isArray(raw.extraBlocks)) {
     out.extraBlocks = raw.extraBlocks.map((x) => String(x).trim()).filter(Boolean).slice(0, 20);
   }
+  if (raw.commaStyle === 'leading' || raw.commaStyle === 'trailing') out.commaStyle = raw.commaStyle;
+  const maxDepth = Number(raw.maxDepth);
+  if (Number.isFinite(maxDepth)) out.maxDepth = Math.min(64, Math.max(2, Math.round(maxDepth)));
+  if (typeof raw.oneFieldPerLine === 'boolean') out.oneFieldPerLine = raw.oneFieldPerLine;
   return out;
 }
 

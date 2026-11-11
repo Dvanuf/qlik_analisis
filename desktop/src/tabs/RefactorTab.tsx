@@ -13,7 +13,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
 import { computeScore } from '../../../src/score/index.js';
-import { formatScript, formatRulesDoc } from '../../../src/script/format.js';
+import { formatScriptDetailed, formatRulesDoc } from '../../../src/script/format.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
 import type { AnalysisResult, RefactorChange, RulesConfig } from '../types.js';
 
@@ -114,10 +114,11 @@ export default function RefactorTab(props: Props) {
     () => (rulesConfig as { rules?: { formatting?: Record<string, unknown> } } | null)?.rules?.formatting ?? {},
     [rulesConfig],
   );
-  const shown = useMemo(
-    () => (formatOn ? formatScript(proposed, fmtOpts) : proposed),
+  const fmt = useMemo(
+    () => (formatOn ? formatScriptDetailed(proposed, fmtOpts) : { script: proposed, warnings: [] }),
     [proposed, formatOn, fmtOpts],
   );
+  const shown = fmt.script;
   const rightLines = useMemo(() => shown.split(/\r?\n/), [shown]);
 
   const anchorLines = useMemo(
@@ -374,6 +375,15 @@ export default function RefactorTab(props: Props) {
             Как форматируется
           </button>
         </div>
+
+        {fmt.warnings.length > 0 && (
+          <div className="fmtdoc" role="alert">
+            <b>Предупреждения форматирования</b>
+            <ul className="warn">
+              {fmt.warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </div>
+        )}
 
         {howFmt && (
           <div className="fmtdoc">

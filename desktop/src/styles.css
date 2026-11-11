@@ -1017,6 +1017,8 @@ table.rq tr.pat { cursor: pointer; }
 }
 .fmtdoc ul { margin: 6px 0 0; padding-left: 18px; }
 .fmtdoc li { padding: 2px 0; font-size: 0.8125rem; color: var(--text); }
+.fmtdoc li:has(+ b), .fmtdoc b { color: var(--warn, #e0a33e); }
+.fmtdoc ul.warn li { color: var(--warn, #e0a33e); }
 
 /* Агрегированный план топ-5. */
 .planbox { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 4px; }

@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.24.1 | [v0.24.1 — форматтер v2 по спецификации QVS: маскирование, стек с типами, LOAD-поля с ведущими запятыми, предупреждения](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.24.1) |
 | 0.24.0 | [v0.24.0 — правила форматирования видны в приложении и настраиваются](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.24.0) |
 | 0.23.3 | [v0.23.3 — QRS по сессии хаба (без сертификатов), авто-pull клона перед анализом](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.3) |
 | 0.23.2 | [v0.23.2 — явная диагностика «QRS не настроен» в блоке включений](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.23.2) |

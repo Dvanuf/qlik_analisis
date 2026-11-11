@@ -145,7 +145,7 @@ test('App: аватар удалён, платформа показываетс�
 });
 
 test('RefactorTab: форматирование и синхронная прокрутка панелей', () => {
-  assert.ok(REFACTOR_TAB.includes("formatScript(proposed, fmtOpts)"), 'форматирование не подключено');
+  assert.ok(REFACTOR_TAB.includes("formatScriptDetailed(proposed, fmtOpts)"), 'форматирование не подключено');
   assert.ok(REFACTOR_TAB.includes('setFormatOn'), 'нет тумблера формата');
   assert.ok(REFACTOR_TAB.includes('setSyncScroll'), 'нет тумблера прокрутки');
   assert.ok(REFACTOR_TAB.includes('syncFrom'), 'нет синхронной прокрутки');
