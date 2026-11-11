@@ -612,11 +612,10 @@ export default function ConnectTab(props: Props) {
               <thead>
                 <tr>
                   <th style={{ width: 64 }} title="Отметить для анализа">Выбор</th>
-                  <th style={{ width: 64 }} title="Пакетный анализ">Пакет</th>
                   <th>Приложение</th>
                   <th style={{ width: 90 }}>Размер</th>
                   <th style={{ width: 170 }}>Поток</th>
-                  <th style={{ width: 260 }}>Тэги</th>
+                  <th style={{ width: 170 }}>Владелец</th>
                   <th style={{ width: 130 }}>Вид</th>
                   <th style={{ width: 110 }} title="Последняя оценка из истории прогонов">Оценка</th>
                 </tr>
@@ -638,15 +637,15 @@ export default function ConnectTab(props: Props) {
                         aria-label={`Выбрать ${a.title} для пакетного анализа`}
                       />
                     </td>
-                    <td style={{ fontWeight: a.id === appId ? 600 : 400 }}>
+                    <td style={{ fontWeight: selectedIds.includes(a.id) ? 600 : 400 }}>
                       {a.title}
-                      {a.id === appId ? (
-                        <span className="pill ok" style={{ marginLeft: 8 }}>будет проанализировано</span>
+                      {selectedIds.includes(a.id) ? (
+                        <span className="pill ok" style={{ marginLeft: 8 }}>выбрано</span>
                       ) : null}
                     </td>
                     <td className="hint">{a.size ? `${(a.size / 1048576).toFixed(1).replace('.', ',')} МБ` : '—'}</td>
                     <td className="hint">{a.stream || '—'}</td>
-                    <td className="hint">{(a.tags ?? []).join(', ') || '—'}</td>
+                    <td className="hint">{a.owner || '—'}</td>
                     <td>
                       <span className={`pill ${a.published === true ? 'ok' : 'mute'}`}>
                         {a.published === true ? 'опубликовано' : 'личное'}

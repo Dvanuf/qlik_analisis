@@ -209,3 +209,24 @@ test('RefactorTab: правила форматирования видны и н�
   assert.ok(REFACTOR_TAB.includes('rulesConfig?: RulesConfig | null'), 'rulesConfig не передан в RefactorTab');
   assert.ok(APP.includes('rulesConfig={rulesConfig}'), 'App не передаёт rulesConfig');
 });
+
+test('ConnectTab: таблица — Владелец на месте, Тэги убраны, шапка и ячейки совпадают', () => {
+  const CONNECT_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ConnectTab.tsx'), 'utf8');
+  assert.ok(CONNECT_TAB.includes('>Владелец</th>'), 'нет столбца Владелец');
+  assert.ok(!CONNECT_TAB.includes('>Тэги</th>'), 'столбец Тэги остался');
+  assert.ok(CONNECT_TAB.includes("{a.owner || '—'}"), 'нет ячейки владельца');
+  assert.ok(!CONNECT_TAB.includes("(a.tags ?? []).join"), 'ячейка тэгов осталась');
+  // Шапка таблицы приложений: 8 колонок — столько же ячеек в строке.
+  // Шапка таблицы приложений: точная последовательность колонок.
+  const heads = [...CONNECT_TAB.matchAll(/<thead>([\s\S]*?)<\/thead>/g)].map((m) => m[1]);
+  const appsHead = heads.find((h) => h.includes('Владелец'));
+  assert.ok(appsHead, 'нет шапки с Владельцем');
+  const names = [...appsHead.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1].trim());
+  assert.deepEqual(names, ['Выбор', 'Приложение', 'Размер', 'Поток', 'Владелец', 'Вид', 'Оценка']);
+  // Первая строка после этой шапки: 8 ячеек с владельцем и видом.
+  const afterHead = CONNECT_TAB.indexOf(appsHead) + appsHead.length;
+  const row = CONNECT_TAB.slice(CONNECT_TAB.indexOf('<tr', afterHead), CONNECT_TAB.indexOf('</tr>', afterHead));
+  assert.equal((row.match(/<td/g) || []).length, 7, 'в строке не 7 ячеек');
+  assert.ok(row.includes("a.owner || '—'"), 'нет ячейки владельца');
+  assert.ok(row.includes('a.published === true'), 'нет ячейки вида');
+});

@@ -121,6 +121,8 @@ export default function RefactorTab(props: Props) {
     [proposed, formatOn, fmtOpts],
   );
   const shown = fmt.script;
+  // Форматирование включено, но текст не изменился — объясняем почему.
+  const fmtNoChange = formatOn && shown === proposed;
   const rightLines = useMemo(() => shown.split(/\r?\n/), [shown]);
 
   const anchorLines = useMemo(
@@ -377,6 +379,13 @@ export default function RefactorTab(props: Props) {
             Как форматируется
           </button>
         </div>
+
+        {fmtNoChange && (
+          <p className="hint" style={{ margin: '6px 0' }}>
+            Форматирование не изменило текст: в скрипте нет многострочных
+            LOAD/SELECT и блоков для выравнивания (или он уже отформатирован).
+          </p>
+        )}
 
         {fmt.warnings.length > 0 && (
           <div className="fmtdoc" role="alert">
