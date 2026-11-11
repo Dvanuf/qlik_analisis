@@ -1932,7 +1932,8 @@ ipcMain.handle('core:gitlab-config-save', async (_e, payload: Record<string, unk
       .filter((t) => t.project && t.folder)
       .slice(0, 20);
   }
-  cfg.enabled = payload.enabled === true;
+  // enabled меняется только явным значением; отсутствие поля не выключает.
+  if (typeof payload.enabled === 'boolean') cfg.enabled = payload.enabled === true;
   writeGitlabConfig(cfg);
   if (typeof payload.token === 'string') await saveGitlabToken(payload.token);
   const token = await loadGitlabToken();

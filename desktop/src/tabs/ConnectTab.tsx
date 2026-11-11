@@ -299,8 +299,9 @@ export default function ConnectTab(props: Props) {
       if (glToken.trim()) payload.token = glToken.trim();
       const saved = await window.qa.gitlabConfigSave(payload);
       setGlHasToken(saved.hasToken === true);
+      setGlEnabled(saved.enabled === true);
       setGlToken('');
-      setGlNote('Настройки GitLab сохранены.');
+      setGlNote(`Настройки GitLab сохранены. Авто-раскрытие: ${saved.enabled === true ? 'ВКЛ' : 'выключено'} (галочка выше).`);
     } catch (err) {
       setGlNote(`Не удалось сохранить: ${err instanceof Error ? err.message : String(err)}`);
     }
