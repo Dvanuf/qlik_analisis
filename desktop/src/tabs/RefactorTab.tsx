@@ -13,14 +13,16 @@
 import { useMemo, useRef, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
 import { computeScore } from '../../../src/score/index.js';
-import { formatScript } from '../../../src/script/format.js';
+import { formatScript, formatRulesDoc } from '../../../src/script/format.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
-import type { AnalysisResult, RefactorChange } from '../types.js';
+import type { AnalysisResult, RefactorChange, RulesConfig } from '../types.js';
 
 type Props = {
   analysis: AnalysisResult | null;
   /** Заметки об экспорте и ошибках — общий текст внизу окна. */
   onNote: (note: string) => void;
+  /** Настройки правил — источник раздела formatting. */
+  rulesConfig?: RulesConfig | null;
 };
 
 /** Ответ IPC core:ai-refactor. */
@@ -44,7 +46,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export default function RefactorTab(props: Props) {
-  const { analysis, onNote } = props;
+  const { analysis, onNote, rulesConfig } = props;
   const script = analysis?.script ?? '';
 
   // Выключенные правки: чекбоксы пересобирают предложенную версию.
@@ -60,6 +62,7 @@ export default function RefactorTab(props: Props) {
   // синхронная прокрутка панелей «было/стало».
   const [formatOn, setFormatOn] = useState(true);
   const [syncScroll, setSyncScroll] = useState(true);
+  const [howFmt, setHowFmt] = useState(false);
   const leftRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef(false);
@@ -106,9 +109,14 @@ export default function RefactorTab(props: Props) {
     });
     return (computeScore(remaining, { totalRows }) as { score: number }).score;
   }, [analysis, off]);
+  /** Настройки форматирования из rules.json (раздел formatting). */
+  const fmtOpts = useMemo(
+    () => (rulesConfig as { rules?: { formatting?: Record<string, unknown> } } | null)?.rules?.formatting ?? {},
+    [rulesConfig],
+  );
   const shown = useMemo(
-    () => (formatOn ? formatScript(proposed) : proposed),
-    [proposed, formatOn],
+    () => (formatOn ? formatScript(proposed, fmtOpts) : proposed),
+    [proposed, formatOn, fmtOpts],
   );
   const rightLines = useMemo(() => shown.split(/\r?\n/), [shown]);
 
@@ -357,7 +365,27 @@ export default function RefactorTab(props: Props) {
           >
             Синхронно
           </button>
+          <button
+            className={`small${howFmt ? ' on' : ''}`}
+            onClick={() => setHowFmt((v) => !v)}
+            aria-expanded={howFmt}
+            title="Показать правила форматирования"
+          >
+            Как форматируется
+          </button>
         </div>
+
+        {howFmt && (
+          <div className="fmtdoc">
+            <b>Как форматируется</b>
+            <ul>
+              {formatRulesDoc(fmtOpts).map((rule, i) => <li key={i}>{rule}</li>)}
+            </ul>
+            <p className="hint" style={{ margin: '6px 0 0' }}>
+              Правила настраиваются в rules.json (раздел formatting).
+            </p>
+          </div>
+        )}
 
         {aiLoading && (
           <div className="ailoading" role="status">

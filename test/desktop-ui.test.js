@@ -145,7 +145,7 @@ test('App: аватар удалён, платформа показываетс�
 });
 
 test('RefactorTab: форматирование и синхронная прокрутка панелей', () => {
-  assert.ok(REFACTOR_TAB.includes("formatScript(proposed)"), 'форматирование не подключено');
+  assert.ok(REFACTOR_TAB.includes("formatScript(proposed, fmtOpts)"), 'форматирование не подключено');
   assert.ok(REFACTOR_TAB.includes('setFormatOn'), 'нет тумблера формата');
   assert.ok(REFACTOR_TAB.includes('setSyncScroll'), 'нет тумблера прокрутки');
   assert.ok(REFACTOR_TAB.includes('syncFrom'), 'нет синхронной прокрутки');
@@ -201,4 +201,11 @@ test('ScriptTab: включаемые файлы — разметка и под�
   assert.ok(SCRIPT_TAB.includes('Включаемые файлы'), 'нет блока включений');
   assert.ok(APP2.includes('includes: includesFor(target)'), 'includes не передаются в анализ');
   assert.ok(APP2.includes('pickInclude'), 'нет подкладывания файла');
+});
+
+test('RefactorTab: правила форматирования видны и настраиваются', () => {
+  assert.ok(REFACTOR_TAB.includes('formatRulesDoc(fmtOpts)'), 'панель правил не из текущих настроек');
+  assert.ok(REFACTOR_TAB.includes('Как форматируется'), 'нет кнопки/панели правил');
+  assert.ok(REFACTOR_TAB.includes('rulesConfig?: RulesConfig | null'), 'rulesConfig не передан в RefactorTab');
+  assert.ok(APP.includes('rulesConfig={rulesConfig}'), 'App не передаёт rulesConfig');
 });

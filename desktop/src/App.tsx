@@ -1341,7 +1341,7 @@ export default function App() {
       )}
 
       {tab === 'refactor' && (
-        <RefactorTab analysis={analysis} onNote={showToast} />
+        <RefactorTab analysis={analysis} onNote={showToast} rulesConfig={rulesConfig} />
       )}
       </div>
       </div>

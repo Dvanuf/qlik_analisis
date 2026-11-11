@@ -1,18 +1,23 @@
 /**
  * Форматирование скрипта загрузки — «красивые отступы как в линтерах».
  *
- * Что делает:
+ * Что делает (правила читает панель «Как форматируется» во вкладке
+ * «Улучшенный скрипт» — см. formatRulesDoc):
  *  - убирает хвостовые пробелы, пробелы перед запятыми и лишние пробелы
- *    между словами (вне строковых литералов);
+ *    между словами (вне строковых литералов) — правило cleanSpaces;
  *  - схлопывает 3+ пустые строки в одну;
  *  - выравнивает вложенность управляющих конструкций по стеку блоков:
  *    SUB … END SUB, FOR … NEXT, DO … LOOP, многострочный IF … THEN …
  *    ELSE … END IF (ELSE/ELSEIF — на уровне открывающего IF),
  *    SWITCH … CASE … END SWITCH (CASE — под SWITCH, тело — под CASE);
- *  - базовый отступ — 4 пробела на уровень.
+ *  - дополнительные конструкции блоков пользователя (extraBlocks)
+ *    открывают блок наравне со стандартными;
+ *  - при alignAs — выравнивает `as [алиас]` колонкой внутри рядов
+ *    подряд идущих строк списков полей;
+ *  - базовый отступ — indentUnit (по умолчанию 4 пробела, настраивается).
  *
- * Чего не делает (сознательно): не переносит длинные строки, не
- * выравнивает AS-алиасы колонкой — риск сломать смысл выше выгоды.
+ * Чего не делает (сознательно): не переносит длинные строки — риск
+ * сломать смысл выше выгоды.
  */
 
 /** Строка открывает блок (после неё глубина растёт). */
@@ -24,10 +29,28 @@ const BLOCK_MID = /^(else|elseif)\b/i;
 /** Метка внутри SWITCH: на уровень ниже SWITCH, тело — ещё на уровень. */
 const BLOCK_CASE = /^(case|when)\b/i;
 
-/** Тип блока по открывающей строке — нужен для END SWITCH (закрывает SWITCH). */
-function blockType(lower) {
-  if (/^switch\b/.test(lower)) return 'switch';
-  return 'block';
+/**
+ * Настройки форматирования (rules.json → раздел formatting).
+ * @typedef {{
+ *   indent?: number, cleanSpaces?: boolean, alignAs?: boolean,
+ *   extraBlocks?: string[],
+ * }} FormatOptions
+ */
+
+/** Строка отступа по числу пробелов (1–8, нечётные — к ближайшему чётному). */
+export function indentUnitFor(indent) {
+  const n = Math.min(8, Math.max(1, Number(indent) || 4));
+  return ' '.repeat(n);
+}
+
+/** Регэксп открывающих строк с учётом пользовательских конструкций. */
+function blockStartRegex(extraBlocks) {
+  const extra = (extraBlocks ?? [])
+    .map((k) => String(k ?? '').trim())
+    .filter(Boolean)
+    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const head = extra.length ? `${extra.join('|')}|` : '';
+  return new RegExp(`^(${head}sub|for|do|switch)\\b|^(if)\\b.*\\bthen\\s*$`, 'i');
 }
 
 /**
@@ -57,13 +80,65 @@ function cleanLine(line) {
 }
 
 /**
+ * Выравнивание `as [алиас]` колонкой внутри рядов подряд идущих строк,
+ * где алиас в конце строки (списки полей LOAD). Строки вне рядов
+ * не трогаются.
+ */
+function alignAsLines(lines) {
+  const AS = /^(.*[^\s])\s+([Aa][Ss])\s+(\[.*\]|".*"|'.*'|[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)\s*([;,]?)$/;
+  let i = 0;
+  while (i < lines.length) {
+    if (!AS.test(lines[i])) { i += 1; continue; }
+    let j = i;
+    while (j < lines.length && AS.test(lines[j])) j += 1;
+    // Ряд i..j-1: ширина префикса до «as».
+    const width = Math.max(...lines.slice(i, j)
+      .map((l) => (AS.exec(l) || [])[1].length));
+    for (let k = i; k < j; k += 1) {
+      const m = AS.exec(lines[k]);
+      lines[k] = `${m[1]}${' '.repeat(width - m[1].length)} ${m[2]} ${m[3]}${m[4]}`;
+    }
+    i = j;
+  }
+  return lines;
+}
+
+/**
+ * Человекочитаемый перечень правил — панель «Как форматируется».
+ * Описание строится из текущих настроек, чтобы не расходилось с кодом.
+ *
+ * @param {FormatOptions} [opts]
+ * @returns {string[]} строки-правила
+ */
+export function formatRulesDoc(opts = {}) {
+  const indent = Math.min(8, Math.max(1, Number(opts.indent) || 4));
+  const extra = (opts.extraBlocks ?? []).filter(Boolean);
+  return [
+    `Отступ — ${indent} пробела(ов) на уровень вложенности.`,
+    'Блоки: SUB…END SUB, FOR…NEXT, DO…LOOP, IF…THEN…ELSE…END IF, SWITCH…CASE…END SWITCH.',
+    'ELSE/ELSEIF печатаются на уровне открывающего IF; CASE — на уровень ниже SWITCH.',
+    extra.length ? `Дополнительные блоки пользователя: ${extra.join(', ')}.` : null,
+    opts.cleanSpaces === false
+      ? 'Пробелы не чистятся.'
+      : 'Убираются хвостовые пробелы, пробелы перед запятыми, лишние пробелы между словами (вне строк).',
+    'Пустые строки схлопываются: максимум одна подряд.',
+    opts.alignAs
+      ? 'Алиасы «as [поле]» выравниваются колонкой внутри подряд идущих строк.'
+      : 'Алиасы «as [поле]» не выравниваются колонкой (alignAs выключен).',
+    'Длинные строки не переносятся; содержимое строк и скобок не меняется.',
+  ].filter(Boolean);
+}
+
+/**
  * Форматирует скрипт загрузки.
  * @param {string} src — исходный скрипт
- * @param {{indent?: string}} [opts] — строка отступа (по умолчанию 4 пробела)
+ * @param {FormatOptions} [opts] — настройки (rules.json → formatting)
  * @returns {string}
  */
 export function formatScript(src, opts = {}) {
-  const indentUnit = opts.indent ?? '    ';
+  const indentUnit = indentUnitFor(opts.indent);
+  const cleanSpaces = opts.cleanSpaces !== false;
+  const startRe = blockStartRegex(opts.extraBlocks);
   const lines = String(src ?? '').replace(/\r\n?/g, '\n').split('\n');
   const out = [];
   /** Стек открытых блоков: базовая глубина каждого. */
@@ -71,7 +146,7 @@ export function formatScript(src, opts = {}) {
   let depth = 0;
 
   for (const raw of lines) {
-    const line = cleanLine(raw);
+    const line = cleanSpaces ? cleanLine(raw) : raw.replace(/[ \t]+$/g, '');
     const trimmed = line.trim();
 
     // Пустые строки: максимум одна подряд, глубину не трогают.
@@ -106,7 +181,7 @@ export function formatScript(src, opts = {}) {
     }
 
     out.push(indentUnit.repeat(depth) + trimmed);
-    if (BLOCK_START.test(lower)) {
+    if (startRe.test(lower)) {
       stack.push(depth);
       depth += 1;
     }
@@ -114,5 +189,6 @@ export function formatScript(src, opts = {}) {
 
   // Убрать пустые строки в конце.
   while (out.length && out[out.length - 1] === '') out.pop();
-  return out.join('\n');
+  const finalLines = opts.alignAs ? alignAsLines(out) : out;
+  return finalLines.join('\n');
 }

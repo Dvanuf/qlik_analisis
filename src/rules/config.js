@@ -13,6 +13,25 @@ import { dirname, resolve } from 'node:path';
 import { DEFAULT_THRESHOLDS, DEFAULT_EXCLUDED_TABLES, DEFAULT_DISABLED_RULES } from './settings.js';
 import { DEFAULT_SCORING, normalizeScoring } from '../score/index.js';
 
+/** Настройки форматирования «Улучшенного скрипта» по умолчанию. */
+export const DEFAULT_FORMATTING = {
+  indent: 4, cleanSpaces: true, alignAs: false, extraBlocks: [],
+};
+
+/** Приводит раздел formatting к допустимому виду (битый/частичный — к дефолту). */
+function sanitizeFormatting(raw) {
+  const out = { ...DEFAULT_FORMATTING };
+  if (!raw || typeof raw !== 'object') return out;
+  const indent = Number(raw.indent);
+  if (Number.isFinite(indent)) out.indent = Math.min(8, Math.max(1, Math.round(indent)));
+  if (typeof raw.cleanSpaces === 'boolean') out.cleanSpaces = raw.cleanSpaces;
+  if (typeof raw.alignAs === 'boolean') out.alignAs = raw.alignAs;
+  if (Array.isArray(raw.extraBlocks)) {
+    out.extraBlocks = raw.extraBlocks.map((x) => String(x).trim()).filter(Boolean).slice(0, 20);
+  }
+  return out;
+}
+
 /** Имя файла конфигурации в каталоге данных приложения. */
 export const RULES_CONFIG_FILE = 'rules.json';
 
@@ -27,6 +46,8 @@ export function defaultRulesConfig() {
       thresholds: { ...DEFAULT_THRESHOLDS },
       exclusions: { S002: { tables: [...DEFAULT_EXCLUDED_TABLES] } },
       suppress: [],
+      // Форматирование «Улучшенного скрипта» — настраивается пользователем.
+      formatting: { ...DEFAULT_FORMATTING },
     },
     // Веса и потолки формулы оценки — настраиваются пользователем.
     scoring: {
@@ -58,6 +79,7 @@ export function readRulesConfig(path) {
         thresholds: { ...base.rules.thresholds, ...(rules.thresholds ?? {}) },
         exclusions: { ...base.rules.exclusions, ...(rules.exclusions ?? {}) },
         suppress: Array.isArray(rules.suppress) ? rules.suppress : [],
+        formatting: sanitizeFormatting(rules.formatting),
       },
       scoring: normalizeScoring(raw?.scoring),
     };

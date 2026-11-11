@@ -3,7 +3,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatScript } from '../src/script/format.js';
+import { formatScript, formatRulesDoc } from '../src/script/format.js';
 
 test('formatScript: вложенность SUB/FOR/IF и обратный выход', () => {
   const src = [
@@ -48,4 +48,42 @@ test('formatScript: строки в кавычках не перекошены �
 test('formatScript: SWITCH/CASE', () => {
   const out = formatScript('SWITCH x\nCASE 1\nLOAD 1;\nEND SWITCH').split('\n');
   assert.deepEqual(out, ['SWITCH x', '    CASE 1', '        LOAD 1;', 'END SWITCH']);
+});
+
+test('formatScript: настраиваемый отступ (2 пробела)', () => {
+  const out = formatScript('SUB A\nLOAD 1;\nEND SUB', { indent: 2 }).split('\n');
+  assert.equal(out[1], '  LOAD 1;');
+});
+
+test('formatScript: cleanSpaces=false сохраняет пробелы', () => {
+  const out = formatScript('LOAD a ,  b   ;', { cleanSpaces: false });
+  assert.equal(out, 'LOAD a ,  b   ;');
+});
+
+test('formatScript: alignAs выравнивает алиасы колонкой в ряду', () => {
+  const src = 'LOAD\n    Сумма as [Сумма],\n    Количество as [Кол-во],\n    Дата as [Дата]';
+  const out = formatScript(src, { alignAs: true }).split('\n');
+  const at = (i) => out[i].indexOf(' as ');
+  assert.ok(at(1) === at(2) && at(2) === at(3), `алиасы не в колонке: ${JSON.stringify(out)}`);
+  // без alignAs — не выравниваются
+  const plain = formatScript(src).split('\n');
+  assert.ok(plain[1].indexOf(' as ') !== plain[2].indexOf(' as '));
+});
+
+test('formatScript: extraBlocks открывают блок как конструкция', () => {
+  const out = formatScript('TRACEMSG x\nLOAD 1;', { extraBlocks: ['TRACEMSG'] }).split('\n');
+  assert.equal(out[1], '    LOAD 1;');
+  // без extraBlocks — обычная строка
+  const plain = formatScript('TRACEMSG x\nLOAD 1;').split('\n');
+  assert.equal(plain[1], 'LOAD 1;');
+});
+
+test('formatRulesDoc: описание из текущих настроек', () => {
+  const rules = formatRulesDoc({ indent: 2, alignAs: true, extraBlocks: ['TRACEMSG'] });
+  const text = rules.join(' ');
+  assert.ok(text.includes('2 пробела'));
+  assert.ok(text.includes('выравниваются колонкой'));
+  assert.ok(text.includes('TRACEMSG'));
+  const off = formatRulesDoc({}).join(' ');
+  assert.ok(off.includes('4 пробела') && off.includes('не выравниваются'));
 });
