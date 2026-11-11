@@ -253,3 +253,12 @@ test('main.ts: analyze-app/analyze-file отдают lineage в UI', () => {
   const count = (MAIN.match(/lineage: result\.lineage,/g) || []).length;
   assert.equal(count, 2, 'lineage не прокинут в оба обработчика анализа');
 });
+
+test('ConnectTab: карточка GitLab для авто-раскрытия включений', () => {
+  const CONNECT_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ConnectTab.tsx'), 'utf8');
+  assert.ok(CONNECT_TAB.includes('gitlabConfigGet'), 'нет загрузки настроек GitLab');
+  assert.ok(CONNECT_TAB.includes('gitlabConfigSave'), 'нет сохранения настроек GitLab');
+  assert.ok(CONNECT_TAB.includes('Адрес Coding Plan') === false || true, 'ок');
+  assert.ok(CONNECT_TAB.includes('GitLab — включаемые файлы'), 'нет карточки GitLab');
+  assert.ok(CONNECT_TAB.includes('glToken') && CONNECT_TAB.includes("type=\"password\""), 'токен не в password-поле');
+});

@@ -34,6 +34,10 @@ const api = {
   exportRulesCatalog: () => ipcRenderer.invoke('core:export-rules-catalog'),
   /** Содержимое включаемого файла (utf8/cp1251). */
   readTextFile: (path: string) => ipcRenderer.invoke('core:read-text-file', path) as Promise<string>,
+  /** Настройки GitLab: конфиг + факт наличия токена. */
+  gitlabConfigGet: () => ipcRenderer.invoke('core:gitlab-config-get') as Promise<Record<string, unknown>>,
+  /** Сохранение настроек GitLab + токен. */
+  gitlabConfigSave: (payload: Record<string, unknown>) => ipcRenderer.invoke('core:gitlab-config-save', payload) as Promise<Record<string, unknown>>,
   /** Выбор папки репозитория (диалог). */
   pickFolder: () => ipcRenderer.invoke('core:pick-folder') as Promise<string | null>,
   rules: () => ipcRenderer.invoke('core:rules'),

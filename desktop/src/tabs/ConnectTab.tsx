@@ -194,6 +194,18 @@ export default function ConnectTab(props: Props) {
   const [howtoOpen, setHowtoOpen] = useState(() => localStorage.getItem('qa.howto.open') !== '0');
   // Настройки репозитория QRS: подгружаются из файла приложения.
   const [qrsHost, setQrsHost] = useState('');
+
+  // GitLab: авто-раскрытие включений (.qvs из репозитория).
+  const [glEnabled, setGlEnabled] = useState(false);
+  const [glBaseUrl, setGlBaseUrl] = useState('http://gitlab.onyx.local');
+  const [glRef, setGlRef] = useState('master');
+  const [glToken, setGlToken] = useState('');
+  const [glHasToken, setGlHasToken] = useState(false);
+  const [glFolders, setGlFolders] = useState(
+    'qlik/qlik-sense/03_Load_Layer, qlik/qlik-view/03_Load_Layer, qlik/qlik-view/Documents, '
+    + 'qlik/qlik-view/Documents2, qlik/qlik-view/Documents_Продажи, qlik/qlik-view/Documents_Archive',
+  );
+  const [glNote, setGlNote] = useState('');
   const [qrsPort, setQrsPort] = useState('4242');
   const [qrsCert, setQrsCert] = useState('');
   const [qrsKey, setQrsKey] = useState('');
@@ -251,6 +263,46 @@ export default function ConnectTab(props: Props) {
       setQrsNote(`Проверка не удалась: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setQrsBusy(false);
+    }
+  }
+
+  /** Загрузить настройки GitLab. */
+  useEffect(() => {
+    let alive = true;
+    void window.qa.gitlabConfigGet().then((cfg) => {
+      if (!alive) return;
+      setGlEnabled(cfg.enabled === true);
+      if (typeof cfg.baseUrl === 'string' && cfg.baseUrl) setGlBaseUrl(cfg.baseUrl);
+      if (typeof cfg.ref === 'string' && cfg.ref) setGlRef(cfg.ref);
+      if (Array.isArray(cfg.targets) && cfg.targets.length) {
+        setGlFolders((cfg.targets as { project: string; folder: string }[])
+          .map((t) => `${t.project}/${t.folder}`).join(', '));
+      }
+      setGlHasToken(cfg.hasToken === true);
+    }).catch(() => { /* настройки необязательны */ });
+    return () => { alive = false; };
+  }, []);
+
+  /** Сохранить настройки GitLab (+ токен, если введён). */
+  async function saveGitlab(): Promise<void> {
+    setGlNote('');
+    try {
+      const targets = glFolders.split(',').map((x) => {
+        const parts = x.trim().split('/');
+        const folder = parts.pop() ?? '';
+        return { project: parts.join('/'), folder };
+      }).filter((t) => t.project && t.folder);
+      const payload: Record<string, unknown> = {
+        baseUrl: glBaseUrl.trim(), ref: glRef.trim() || 'master',
+        targets, enabled: glEnabled,
+      };
+      if (glToken.trim()) payload.token = glToken.trim();
+      const saved = await window.qa.gitlabConfigSave(payload);
+      setGlHasToken(saved.hasToken === true);
+      setGlToken('');
+      setGlNote('Настройки GitLab сохранены.');
+    } catch (err) {
+      setGlNote(`Не удалось сохранить: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -697,6 +749,38 @@ export default function ConnectTab(props: Props) {
           </div>
         </div>
       )}
+
+      {/* --- GitLab: авто-раскрытие включений --- */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3>GitLab — включаемые файлы</h3>
+        <div className="ntlmbox">
+          <div className="row">
+            <label className="small"><input type="checkbox" checked={glEnabled} onChange={(e) => setGlEnabled(e.target.checked)} /> Включить авто-раскрытие $(Must_Include=…) из репозитория</label>
+          </div>
+          <div className="row">
+            <span className="lbl">Адрес</span>
+            <input value={glBaseUrl} onChange={(e) => setGlBaseUrl(e.target.value)} placeholder="http://gitlab.onyx.local" style={{ flex: 1, minWidth: 220 }} />
+            <span className="lbl">Ветка</span>
+            <input value={glRef} onChange={(e) => setGlRef(e.target.value)} placeholder="master" style={{ width: 100 }} />
+          </div>
+          <div className="row">
+            <span className="lbl">Токен {glHasToken ? '(сохранён)' : '(не задан — для приватных проектов нужен)'}</span>
+            <input type="password" value={glToken} onChange={(e) => setGlToken(e.target.value)} placeholder={glHasToken ? 'ключ сохранён' : 'Personal Access Token (read_repository)'} style={{ flex: 1, minWidth: 220 }} />
+          </div>
+          <div className="row">
+            <span className="lbl">Папки</span>
+            <input value={glFolders} onChange={(e) => setGlFolders(e.target.value)} style={{ flex: 1, minWidth: 300 }} />
+          </div>
+          <div className="row">
+            <button className="small" onClick={() => void saveGitlab()}>Сохранить настройки GitLab</button>
+            {glNote && <span className="hint">{glNote}</span>}
+          </div>
+          <p className="hint" style={{ margin: '6px 0 0' }}>
+            Папки в формате «проект/папка» через запятую; .qvs из них сопоставляются
+            с $(Must_Include=…) по имени файла. Токен хранится зашифрованно.
+          </p>
+        </div>
+      </div>
 
       {/* --- Проверки подключения --- */}
       {doctorSteps.length > 0 && (

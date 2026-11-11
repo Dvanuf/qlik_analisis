@@ -49,6 +49,8 @@ declare global {
         includes?: Record<string, string>;
         /** Папка клона репозитория: включения ищутся по именам автоматически. */
         repoFolder?: string;
+        /** Настройки GitLab для авто-раскрытия включений. */
+        gitlab?: Record<string, unknown>;
       }): Promise<AnalysisResult>;
       openHub(opts: { hubUrl: string; appId?: string; insecure?: boolean; loginUrl?: string; platform?: 'sense' | 'qv' }): Promise<{
         cookie?: string; xrfKey?: string; csrfToken?: string; wsUrl?: string;
@@ -82,6 +84,10 @@ declare global {
       exportRulesCatalog(): Promise<{ canceled: boolean; path?: string }>;
       /** Содержимое включаемого файла (utf8/cp1251). */
       readTextFile(path: string): Promise<string>;
+      /** Настройки GitLab: конфиг + факт наличия токена. */
+      gitlabConfigGet(): Promise<Record<string, unknown>>;
+      /** Сохранение настроек GitLab + токен. */
+      gitlabConfigSave(payload: Record<string, unknown>): Promise<Record<string, unknown>>;
       /** Выбор папки репозитория (диалог). */
       pickFolder(): Promise<string | null>;
       rulesConfig(): Promise<unknown>;
@@ -625,7 +631,11 @@ export default function App() {
     setBusy('Анализ приложения…');
     setAnalyzeStage(null);
     try {
-      const res = await window.qa.analyzeApp({ ...conn, appId: target, platform, includes: includesFor(target), repoFolder: repoFolderFor(target) });
+      const res = await window.qa.analyzeApp({
+        ...conn, appId: target, platform,
+        includes: includesFor(target), repoFolder: repoFolderFor(target),
+        gitlab: await window.qa.gitlabConfigGet().catch(() => ({})),
+      });
       setAnalysis(res);
       // ТЗ «Оценка»: вкладка «Оценка» открывается автоматически после анализа.
       setTab('score');
@@ -649,7 +659,11 @@ export default function App() {
     setAnalyzeStage(null);
     setAppId(targetAppId);
     try {
-      const res = await window.qa.analyzeApp({ ...conn, appId: targetAppId, platform, includes: includesFor(targetAppId), repoFolder: repoFolderFor(targetAppId) });
+      const res = await window.qa.analyzeApp({
+        ...conn, appId: targetAppId, platform,
+        includes: includesFor(targetAppId), repoFolder: repoFolderFor(targetAppId),
+        gitlab: await window.qa.gitlabConfigGet().catch(() => ({})),
+      });
       setAnalysis(res);
       // «Открыть»/«анализ» из сводных представлений — это детальный разбор
       // находок; на «Оценку» переводит основной анализ приложения.

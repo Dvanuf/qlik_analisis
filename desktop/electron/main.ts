@@ -1545,7 +1545,7 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   // Включаемые файлы: скрипт-заглушка «$(Must_Include=…)» раскрывается
   // в полный текст — правила видят реальную логику. Файлы подкладывает
   // пользователь (клон Git-репозитория), ключ — includeKey(path).
-  const incOpts = (opts as { includes?: Record<string, string>; repoFolder?: string });
+  const incOpts = (opts as { includes?: Record<string, string>; repoFolder?: string; gitlab?: Record<string, unknown> });
   const includes = incOpts.includes ?? {};
   const includeNotes: string[] = [];
   if (graph.script) {
@@ -1557,6 +1557,37 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     }
     // Папка репозитория: include-файлы ищутся по имени автоматически.
     const repoFolder = incOpts.repoFolder;
+    let cur = graph.script as string;
+    // GitLab: индекс .qvs по настроенным папкам — включения читаются сами.
+    // Настройки GitLab приходят из UI (вместе с анализом); fallback — файл userData.
+    const gitlab = ((incOpts.gitlab ?? null) && Object.keys(incOpts.gitlab!).length)
+      ? { ...(await gitlabSettings()), ...incOpts.gitlab }
+      : await gitlabSettings();
+    if (gitlab.enabled === true && (gitlab.targets as unknown[] | undefined)?.length) {
+      const { fetchGitLabIndex, fetchGitLabFileText } = await import('../../src/extract/gitlab.js');
+      sendProgress('includes', 'Индекс GitLab…');
+      const idx = await fetchGitLabIndex({
+        baseUrl: String(gitlab.baseUrl ?? ''),
+        ref: String(gitlab.ref ?? 'master'),
+        token: String(gitlab.token ?? ''),
+        targets: gitlab.targets as { project: string; folder: string }[],
+      });
+      for (const note of idx.notes) includeNotes.push(`GitLab: ${note}`);
+      if (idx.ok) {
+        for (const inc of parseIncludeLines(cur)) {
+          const file = includeKey(inc.path).split('/').pop() ?? '';
+          const hit = idx.index.get(file);
+          if (hit && !map[includeKey(inc.path)]) {
+            const raw = await fetchGitLabFileText({
+              baseUrl: String(gitlab.baseUrl ?? ''), ref: String(gitlab.ref ?? 'master'),
+              token: String(gitlab.token ?? ''), projectId: hit.projectId, path: hit.path,
+            });
+            if (raw.ok) map[includeKey(inc.path)] = raw.content ?? '';
+            else includeNotes.push(`GitLab: ${inc.path} → ${raw.note}`);
+          }
+        }
+      }
+    }
     if (repoFolder) {
       // Обновляем клон из Git перед анализом: клонирование — один раз,
       // дальше только pull (быстро, без терминала). Сбой сети не мешает:
@@ -1590,7 +1621,6 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
       }
       return cache.get(name)!;
     };
-    let cur = graph.script as string;
     for (let iter = 0; iter < 6; iter += 1) {
       for (const inc of parseIncludeLines(cur)) {
         const key = includeKey(inc.path);
@@ -1683,6 +1713,10 @@ const AI_KEYS_FILE = 'ai-keys.bin';
 const AI_CONFIG_FILE = 'ai-config.json';
 /** Настройки репозитория QRS: путь к сертификату — на этой машине. */
 const QRS_CONFIG_FILE = 'qrs-config.json';
+/** Настройки GitLab (адрес, папки) — для авто-раскрытия включений. */
+const GITLAB_CONFIG_FILE = 'gitlab-config.json';
+/** Токен GitLab — зашифрованно (safeStorage). */
+const GITLAB_TOKEN_FILE = 'gitlab-token.bin';
 
 function aiKeysPath(): string {
   return resolve(app.getPath('userData'), AI_KEYS_FILE);
@@ -1716,6 +1750,53 @@ function writeQrsConfig(config: Record<string, unknown>): void {
 /** Итоговые настройки репозитория: файл приложения + переменные окружения. */
 function qrsSettings(): ReturnType<typeof resolveQrs> {
   return resolveQrs({}, { qrs: readQrsConfig() });
+}
+
+/** Читает настройки GitLab (битый файл — дефолт). */
+function readGitlabConfig(): Record<string, unknown> {
+  const file = resolve(app.getPath('userData'), GITLAB_CONFIG_FILE);
+  if (!existsSync(file)) return {};
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** Сохраняет настройки GitLab. */
+function writeGitlabConfig(config: Record<string, unknown>): void {
+  const file = resolve(app.getPath('userData'), GITLAB_CONFIG_FILE);
+  writeFileSync(file, `${JSON.stringify(config ?? {}, null, 2)}\n`, 'utf8');
+}
+
+/** Читает токен GitLab (зашифрованный). */
+async function loadGitlabToken(): Promise<string> {
+  const file = resolve(app.getPath('userData'), GITLAB_TOKEN_FILE);
+  if (!existsSync(file)) return '';
+  try {
+    const { result } = await safeStorage.decryptStringAsync(readFileSync(file));
+    return String(result ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Сохраняет токен GitLab (зашифрованный). Пустая строка — удалить. */
+async function saveGitlabToken(token: string): Promise<void> {
+  const file = resolve(app.getPath('userData'), GITLAB_TOKEN_FILE);
+  const clean = String(token ?? '').trim();
+  if (!clean) {
+    if (existsSync(file)) rmSync(file);
+    return;
+  }
+  writeFileSync(file, await safeStorage.encryptStringAsync(clean));
+}
+
+/** Эффективные настройки GitLab для анализа. */
+async function gitlabSettings(): Promise<Record<string, unknown>> {
+  const cfg = readGitlabConfig();
+  const token = await loadGitlabToken();
+  return { ...cfg, token: token || undefined, enabled: cfg.enabled === true };
 }
 
 /** Читает ключи провайдеров из зашифрованного файла. */
@@ -1829,6 +1910,34 @@ function walkScriptFiles(dir: string, depth = 0): string[] {
   }
   return out;
 }
+
+/** Настройки GitLab: конфиг + факт наличия токена (значение не отдаётся). */
+ipcMain.handle('core:gitlab-config-get', async () => {
+  const cfg = readGitlabConfig();
+  const token = await loadGitlabToken();
+  return { ...cfg, hasToken: Boolean(token) };
+});
+
+/** Сохранение настроек GitLab + токен (пустой токен удаляет). */
+ipcMain.handle('core:gitlab-config-save', async (_e, payload: Record<string, unknown>) => {
+  const cfg: Record<string, unknown> = {};
+  if (typeof payload.baseUrl === 'string' && payload.baseUrl.trim()) cfg.baseUrl = payload.baseUrl.trim();
+  if (typeof payload.ref === 'string' && payload.ref.trim()) cfg.ref = payload.ref.trim();
+  if (Array.isArray(payload.targets)) {
+    cfg.targets = (payload.targets as unknown[])
+      .map((t) => {
+        const x = t as { project?: string; folder?: string };
+        return { project: String(x.project ?? '').trim(), folder: String(x.folder ?? '').trim() };
+      })
+      .filter((t) => t.project && t.folder)
+      .slice(0, 20);
+  }
+  cfg.enabled = payload.enabled === true;
+  writeGitlabConfig(cfg);
+  if (typeof payload.token === 'string') await saveGitlabToken(payload.token);
+  const token = await loadGitlabToken();
+  return { ...cfg, hasToken: Boolean(token) };
+});
 
 /** Чтение текстового файла включения (utf8 с BOM/cp1251-fallback). */
 ipcMain.handle('core:read-text-file', async (_e, path: string) => {
