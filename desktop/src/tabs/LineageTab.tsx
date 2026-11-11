@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react';
 import type { AnalysisResult, LineageNode } from '../types.js';
 import { SOURCE_KIND_LABELS } from '../../../src/script/lineage.js';
+import { parseIncludeLines } from '../../../src/extract/includes.js';
 
 type Props = {
   analysis: AnalysisResult | null;
@@ -37,6 +38,8 @@ export default function LineageTab({ analysis }: { analysis: Props['analysis'] }
 
   const lineage = analysis?.lineage ?? null;
   const outline = analysis?.outline?.full ?? null;
+  // Нераскрытые включения: скрипт-заглушка не был дополнен файлами.
+  const unresolved = parseIncludeLines(analysis?.script ?? '');
 
   /** Раскладка: колонки по depth, узлы внутри колонки по порядку. */
   const layout = useMemo(() => {
@@ -86,6 +89,26 @@ export default function LineageTab({ analysis }: { analysis: Props['analysis'] }
           Документ
         </button>
       </div>
+
+      {/* Скрипт-заглушка: включения не раскрылись — самый частый вопрос */}
+      {unresolved.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <b>Скрипт — заглушка: включения не раскрыты</b>
+          <p className="hint" style={{ margin: '4px 0 6px' }}>
+            В скрипте есть нераскрытые включения — их содержимое не попало в
+            анализ, поэтому граф показывает только каркас. Укажите папку
+            репозитория во вкладке «Скрипт загрузки» и переанализируйте.
+          </p>
+          {unresolved.map((inc, i) => (
+            <div key={i} className="hint" style={{ color: 'var(--warn, #e0a33e)' }}>
+              ⚠ не раскрыто: {inc.path} (строка {inc.line})
+            </div>
+          ))}
+          {(analysis?.includeNotes ?? []).map((n, i) => (
+            <div key={`n${i}`} className="hint" style={{ color: 'var(--warn, #e0a33e)' }}>{n}</div>
+          ))}
+        </div>
+      )}
 
       {/* Предупреждения: мёртвые таблицы, источники-сироты */}
       {lineage.warnings.length > 0 && (

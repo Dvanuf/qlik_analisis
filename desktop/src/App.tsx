@@ -649,7 +649,7 @@ export default function App() {
     setAnalyzeStage(null);
     setAppId(targetAppId);
     try {
-      const res = await window.qa.analyzeApp({ ...conn, appId: targetAppId, platform });
+      const res = await window.qa.analyzeApp({ ...conn, appId: targetAppId, platform, includes: includesFor(targetAppId), repoFolder: repoFolderFor(targetAppId) });
       setAnalysis(res);
       // «Открыть»/«анализ» из сводных представлений — это детальный разбор
       // находок; на «Оценку» переводит основной анализ приложения.

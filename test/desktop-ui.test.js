@@ -240,3 +240,10 @@ test('LineageTab: вкладка «Формирование» — SVG-DAG и д�
   assert.ok(APP.includes("tabs: ['analysis', 'script', 'refactor', 'model', 'lineage']"), 'вкладка не в РАБОТА');
   assert.ok(APP.includes("<LineageTab analysis={analysis} />"), 'LineageTab не смонтирован');
 });
+
+test('LineageTab: баннер нераскрытых включений (скрипт-заглушка)', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  assert.ok(LINEAGE_TAB.includes('parseIncludeLines(analysis?.script'), 'включения не проверяются');
+  assert.ok(LINEAGE_TAB.includes('включения не раскрыты'), 'нет баннера заглушки');
+  assert.ok(LINEAGE_TAB.includes('includeNotes'), 'нет диагностики QRS');
+});
