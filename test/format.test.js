@@ -35,8 +35,9 @@ test('formatScript: однострочный IF ... THEN не уходит вг�
 });
 
 test('formatScript: чистка пробелов и пустых строк', () => {
-  const out = formatScript('LOAD a ,  b ;   \n\n\n\nLOAD c;').split('\n');
-  assert.deepEqual(out, ['LOAD a, b ;', '', 'LOAD c;']);
+  // Не-LOAD текст: чистка пробелов, запятая вплотную, пустые строки схлопнуты.
+  const out = formatScript('LET a = 1 ,  2 ;   \n\n\n\nLET b = 3;').split('\n');
+  assert.deepEqual(out, ['LET a = 1, 2 ;', '', 'LET b = 3;']);
 });
 
 test('formatScript: строки в кавычках не перекошены по содержимому', () => {
@@ -56,8 +57,8 @@ test('formatScript: настраиваемый отступ (2 пробела)',
 });
 
 test('formatScript: cleanSpaces=false сохраняет пробелы', () => {
-  const out = formatScript('LOAD a ,  b   ;', { cleanSpaces: false });
-  assert.equal(out, 'LOAD a ,  b   ;');
+  const out = formatScript('LET a = 1 ,  2   ;', { cleanSpaces: false });
+  assert.equal(out, 'LET a = 1 ,  2   ;');
 });
 
 test('formatScript: alignAs выравнивает алиасы колонкой в ряду', () => {
@@ -86,4 +87,11 @@ test('formatRulesDoc: описание из текущих настроек', ()
   assert.ok(text.includes('TRACEMSG'));
   const off = formatRulesDoc({}).join(' ');
   assert.ok(off.includes('4 пробела') && off.includes('не выравниваются'));
+});
+
+test('formatScript: однострочный LOAD с полями — одно поле на строку, ведущие запятые', () => {
+  const out = formatScript('Продажи:\nLOAD Код, Сумма, Дата FROM qvd;').split('\n');
+  assert.deepEqual(out, ['Продажи:', 'LOAD', ' Код', ',Сумма', ',Дата', 'FROM qvd;']);
+  // «LOAD * FROM x;» без полей не трогается.
+  assert.equal(formatScript('LOAD * FROM x;'), 'LOAD * FROM x;');
 });

@@ -290,12 +290,15 @@ function reformatLoadStatements(lines, { commaStyle, warnings }) {
       if (endsStatement(lines[j])) break;
       j += 1;
     }
-    if (body.length === 1) { // однострочный оператор не трогаем
+    const text = body.join(' ');
+    // Однострочный оператор разбираем, только если в нём есть поля
+    // (хотя бы одна запятая): «LOAD * FROM x;» остаётся как есть.
+    const single = body.length === 1 && !/^\s*(?:load|select)\b[^,]*,/i.test(text);
+    if (single) {
       for (let k = i; k <= j; k += 1) out.push(lines[k]);
       i = j + 1;
       continue;
     }
-    const text = body.join(' ');
     const kwMatch = LOAD_KEYWORD_SPLIT.exec(text);
     let head = text;
     let tailParts = [];

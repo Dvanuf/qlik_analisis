@@ -616,7 +616,6 @@ export default function ConnectTab(props: Props) {
                   <th>Приложение</th>
                   <th style={{ width: 90 }}>Размер</th>
                   <th style={{ width: 170 }}>Поток</th>
-                  <th style={{ width: 230 }}>Владелец</th>
                   <th style={{ width: 260 }}>Тэги</th>
                   <th style={{ width: 130 }}>Вид</th>
                   <th style={{ width: 110 }} title="Последняя оценка из истории прогонов">Оценка</th>
@@ -647,7 +646,6 @@ export default function ConnectTab(props: Props) {
                     </td>
                     <td className="hint">{a.size ? `${(a.size / 1048576).toFixed(1).replace('.', ',')} МБ` : '—'}</td>
                     <td className="hint">{a.stream || '—'}</td>
-                    <td className="hint">{a.owner || '—'}</td>
                     <td className="hint">{(a.tags ?? []).join(', ') || '—'}</td>
                     <td>
                       <span className={`pill ${a.published === true ? 'ok' : 'mute'}`}>
@@ -665,7 +663,7 @@ export default function ConnectTab(props: Props) {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="muted" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={7} className="muted" style={{ padding: 20, textAlign: 'center' }}>
                       Ничего не найдено по текущим фильтрам
                     </td>
                   </tr>

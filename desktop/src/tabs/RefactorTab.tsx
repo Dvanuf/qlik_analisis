@@ -60,7 +60,9 @@ export default function RefactorTab(props: Props) {
   const [aiError, setAiError] = useState<string | null>(null);
   // Форматирование предложенной версии (отступы как в линтерах) и
   // синхронная прокрутка панелей «было/стало».
-  const [formatOn, setFormatOn] = useState(true);
+  // Формат применяется по нажатию кнопки: выключен по умолчанию, чтобы
+  // нажатие давало видимый эффект.
+  const [formatOn, setFormatOn] = useState(false);
   const [syncScroll, setSyncScroll] = useState(true);
   const [howFmt, setHowFmt] = useState(false);
   const leftRef = useRef<HTMLDivElement | null>(null);
