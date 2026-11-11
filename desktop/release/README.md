@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.25.2 | [v0.25.2 — вкладка «Формирование» работает: lineage доезжает до интерфейса](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.25.2) |
 | 0.25.1 | [v0.25.1 — включения не теряются при переанализе; баннер нераскрытых включений в «Формировании»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.25.1) |
 | 0.25.0 | [v0.25.0 — вкладка «Формирование»: lineage-граф структуры приложения; фикс кириллических меток парсера](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.25.0) |
 | 0.24.3 | [v0.24.3 — таблица подключений: шапка совпадает с ячейками; «Формат» с понятным исходом](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.24.3) |

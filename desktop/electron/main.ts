@@ -674,6 +674,7 @@ ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
     dataModel: result.dataModel,
     expressionIndex: result.expressionIndex,
     outline: result.outline,
+    lineage: result.lineage,
     skipped: result.summary.skipped,
   };
 });
@@ -1657,6 +1658,7 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     expressionIndex: result.expressionIndex,
     // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
     outline: result.outline,
+    lineage: result.lineage,
   };
 });
 

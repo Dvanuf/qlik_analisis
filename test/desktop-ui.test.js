@@ -247,3 +247,9 @@ test('LineageTab: баннер нераскрытых включений (скр
   assert.ok(LINEAGE_TAB.includes('включения не раскрыты'), 'нет баннера заглушки');
   assert.ok(LINEAGE_TAB.includes('includeNotes'), 'нет диагностики QRS');
 });
+
+test('main.ts: analyze-app/analyze-file отдают lineage в UI', () => {
+  const MAIN = readFileSync(resolve(HERE, '..', 'desktop', 'electron', 'main.ts'), 'utf8');
+  const count = (MAIN.match(/lineage: result\.lineage,/g) || []).length;
+  assert.equal(count, 2, 'lineage не прокинут в оба обработчика анализа');
+});
