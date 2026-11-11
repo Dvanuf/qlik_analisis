@@ -304,7 +304,7 @@ export function parseScript(script) {
     }
 
     // Метка может стоять в начале оператора: "Customers:\nLOAD ...".
-    const labelMatch = text.match(/^([A-Za-z_][A-Za-z0-9_ ]*):\s*([\s\S]+)$/);
+    const labelMatch = text.match(/^([\p{L}_][\p{L}\p{N}_ ]*):\s*([\s\S]+)$/u);
     if (labelMatch && /^(LOAD|RESIDENT|CONCATENATE|JOIN|INTO|LET|SET|DROP|RENAME|STORE)\b/i.test(labelMatch[2].trim())) {
       pendingLabel = labelMatch[1].trim();
       text = labelMatch[2].trim();
@@ -395,7 +395,7 @@ export function parseScript(script) {
       const loadIdx = source.search(/\bLOAD\b/i);
       if (loadIdx !== -1) {
         // Вложенный LOAD (типично для LEFT JOIN (T) LOAD ... RESIDENT T)
-        queue.unshift({ text: source.slice(loadIdx).trim() });
+        queue.unshift({ text: source.slice(loadIdx).trim(), line });
         source = source.slice(0, loadIdx);
       }
       model.joins.push({

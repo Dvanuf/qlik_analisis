@@ -230,3 +230,13 @@ test('ConnectTab: таблица — Владелец на месте, Тэги 
   assert.ok(row.includes("a.owner || '—'"), 'нет ячейки владельца');
   assert.ok(row.includes('a.published === true'), 'нет ячейки вида');
 });
+
+test('LineageTab: вкладка «Формирование» — SVG-DAG и детали', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  assert.ok(LINEAGE_TAB.includes('lineage?.nodes') || LINEAGE_TAB.includes('analysis?.lineage'), 'lineage не используется');
+  assert.ok(LINEAGE_TAB.includes('.scoretiles') === false && LINEAGE_TAB.includes('comp-track') === false, 'лишние блоки');
+  assert.ok(LINEAGE_TAB.includes('ln-arrow'), 'нет стрелок графа');
+  assert.ok(LINEAGE_TAB.includes('Документ'), 'нет текстового документа');
+  assert.ok(APP.includes("tabs: ['analysis', 'script', 'refactor', 'model', 'lineage']"), 'вкладка не в РАБОТА');
+  assert.ok(APP.includes("<LineageTab analysis={analysis} />"), 'LineageTab не смонтирован');
+});

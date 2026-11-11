@@ -6,6 +6,7 @@ import { runRules, CATEGORIES, SEVERITIES } from './rules/index.js';
 import { PLATFORM_ANY, PLATFORM_AUTO } from './rules/platforms.js';
 import { parseScript } from './script/parse.js';
 import { buildOutline } from './script/outline.js';
+import { buildLineage } from './script/lineage.js';
 import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
 import { computeScore } from './score/index.js';
@@ -27,6 +28,7 @@ import { SCOPES, SCOPE_LABELS } from './rules/scopes.js';
  */
 export function analyze(graph, config = {}) {
   const scriptModel = parseScript(graph.script ?? '');
+  const lineage = buildLineage(scriptModel);
   const index = buildIndex(graph, scriptModel);
   // Outline скрипта: разделы, шаги таблиц, поток построения, недостижимый код.
   const outline = buildOutline(scriptModel);
@@ -223,6 +225,7 @@ export function analyze(graph, config = {}) {
     errors,
     summary,
     outline,
+    lineage,
     patch: buildScriptPatch(findings),
     // Модель данных и метаданные — листами книги Excel (QSME: Data model).
     dataModel: buildDataModelSheets(graph),

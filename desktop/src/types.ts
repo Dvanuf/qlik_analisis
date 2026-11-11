@@ -2,7 +2,7 @@
  * Общие типы десктоп-приложения.
  * Вынесены отдельно, чтобы вкладки не импортировали друг друга.
  */
-export type Tab = 'score' | 'connect' | 'analysis' | 'script' | 'refactor' | 'summary' | 'model' | 'rules' | 'library' | 'ai';
+export type Tab = 'score' | 'connect' | 'analysis' | 'script' | 'refactor' | 'summary' | 'model' | 'lineage' | 'rules' | 'library' | 'ai';
 
 /**
  * Одна правка в перечне вкладки «Улучшенный скрипт».
@@ -248,6 +248,20 @@ export type PatternRule = {
   places: number;
 };
 
+export type LineageNode = {
+  id: string;
+  kind: 'source' | 'table';
+  label: string;
+  depth: number | null;
+  line?: number;
+  status?: 'dropped';
+  stored?: boolean;
+  detail?: string;
+  sourceKind?: 'lib' | 'file' | 'sql' | 'inline' | 'web' | 'other';
+};
+export type LineageEdge = { from: string; to: string; kind: 'source' | 'resident' | 'join' | 'concatenate' | 'store' };
+export type LineageGraph = { nodes: LineageNode[]; edges: LineageEdge[]; warnings: string[] };
+
 export type AnalysisResult = {
   appName?: string;
   appId?: string;
@@ -310,6 +324,8 @@ export type AnalysisResult = {
   skipped?: { capability: string; reason: string }[];
   /** Диагностика раскрытия включений (QRS-пути). */
   includeNotes?: string[];
+  /** Структура формирования приложения (lineage-граф). */
+  lineage?: LineageGraph;
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
     count: number; skipped: boolean; note: string | null; domain?: DomainId;

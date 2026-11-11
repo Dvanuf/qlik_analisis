@@ -10,6 +10,7 @@ import RulesTab from './tabs/RulesTab.js';
 import LibraryTab from './tabs/LibraryTab.js';
 import SummaryTab from './tabs/SummaryTab.js';
 import ModelTab from './tabs/ModelTab.js';
+import LineageTab from './tabs/LineageTab.js';
 import ScriptTab from './tabs/ScriptTab.js';
 import RefactorTab from './tabs/RefactorTab.js';
 import ScoreTab from './tabs/ScoreTab.js';
@@ -137,7 +138,7 @@ const SEVERITIES: { id: Severity; label: string }[] = [
  */
 const TAB_GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Обзор', tabs: ['score', 'summary'] },
-  { label: 'Работа', tabs: ['analysis', 'script', 'refactor', 'model'] },
+  { label: 'Работа', tabs: ['analysis', 'script', 'refactor', 'model', 'lineage'] },
   { label: 'Помощь', tabs: ['ai', 'library'] },
   { label: 'Настройки', tabs: ['connect', 'rules'] },
 ];
@@ -168,6 +169,7 @@ const TAB_LABELS: Record<Tab, string> = {
   script: 'Скрипт загрузки',
   refactor: 'Улучшенный скрипт',
   model: 'Модель данных',
+  lineage: 'Формирование',
   summary: 'Сводный отчёт',
   rules: 'Правила',
   library: 'Каталог функций',
@@ -188,6 +190,7 @@ const TAB_ICONS: Record<Tab, ReactElement> = {
   script: ICON(<><path d="M12 3v12" /><path d="M7 11l5 5 5-5" /><path d="M4 21h16" /></>),
   refactor: ICON(<><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7z" /><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></>),
   model: ICON(<><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>),
+  lineage: ICON(<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><path d="M6.5 10v4a2 2 0 0 0 2 2H14" /><path d="M17.5 10v4" /></>),
   ai: ICON(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z" />),
   library: ICON(<><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z" /><path d="M4 19a2 2 0 0 1 2-2h13" /></>),
   connect: ICON(<><path d="M9 3v6M15 3v6" /><path d="M6 9h12v3a6 6 0 0 1-12 0z" /><path d="M12 18v3" /></>),
@@ -1289,6 +1292,10 @@ export default function App() {
           analysis={analysis}
           onExport={() => void exportDataModel()}
         />
+      )}
+
+      {tab === 'lineage' && (
+        <LineageTab analysis={analysis} />
       )}
 
       {tab === 'summary' && (

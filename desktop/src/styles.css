@@ -1010,6 +1010,16 @@ table.rq tr.pat { cursor: pointer; }
 .comp-legend .d-warn { background: var(--warn, #e0a33e); }
 .comp-legend .d-info { background: var(--panel-3); }
 
+/* Lineage: узлы графа формирования. */
+.ln-node { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.2; }
+.ln-node.ln-src { fill: var(--panel-3); }
+.ln-node.ln-stored { stroke: var(--success); }
+.ln-node.ln-dropped { stroke: var(--danger); opacity: 0.75; }
+.ln-node.ln-sel { stroke: var(--brand); stroke-width: 2; }
+.ln-label { font-size: 12px; font-weight: 600; fill: var(--text); }
+.ln-sub { font-size: 10px; fill: var(--muted); }
+.legend-item { display: inline-flex; gap: 6px; align-items: center; font-size: 0.8125rem; }
+
 /* Панель правил форматирования. */
 .fmtdoc {
   background: var(--panel-2); border: 1px solid var(--line);
