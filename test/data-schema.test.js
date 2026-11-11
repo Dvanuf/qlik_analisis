@@ -1,0 +1,149 @@
+/**
+ * Схема модели данных с пометками проблем: узлы-таблицы, связи по общим
+ * полям (1:1 / m:n / key), агрегация находок по таблицам и полям, notes
+ * о полноте данных.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseScript } from '../src/script/parse.js';
+import { buildLineage } from '../src/script/lineage.js';
+import { buildDataSchema, SCHEMA_MAX_LINKS } from '../src/report/data-schema.js';
+
+const SCRIPT = [
+  'Продажи:',
+  'LOAD Код, Сумма FROM [lib://Data/sales.qvd] (qvd);',
+  'Товары:',
+  'LOAD Код, Наименование FROM [lib://Data/goods.qvd] (qvd);',
+].join('\n');
+
+const GRAPH = {
+  appName: 'Тест',
+  script: SCRIPT,
+  meta: {
+    source: 'engine',
+    capabilities: ['dataModel', 'associations'],
+    associations: [{ qTable: 'Продажи', qTable2: 'Товары', qField: 'Код', qCardinality: '1:1' }],
+  },
+  tables: [
+    { name: 'Продажи', rows: 100, fields: ['Код', 'Сумма'], keyFields: ['Код'], synthetic: false },
+    { name: 'Товары', rows: 50, fields: ['Код', 'Наименование'], keyFields: ['Код'], synthetic: false },
+    { name: 'Мост', rows: 30, fields: ['Код', 'Сумма'], keyFields: [], synthetic: true },
+  ],
+  fields: [
+    { name: 'Код', table: 'Продажи', key: true, rows: 100, distinct: 100, subsetRatio: 0.8 },
+    { name: 'Сумма', table: 'Продажи', key: false, rows: 100, distinct: 90 },
+    { name: 'Код', table: 'Товары', key: true, rows: 50, distinct: 50, subsetRatio: 1 },
+    { name: 'Наименование', table: 'Товары', key: false, rows: 50, distinct: 50 },
+    { name: 'Код', table: 'Мост', key: false, rows: 30, distinct: 10 },
+    { name: 'Сумма', table: 'Мост', key: false, rows: 30, distinct: 20 },
+  ],
+};
+
+const FINDINGS = [
+  { ruleId: 'R003', severity: 'warning', title: 'Неиспользуемая таблица', target: { kind: 'table', name: 'Мост' } },
+  { ruleId: 'R001', severity: 'info', title: 'Поле не используется', target: { kind: 'field', name: 'Сумма' } },
+  { ruleId: 'R010', severity: 'warning', title: 'Неполный ключ', target: { kind: 'field', name: 'Код' } },
+];
+
+const lineage = () => buildLineage(parseScript(SCRIPT));
+
+test('buildDataSchema: узлы-таблицы с атрибутами и типом источника', () => {
+  const schema = buildDataSchema(GRAPH, FINDINGS, lineage());
+  assert.equal(schema.tables.length, 3);
+  const sales = schema.tables.find((t) => t.name === 'Продажи');
+  const bridge = schema.tables.find((t) => t.name === 'Мост');
+  assert.equal(sales.rows, 100);
+  assert.equal(sales.sourceKind, 'lib', 'источник из lineage');
+  assert.equal(bridge.sourceKind, null, 'таблицы вне скрипта — без типа источника');
+  assert.equal(bridge.synthetic, true, 'синтетический ключ сохраняется');
+  // Поля таблицы: ключевые помечены, неполный ключ — по subsetRatio.
+  const salesKey = sales.fields.find((f) => f.name === 'Код');
+  assert.equal(salesKey.key, true);
+  assert.equal(salesKey.incompleteKey, true, 'subsetRatio 0.8 — ключ неполный');
+  const goodsKey = schema.tables.find((t) => t.name === 'Товары').fields.find((f) => f.name === 'Код');
+  assert.equal(goodsKey.incompleteKey, false, 'subsetRatio 1 — ключ полный');
+});
+
+test('buildDataSchema: типы связей — 1:1 из associations, m:n по неуникальности, key по умолчанию', () => {
+  const schema = buildDataSchema(GRAPH, FINDINGS, lineage());
+  const kinds = {};
+  for (const l of schema.links) kinds[`${l.from}+${l.to}+${l.field}`] = l.kind;
+  assert.equal(kinds['продажи+товары+код'], '1:1', 'связь из meta.associations');
+  assert.equal(kinds['мост+продажи+сумма'], 'm:n', 'Сумма неуникальна в обеих таблицах');
+  assert.equal(kinds['мост+продажи+код'], 'key', 'Код неуникален только в Мост');
+  assert.equal(schema.meta.associationsAvailable, true);
+});
+
+test('buildDataSchema: проблемы таблицы — находка по таблице и по её полям', () => {
+  const schema = buildDataSchema(GRAPH, FINDINGS, lineage());
+  const bridge = schema.tables.find((t) => t.name === 'Мост');
+  // R003 (таблица) + R010 (поле Код) — warnings; R001 (поле Сумма) — info.
+  assert.equal(bridge.problems.warning, 2);
+  assert.equal(bridge.problems.info, 1);
+  assert.equal(bridge.problems.total, 3);
+  const ids = bridge.problems.rules.map((r) => r.id);
+  assert.deepEqual(ids, ['R003', 'R010', 'R001'], 'сортировка по важности, затем по id');
+  assert.equal(bridge.problems.rules.find((r) => r.id === 'R010').count, 1);
+  const clean = schema.tables.find((t) => t.name === 'Товары');
+  // Товары: R010 по полю Код → warning тоже здесь (поле в двух таблицах).
+  assert.equal(clean.problems.warning, 1);
+  assert.equal(clean.problems.info, 0);
+});
+
+test('buildDataSchema: проблемы поля попадают во все таблицы с этим полем', () => {
+  const schema = buildDataSchema(GRAPH, FINDINGS, lineage());
+  const salesSum = schema.tables.find((t) => t.name === 'Продажи').fields.find((f) => f.name === 'Сумма');
+  const bridgeSum = schema.tables.find((t) => t.name === 'Мост').fields.find((f) => f.name === 'Сумма');
+  assert.equal(salesSum.problems.rules[0].id, 'R001');
+  assert.equal(bridgeSum.problems.rules[0].id, 'R001');
+  const salesName = schema.tables.find((t) => t.name === 'Товары').fields.find((f) => f.name === 'Наименование');
+  assert.equal(salesName.problems, null, 'чистое поле — problems null');
+});
+
+test('buildDataSchema: чистая таблица без находок — problems null', () => {
+  const schema = buildDataSchema(GRAPH, [], lineage());
+  for (const t of schema.tables) assert.equal(t.problems, null);
+});
+
+test('buildDataSchema: пустой граф — пустая схема без лишних notes', () => {
+  const schema = buildDataSchema({}, []);
+  assert.deepEqual(schema.tables, []);
+  assert.deepEqual(schema.links, []);
+  assert.deepEqual(schema.meta.notes, []);
+});
+
+test('buildDataSchema: модель из скрипта — пометка об отсутствии объёмов', () => {
+  const g = { ...GRAPH, meta: { source: 'file:qvs', capabilities: [] } };
+  const schema = buildDataSchema(g, [], lineage());
+  assert.equal(schema.meta.modelFromScript, true);
+  assert.ok(schema.meta.notes.some((n) => n.includes('объём данных')), 'note о неизвестных строках');
+});
+
+test('buildDataSchema: пропуск проверок использования полей — note', () => {
+  const stats = [
+    { id: 'R001', skipped: true },
+    { id: 'R002', skipped: true },
+    { id: 'R003', skipped: true },
+  ];
+  const schema = buildDataSchema(GRAPH, [], lineage(), stats);
+  assert.ok(schema.meta.notes.some((n) => n.includes('использовании полей')));
+  const partial = buildDataSchema(GRAPH, [], lineage(), stats.slice(0, 2));
+  assert.ok(!partial.meta.notes.some((n) => n.includes('использовании полей')), 'частичный пропуск — без note');
+});
+
+test('buildDataSchema: связи обрезаются пределом SCHEMA_MAX_LINKS', () => {
+  const fields = [];
+  const names = Array.from({ length: SCHEMA_MAX_LINKS + 50 }, (_, i) => `f${String(i).padStart(3, '0')}`);
+  for (const n of names) fields.push({ name: n, table: 'A', rows: 10, distinct: 10 }, { name: n, table: 'B', rows: 10, distinct: 10 });
+  const g = {
+    meta: { source: 'engine', capabilities: ['dataModel'] },
+    tables: [
+      { name: 'A', rows: 10, fields: names, keyFields: [], synthetic: false },
+      { name: 'B', rows: 10, fields: names, keyFields: [], synthetic: false },
+    ],
+    fields,
+  };
+  const schema = buildDataSchema(g, []);
+  assert.equal(schema.links.length, SCHEMA_MAX_LINKS);
+  assert.ok(schema.meta.notes.some((n) => n.includes(`из ${names.length}`)), 'note об упрощении');
+});

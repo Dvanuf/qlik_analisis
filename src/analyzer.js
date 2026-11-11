@@ -11,6 +11,7 @@ import { dedupeFindings, dedupeStats } from './findings/dedupe.js';
 import { applySuppression } from './findings/suppress.js';
 import { computeScore } from './score/index.js';
 import { buildDataModelSheets } from './report/data-model.js';
+import { buildDataSchema } from './report/data-schema.js';
 import { buildScriptIndex, findingLines } from './findings/locations.js';
 import { groupFindings } from './findings/group.js';
 import { groupPatternsByRule } from './findings/patterns.js';
@@ -229,6 +230,8 @@ export function analyze(graph, config = {}) {
     patch: buildScriptPatch(findings),
     // Модель данных и метаданные — листами книги Excel (QSME: Data model).
     dataModel: buildDataModelSheets(graph),
+    // Схема модели данных («снежинка») с пометками проблем по таблицам/полям.
+    schema: buildDataSchema(graph, locatedFindings, lineage, ruleStats),
     // Перечень выражений — для поиска «где используется это выражение».
     expressionIndex: buildExpressionIndex(graph),
   };
