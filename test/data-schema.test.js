@@ -174,3 +174,82 @@ test('buildDataSchema: связи обрезаются пределом SCHEMA_M
   assert.equal(schema.links.length, SCHEMA_MAX_LINKS);
   assert.ok(schema.meta.notes.some((n) => n.includes(`из ${names.length}`)), 'note об упрощении');
 });
+
+const DROP_SCRIPT = [
+  'Продажи:',
+  'LOAD Код, Сумма FROM [lib://Data/sales.qvd] (qvd);',
+  'Raw:',
+  'LOAD Код, Коммент FROM [lib://Data/raw.qvd] (qvd);',
+  'Итог:',
+  'LOAD Код Resident Продажи;',
+  'DROP Table Raw;',
+].join('\n');
+const dropLineage = () => buildLineage(parseScript(DROP_SCRIPT));
+
+test('buildDataSchema: три состояния — asBuilt с дропнутой, final без, критерии в meta', () => {
+  // Движок видит только финальные таблицы; Raw удалена (DROP) в скрипте.
+  const g = { ...GRAPH, meta: { ...GRAPH.meta, associations: [] } };
+  const schema = buildDataSchema(g, [], dropLineage(), [], parseScript(DROP_SCRIPT));
+  // asBuilt содержит и движковые, и промежуточную Raw со статусом dropped.
+  const asNames = schema.asBuilt.tables.map((t) => t.name);
+  assert.ok(asNames.includes('Raw'), 'asBuilt: промежуточная таблица на месте');
+  const raw = schema.asBuilt.tables.find((t) => t.name === 'Raw');
+  assert.equal(raw.dropped, true, 'Raw помечена как удалённая');
+  assert.equal(raw.intermediate, true, 'Raw — промежуточная (нет в движке)');
+  assert.equal(raw.fields.length, 2, 'поля промежуточной — из LOAD скрипта');
+  // final — только движковые, без Raw.
+  const finNames = schema.final.tables.map((t) => t.name);
+  assert.ok(!finNames.includes('Raw'), 'final: дропнутой нет');
+  assert.ok(finNames.includes('Продажи') && finNames.includes('Товары'));
+  // Цепочки RESIDENT из lineage попали в asBuilt-связи (без поля).
+  assert.ok(schema.asBuilt.links.some((l) => l.field === null && l.kind === 'resident'), 'RESIDENT-ребро в asBuilt');
+  // Критерии — для легенды и панели качества.
+  assert.ok(schema.meta.criteria.some((c) => c.id === 'synthetic' && c.label.length > 3));
+});
+
+test('buildDataSchema: анализ файла — final исключает дропнутые таблицы', () => {
+  const model = parseScript(DROP_SCRIPT);
+  const g = { meta: { source: 'file:script', capabilities: [] }, tables: [], fields: [] };
+  const schema = buildDataSchema(g, [], dropLineage(), [], model);
+  const fin = schema.final.tables.map((t) => t.name);
+  assert.ok(!fin.includes('Raw'), 'final без дропнутой');
+  assert.ok(fin.includes('Итог') && fin.includes('Продажи'), 'остальные на месте');
+  const as = schema.asBuilt.tables.map((t) => t.name);
+  assert.ok(as.includes('Raw'), 'asBuilt хранит всю картину');
+});
+
+test('buildDataSchema: problemsByType — синт.ключ, неиспользуемые, перегрузка', () => {
+  const findings = [
+    { ruleId: 'P005', severity: 'warning', title: 'Синтетический ключ', target: { kind: 'table', name: 'Мост' } },
+    { ruleId: 'R001', severity: 'warning', title: 'Неиспользуемое поле', target: { kind: 'field', name: 'Сумма' }, impact: { rows: 40 } },
+    { ruleId: 'Q001', severity: 'error', title: 'Ошибка выражения', target: { kind: 'table', name: 'Мост' } },
+  ];
+  const schema = buildDataSchema(GRAPH, findings, lineage());
+  const bridge = schema.final.tables.find((t) => t.name === 'Мост');
+  assert.equal(bridge.problemsByType.synthetic, 1);
+  assert.equal(bridge.problemsByType.errors, 1, 'ошибки считаются отдельно');
+  // Сумма в двух таблицах: unusedFields в обеих; перегрузка у Продажи —
+  // по доле лишних строк (40 из 100) и полей.
+  const sales = schema.final.tables.find((t) => t.name === 'Продажи');
+  assert.equal(sales.problemsByType.unusedFields, 1);
+  assert.ok(sales.problemsByType.overload > 0 && sales.problemsByType.overload <= 100, 'перегрузка 0–100');
+  const clean = schema.final.tables.find((t) => t.name === 'Товары');
+  assert.equal(clean.problemsByType.overload, 0, 'без лишних данных — 0');
+  // Поле с неиспользуемым флагом.
+  const sumField = sales.fields.find((f) => f.name === 'Сумма');
+  assert.equal(sumField.unused, true);
+});
+
+test('buildDataSchema: afterFix — удаляемое по fix помечено и убрано из связей', () => {
+  const findings = [
+    { ruleId: 'R003', severity: 'warning', title: 'Неиспользуемая таблица', target: { kind: 'table', name: 'Мост' }, fix: { kind: 'dropTable', payload: 'Мост' } },
+    { ruleId: 'R001', severity: 'warning', title: 'Неиспользуемое поле', target: { kind: 'field', name: 'Сумма' }, fix: { kind: 'dropField', payload: 'Сумма' } },
+  ];
+  const schema = buildDataSchema(GRAPH, findings, lineage());
+  const bridge = schema.afterFix.tables.find((t) => t.name === 'Мост');
+  assert.equal(bridge.removedByFix, true, 'таблица помечена удаляемой');
+  const sales = schema.afterFix.tables.find((t) => t.name === 'Продажи');
+  assert.equal(sales.removedByFix, undefined, 'остальные не тронуты');
+  // Связи afterFix не ссылаются на удаляемую таблицу.
+  assert.ok(schema.afterFix.links.every((l) => l.from !== 'мост' && l.to !== 'мост'), 'мост исключён из связей');
+});
