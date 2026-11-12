@@ -155,6 +155,8 @@ export function buildIndex(graph, scriptModel = null) {
      * пропускаются с объяснением, а не выдают массу ложных находок.
      */
     frontEndUsageKnown: frontEndUsageKnown(graph, fieldUsage),
+    /** Цифры для честной диагностики «Оценка неполная»: объекты, из них с выражениями, ссылки на поля. */
+    frontEndStats: frontEndUsageStats(graph, fieldUsage),
     /** Все поля, реально используемые во фронт-энде */
     usedFields: new Set([...fieldUsage.values()].filter((f) => f.usedInFrontEnd).map((f) => f.id)),
     /** Поля, встречающиеся только в скрипте */
@@ -178,15 +180,29 @@ export function buildIndex(graph, scriptModel = null) {
  * @returns {boolean}
  */
 function frontEndUsageKnown(graph, fieldUsage) {
-  if (!(graph.objects ?? []).length) return false;
-  // Ссылок на поля в объектах нет вовсе — значит, API не отдаёт сведений
-  // об их использовании. Если и в модели данных полей нет, вопрос снят.
+  return frontEndUsageStats(graph, fieldUsage).known;
+}
+
+/**
+ * Почему фронт-энд «не доказуем»: числа для диагностики.
+ * objects — сколько объектов собрано; objectsWithExpressions — сколько из
+ * них с выражениями (свойства объектов могли не получиться — например,
+ * устаревшая сессия при частичном отказе); referenced — сколько полей
+ * получили ссылку из выражений.
+ * @param {object} graph
+ * @param {Map} fieldUsage — индекс использования полей
+ * @returns {{objects: number, objectsWithExpressions: number, referenced: number, known: boolean}}
+ */
+export function frontEndUsageStats(graph, fieldUsage) {
+  const objects = (graph.objects ?? []).length;
+  const objectsWithExpressions = (graph.objects ?? [])
+    .filter((o) => (o.expressions ?? []).length > 0).length;
   let referenced = 0;
   for (const entry of fieldUsage.values()) {
     if (entry.usedInFrontEnd) referenced += 1;
   }
-  if (referenced > 0) return true;
-  return (graph.fields ?? []).length === 0;
+  const known = objects > 0 && (referenced > 0 || (graph.fields ?? []).length === 0);
+  return { objects, objectsWithExpressions, referenced, known };
 }
 
 /** Утилита: список выражений приложения с указанием владельца.

@@ -206,6 +206,7 @@ test('buildDataSchema: три состояния — asBuilt с дропнуто
   // Диагностика прогона: платформа не задана в этом графе, объектов нет.
   assert.equal(schema.meta.platform, null);
   assert.equal(schema.meta.objectsCount, 0);
+  assert.deepEqual(schema.meta.frontEndStats, null, 'без index — без цифр');
 });
 
 test('buildDataSchema: анализ файла — final исключает дропнутые таблицы', () => {

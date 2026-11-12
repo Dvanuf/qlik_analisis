@@ -325,6 +325,8 @@ export type DataSchema = {
     /** Платформа прогона и сколько объектов фронт-энда собрано — для честной диагностики пропусков. */
     platform?: string | null;
     objectsCount?: number;
+    /** Цифры извлечения ссылок: объектов / из них с выражениями / полей со ссылками. */
+    frontEndStats?: { objects: number; objectsWithExpressions: number; referenced: number; known: boolean } | null;
   };
 };
 

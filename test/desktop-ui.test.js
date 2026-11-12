@@ -255,6 +255,8 @@ test('LineageTab: карточка качества честна при проп
   assert.ok(LINEAGE_TAB.includes('оценка недоступна'), 'нет обработки отсутствия балла домена');
   assert.ok(LINEAGE_TAB.includes('прогон: платформа'), 'нет строки о том, как прошёл прогон');
   assert.ok(LINEAGE_TAB.includes("plat === 'qlikview'"), 'нет персональной подсказки для режима QlikView');
+  assert.ok(LINEAGE_TAB.includes('objectsWithExpressions'), 'нет диагноза «объекты без выражений»');
+  assert.ok(LINEAGE_TAB.includes('frontEndStats'), 'цифры извлечения ссылок не используются');
 });
 
 test('LineageTab: вьюха «Модель данных» — схема с пометками проблем', () => {

@@ -147,7 +147,7 @@ function computeLinks(tablesOfField, fieldStats, assoc, allowedCanon, fieldAllow
  * @returns {{ asBuilt: object, final: object, afterFix: object,
  *   tables: object[], links: object[], meta: object }}
  */
-export function buildDataSchema(graph, findings = [], lineage = null, ruleStats = [], scriptModel = null) {
+export function buildDataSchema(graph, findings = [], lineage = null, ruleStats = [], scriptModel = null, index = null) {
   const notes = [];
   let tablesSrc = graph?.tables ?? [];
   let fieldsSrc = graph?.fields ?? [];
@@ -476,9 +476,10 @@ export function buildDataSchema(graph, findings = [], lineage = null, ruleStats 
     linkKinds: { '1:1': 'связь один к одному', 'm:n': 'многие ко многим', key: 'связь по ключу' },
     criteria: MODEL_CRITERIA,
     // Для честной диагностики пропуска проверок использования полей:
-    // платформа и сколько объектов фронт-энда собрано в этом прогоне.
+    // платформа, объекты и ЦИФРЫ извлечения ссылок (index.frontEndStats).
     platform: graph?.meta?.platform ?? null,
     objectsCount: (graph?.objects ?? []).length,
+    frontEndStats: index?.frontEndStats ?? null,
   };
 
   return {

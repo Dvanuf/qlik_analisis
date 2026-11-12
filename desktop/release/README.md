@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.29.4 | [v0.29.4 — «Оценка неполная»: цифры извлечения и точная причина](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.29.4) |
 | 0.29.3 | [v0.29.3 — карточка качества: как прошёл прогон и точная причина пропусков](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.29.3) |
 | 0.29.2 | [v0.29.2 — фикс: чистые домены выпадали из оценки («Балл домена недоступен»)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.29.2) |
 | 0.29.1 | [v0.29.1 — «Формирование» упрощено: только модель; честная карточка при пропусках](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.29.1) |

@@ -232,7 +232,7 @@ export function analyze(graph, config = {}) {
     dataModel: buildDataModelSheets(graph),
     // Схема модели данных («снежинка») с пометками проблем по таблицам/полям.
     // Без таблиц движка — таблицы выводятся из модели скрипта (анализ файла).
-    schema: buildDataSchema(graph, locatedFindings, lineage, ruleStats, scriptModel),
+    schema: buildDataSchema(graph, locatedFindings, lineage, ruleStats, scriptModel, index),
     // Перечень выражений — для поиска «где используется это выражение».
     expressionIndex: buildExpressionIndex(graph),
   };
