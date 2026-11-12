@@ -224,6 +224,11 @@ export function formatScriptDetailed(src, opts = {}) {
   const stack = []; // { type, line, depth } — п. 2.1
   let depth = 0;
   let fmtOff = false;
+  // Индексы строк в out, скопированных из зоны fmt:off: reformatLoadStatements
+  // не имеет собственного представления о зоне — передаём эти индексы, чтобы
+  // оператор внутри зоны оставался как есть (индексы совпадают с out: каждая
+  // исходная строка даёт один push, кроме схлопнутых пустых).
+  const protectedOut = new Set();
   const out = [];
 
   for (let idx = 0; idx < rawLines.length; idx += 1) {
@@ -234,9 +239,9 @@ export function formatScriptDetailed(src, opts = {}) {
     if (/^\s*\/\/\/\$tab/i.test(plain)) { out.push(plain.replace(/^\s+/, '')); continue; }
 
     // fmt:off / fmt:on (п. 3.2).
-    if (/\/\/\s*fmt:off/i.test(plain)) { fmtOff = true; out.push(raw.trimEnd()); continue; }
-    if (/\/\/\s*fmt:on/i.test(plain)) { fmtOff = false; out.push(raw.trimEnd()); continue; }
-    if (fmtOff) { out.push(raw.trimEnd()); continue; }
+    if (/\/\/\s*fmt:off/i.test(plain)) { protectedOut.add(out.length); out.push(raw.trimEnd()); fmtOff = true; continue; }
+    if (/\/\/\s*fmt:on/i.test(plain)) { protectedOut.add(out.length); out.push(raw.trimEnd()); fmtOff = false; continue; }
+    if (fmtOff) { protectedOut.add(out.length); out.push(raw.trimEnd()); continue; }
 
     const line = strip(raw);
     const trimmed = line.trim();
@@ -306,6 +311,7 @@ export function formatScriptDetailed(src, opts = {}) {
     lines = reformatLoadStatements(lines, {
       commaStyle: opts.commaStyle === 'trailing' ? 'trailing' : 'leading',
       warnings,
+      protectedOut,
     });
   }
 
@@ -322,9 +328,13 @@ export function formatScript(src, opts = {}) {
 /**
  * Многострочные LOAD/SELECT: одно поле на строку, ведущие запятые,
  * ключевые слова — на уровне оператора, «;» в конце (п. 4–5).
- * Однострочные операторы не трогаются.
+ * Однострочные операторы не трогаются. Оператор с любой строкой из
+ * protectedOut (зона fmt:off) копируется как есть — зона сильнее правил.
+ *
+ * @param {string[]} lines
+ * @param {{ commaStyle: string, warnings: string[], protectedOut?: Set<number> }} opts
  */
-function reformatLoadStatements(lines, { commaStyle, warnings }) {
+function reformatLoadStatements(lines, { commaStyle, warnings, protectedOut }) {
   const out = [];
   let i = 0;
   const endsStatement = (line) => /;\s*$/.test(line.trim());
@@ -337,10 +347,18 @@ function reformatLoadStatements(lines, { commaStyle, warnings }) {
     const indent = line.slice(0, base);
     let j = i;
     const body = [];
+    let isProtected = false;
     while (j < lines.length && j - i <= 200) {
       body.push(lines[j].trim());
+      if (protectedOut?.has(j)) isProtected = true;
       if (endsStatement(lines[j])) break;
       j += 1;
+    }
+    // Зона fmt:off сильнее: оператор внутри зоны не перестраивается.
+    if (isProtected) {
+      for (let k = i; k <= j; k += 1) out.push(lines[k]);
+      i = j + 1;
+      continue;
     }
     const text = body.join(' ');
     // Однострочный оператор разбираем, только если в нём есть поля
@@ -401,4 +419,64 @@ function alignAsLines(lines) {
     i = j;
   }
   return lines;
+}
+
+/**
+ * Делит скрипт на секции по вкладкам ///$tab: «шапка» до первой вкладки
+ * (имя «(без вкладки)») + чанк на каждую вкладку (начинается с её маркера).
+ * Секции независимы — их можно форматировать по отдельности и склеивать.
+ *
+ * @param {string} src
+ * @returns {{ name: string, from: number, to: number, text: string }[]}
+ *   from/to — 1-based границы строк в исходнике (to включительно)
+ */
+export function splitScriptSections(src) {
+  const lines = String(src ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const sections = [];
+  let cur = { name: '(без вкладки)', from: 1, start: 0 };
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = lines[i].match(/^\s*\/\/\/\$tab\s*(.*)$/i);
+    if (!m) continue;
+    if (cur.start < i) {
+      sections.push({ name: cur.name, from: cur.from, to: i, text: lines.slice(cur.start, i).join('\n') });
+    } else if (sections.length || cur.name !== '(без вкладки)') {
+      // Подряд идущие маркеры без тела — секция-пустышка.
+      sections.push({ name: cur.name, from: cur.from, to: i, text: '' });
+    }
+    cur = { name: (m[1] ?? '').trim() || '(без имени)', from: i + 1, start: i };
+  }
+  sections.push({
+    name: cur.name,
+    from: cur.from,
+    to: lines.length,
+    text: lines.slice(cur.start).join('\n'),
+  });
+  return sections;
+}
+
+/**
+ * Частичное форматирование: секции из included форматируются, остальные
+ * остаются байт в байт. included = null/undefined — форматируется всё.
+ * Предупреждения секций получают префикс «[имя]» (у шапки — без префикса).
+ *
+ * @param {string} src
+ * @param {object} [opts] — настройки formatScriptDetailed
+ * @param {Set<string>|string[]|null} [included] — имена секций к форматированию
+ * @returns {{ script: string, warnings: string[] }}
+ */
+export function formatScriptSections(src, opts = {}, included = null) {
+  const wanted = included == null
+    ? null
+    : (included instanceof Set ? included : new Set([...included]));
+  const parts = [];
+  const warnings = [];
+  for (const sec of splitScriptSections(src)) {
+    if (wanted && !wanted.has(sec.name)) { parts.push(sec.text); continue; }
+    const r = formatScriptDetailed(sec.text, opts);
+    parts.push(r.script);
+    for (const w of r.warnings) {
+      warnings.push(sec.name === '(без вкладки)' ? w : `[${sec.name}] ${w}`);
+    }
+  }
+  return { script: parts.join('\n'), warnings };
 }

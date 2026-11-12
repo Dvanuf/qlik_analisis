@@ -3,7 +3,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatScript, formatScriptDetailed, formatRulesDoc, MAX_PROTECT_LINES } from '../src/script/format.js';
+import { formatScript, formatScriptDetailed, formatScriptSections, splitScriptSections, formatRulesDoc, MAX_PROTECT_LINES } from '../src/script/format.js';
 
 test('formatScript: вложенность SUB/FOR/IF и обратный выход', () => {
   const src = [
@@ -145,4 +145,69 @@ test('formatScript: незакрытая кавычка не слепит ост
   const r = formatScriptDetailed(src, {});
   assert.ok(r.warnings.some((w) => w.includes('не найден закрывающий')), 'предупреждение о незакрытой кавычке');
   assert.ok(r.script.includes('LOAD\n c\n,d\nRESIDENT R;'), 'LOAD после сломанного фрагмента отформатирован');
+});
+
+test('splitScriptSections: шапка, вкладки, границы строк', () => {
+  const src = [
+    'SET ThousandSep=\' \';',
+    '///$tab 02_ Иерархия',
+    'Raw:',
+    'LOAD a FROM x;',
+    '///$tab 03_ Данные',
+    'T:',
+    'LOAD b FROM y;',
+  ].join('\n');
+  const secs = splitScriptSections(src);
+  assert.deepEqual(secs.map((s) => s.name), ['(без вкладки)', '02_ Иерархия', '03_ Данные']);
+  assert.deepEqual([secs[1].from, secs[1].to], [2, 4], 'to — строка до следующего маркера (включительно)');
+  assert.ok(secs[1].text.startsWith('///$tab 02_ Иерархия'), 'чанк начинается с маркера');
+  // Скрипт, начинающийся с вкладки, — без шапки; без вкладок — одна секция.
+  assert.deepEqual(splitScriptSections('///$tab A\nT:\nLOAD a;').map((s) => s.name), ['A']);
+  const whole = splitScriptSections('T:\nLOAD a FROM x;');
+  assert.deepEqual(whole.map((s) => s.name), ['(без вкладки)']);
+  assert.equal(whole[0].text, 'T:\nLOAD a FROM x;');
+});
+
+test('formatScriptSections: выбранная секция форматируется, остальные байт в байт', () => {
+  const raw = (fields) => [`T_${fields}:`, 'LOAD a, b', `RESIDENT S_${fields};`].join('\n');
+  const src = [
+    '///$tab 01_ Первый',
+    raw('A'),
+    '///$tab 02_ Второй',
+    raw('B'),
+  ].join('\n');
+  const formatted = formatScriptDetailed(src, {}).script;
+  const r = formatScriptSections(src, {}, new Set(['01_ Первый']));
+  // Первая секция отформатирована, вторая — байт в байт.
+  assert.equal(r.script.split('///$tab 02_ Второй')[0], formatted.split('///$tab 02_ Второй')[0]);
+  assert.ok(r.script.includes('///$tab 02_ Второй\nT_B:\nLOAD a, b\nRESIDENT S_B;'), 'вторая секция не тронута');
+  assert.ok(formatted.includes(',b\nRESIDENT S_B;'), 'полный формат перестраивает вторую');
+  // included = null — форматируется всё (эквивалент formatScriptDetailed).
+  assert.equal(formatScriptSections(src, {}, null).script, formatted);
+  // Предупреждения секций — с префиксом (многострочный LOAD без FROM/RESIDENT).
+  const withWarn = formatScriptSections('///$tab 01_X\nT:\nLOAD a,\nb;\n///$tab 02_Y\nU:\nLOAD c\nRESIDENT R;\n', {}, new Set(['01_X']));
+  assert.ok(withWarn.warnings.some((w) => w.startsWith('[01_X] ')), 'префикс секции');
+  assert.ok(!withWarn.warnings.some((w) => w.startsWith('[02_Y] ')), 'неформатированная секция без предупреждений');
+});
+
+test('formatScript: зона fmt:off защищает LOAD от перестроения полей', () => {
+  // Раньше fmt:off действовал только на отступы: LOAD внутри зоны всё равно
+  // разбирали на «одно поле на строку». Теперь зона сильнее правил.
+  const src = [
+    'T:',
+    'LOAD a, b',
+    'RESIDENT S;',
+    '// fmt:off',
+    'U:',
+    'LOAD c,   d',
+    'RESIDENT R;',
+    '// fmt:on',
+    'V:',
+    'LOAD e, f',
+    'RESIDENT Q;',
+  ].join('\n');
+  const r = formatScriptDetailed(src, {});
+  assert.ok(r.script.includes('U:\nLOAD c,   d\nRESIDENT R;'), 'LOAD в зоне не перестроен — байт в байт');
+  assert.ok(r.script.includes('LOAD\n e\n,f\nRESIDENT Q;'), 'LOAD после зоны отформатирован');
+  assert.ok(r.script.includes('LOAD\n a\n,b\nRESIDENT S;'), 'LOAD до зоны отформатирован');
 });
