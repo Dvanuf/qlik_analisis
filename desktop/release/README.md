@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.27.0 | [v0.27.0 — «Формирование»: схема модели данных с пометками проблем и карточкой «Качество модели»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.27.0) |
 | 0.26.1 | [v0.26.1 — фикс сброса галочки «Включить» GitLab при сохранении](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.26.1) |
 | 0.26.0 | [v0.26.0 — включения раскрываются из GitLab автоматически (карточка на «Подключении»)](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.26.0) |
 | 0.25.2 | [v0.25.2 — вкладка «Формирование» работает: lineage доезжает до интерфейса](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.25.2) |
