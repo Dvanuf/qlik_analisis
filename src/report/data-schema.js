@@ -466,11 +466,8 @@ export function buildDataSchema(graph, findings = [], lineage = null, ruleStats 
   if (modelFromScript && tablesSrc.length) {
     notes.push('Модель построена по скрипту: объём данных (строки, кардинальность) неизвестен.');
   }
-  const usageRules = ['R001', 'R002', 'R003'];
-  const usageSkipped = (ruleStats ?? []).filter((s) => usageRules.includes(s.id) && s.skipped);
-  if (usageSkipped.length === usageRules.length) {
-    notes.push('Сведения об использовании полей фронт-энда недоступны — пометки о лишних данных могут быть неполными.');
-  }
+  // Пропуск проверок использования полей карточка «Качество модели»
+  // показывает сама («Оценка неполная») — дублирующий note не добавляем.
 
   const meta = {
     notes,

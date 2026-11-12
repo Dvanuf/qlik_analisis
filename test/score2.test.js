@@ -86,6 +86,16 @@ test('домены: оценка считается той же формулой
   assert.ok(s.domains.model.word && s.domains.model.verdict);
 });
 
+test('домены: чистый домен присутствует в summary.domains (не «не оценён»)', () => {
+  // Регрессия: домены без находок выпадали из domains — вкладки показывали
+  // «оценка недоступна» на чистом домене (модель без model-находок).
+  const s = computeScore([f('S001', 'error', 1, { domain: 'script' })]);
+  assert.equal(s.domains.model.score, 100);
+  assert.equal(s.domains.model.findings, 0);
+  assert.equal(s.domains.model.verdict, 'Отлично');
+  assert.ok(s.domains.vars && s.domains.conn && s.domains.dash, 'все шесть доменов на месте');
+});
+
 test('первоочередные исправления: сортировка по приросту, прогноз после топ-3', () => {
   const findings = [
     f('R010', 'error', 1, { domain: 'expr', title: 'Ошибка А' }),   // gain 10

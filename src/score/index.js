@@ -21,6 +21,7 @@
  * Прогоны помечены scoreVersion = 2: баллы старой формулы (версия 1)
  * несопоставимы с новыми, тренд считается только внутри версии.
  */
+import { DOMAIN_ORDER } from '../rules/domains.js';
 
 /** Версия формулы — записывается в историю прогонов. */
 export const SCORE_VERSION = 2;
@@ -161,6 +162,19 @@ export function computeScore(findings, options = {}) {
     if (d) (byDomain[d] ??= []).push(f);
   }
   const domains = {};
+  // Сеем ВСЕ шесть доменов: домен без находок (например, «Модель данных»,
+  // когда проверки использования полей пропущены) раньше выпадал из
+  // summary.domains — и интерфейс показывал «оценка недоступна» вместо
+  // честного «Отлично» на чистом домене.
+  for (const id of DOMAIN_ORDER) {
+    domains[id] = {
+      score: 100,
+      verdict: verdictFor(VERDICTS, 100),
+      word: verdictFor(DOMAIN_WORDS, 100),
+      findings: 0,
+      places: 0,
+    };
+  }
   for (const [id, items] of Object.entries(byDomain)) {
     const d = severityPenalties(items, scoring);
     const w = wastedPenalty(items, scoring, totalRows);

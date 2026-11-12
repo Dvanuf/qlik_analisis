@@ -146,16 +146,14 @@ test('buildDataSchema: модель из скрипта — пометка об 
   assert.ok(schema.meta.notes.some((n) => n.includes('объём данных')), 'note о неизвестных строках');
 });
 
-test('buildDataSchema: пропуск проверок использования полей — note', () => {
+test('buildDataSchema: пропуск проверок использования полей — без дубля-note (карточка сама)', () => {
   const stats = [
     { id: 'R001', skipped: true },
     { id: 'R002', skipped: true },
     { id: 'R003', skipped: true },
   ];
   const schema = buildDataSchema(GRAPH, [], lineage(), stats);
-  assert.ok(schema.meta.notes.some((n) => n.includes('использовании полей')));
-  const partial = buildDataSchema(GRAPH, [], lineage(), stats.slice(0, 2));
-  assert.ok(!partial.meta.notes.some((n) => n.includes('использовании полей')), 'частичный пропуск — без note');
+  assert.ok(!schema.meta.notes.some((n) => n.includes('использовании полей')), 'note о пропусках дублирует карточку');
 });
 
 test('buildDataSchema: связи обрезаются пределом SCHEMA_MAX_LINKS', () => {
