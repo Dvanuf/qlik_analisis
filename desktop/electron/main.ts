@@ -1704,6 +1704,8 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
             { id: 'unusedFields', label: 'Неиспользуемые поля', hint: 'R001/R002' },
             { id: 'synthetic', label: 'Синтетические ключи', hint: 'P005/P012' },
           ],
+          platform: 'qlik-sense',
+          objectsCount: 2,
         },
       },
     } as never;

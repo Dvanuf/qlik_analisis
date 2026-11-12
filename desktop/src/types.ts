@@ -322,6 +322,9 @@ export type DataSchema = {
     associationsAvailable: boolean;
     linkKinds: Record<string, string>;
     criteria: SchemaCriterion[];
+    /** Платформа прогона и сколько объектов фронт-энда собрано — для честной диагностики пропусков. */
+    platform?: string | null;
+    objectsCount?: number;
   };
 };
 

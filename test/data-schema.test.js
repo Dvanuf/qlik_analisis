@@ -203,6 +203,9 @@ test('buildDataSchema: три состояния — asBuilt с дропнуто
   assert.ok(schema.asBuilt.links.some((l) => l.field === null && l.kind === 'resident'), 'RESIDENT-ребро в asBuilt');
   // Критерии — для легенды и панели качества.
   assert.ok(schema.meta.criteria.some((c) => c.id === 'synthetic' && c.label.length > 3));
+  // Диагностика прогона: платформа не задана в этом графе, объектов нет.
+  assert.equal(schema.meta.platform, null);
+  assert.equal(schema.meta.objectsCount, 0);
 });
 
 test('buildDataSchema: анализ файла — final исключает дропнутые таблицы', () => {

@@ -385,7 +385,11 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
 
       {/* Карточка «Качество модели» — наверху (утверждённый макет) */}
       <div className="card ms-quality" style={{ marginBottom: 12 }}>
-        <div className="hint" style={{ marginBottom: 6 }}>Качество модели</div>
+        <div className="hint" style={{ marginBottom: 6 }}>
+          Качество модели
+          {schema?.meta?.platform ? ` · прогон: платформа ${schema.meta.platform === 'qlikview' ? 'QlikView (Doc API)' : schema.meta.platform}` : ''}
+          {schema?.meta?.objectsCount != null ? ` · объектов ${schema.meta.objectsCount}` : ''}
+        </div>
         <div className="row" style={{ gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className={`ring ${zone}`} style={{ width: 84, height: 84, borderWidth: 7 }}>
             <div>
@@ -424,13 +428,24 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
             </div>
           )}
         </div>
-        {partialScore && (
-          <div className="hint" style={{ marginTop: 8 }}>
-            ⚠ Оценка неполная: {skippedUsage.length} проверк{skippedUsage.length === 1 ? 'а' : 'и'} не выполнен{(skippedUsage.length === 1 ? 'а' : 'ы')} —
-            сервер не отдал сведения об использовании полей ({skippedUsage.map((s) => s.id).join(', ')}).
-            «Чистые таблицы» в этом случае не означает «отлично»: лишние данные обнаружить невозможно.
-          </div>
-        )}
+        {partialScore && (() => {
+          // Причина пропуска — персональная подсказка:
+          // QlikView/Doc API не отдаёт ссылки на поля; объекты могли не собраться.
+          const plat = schema?.meta?.platform ?? null;
+          const objCount = schema?.meta?.objectsCount ?? 0;
+          const advice = plat === 'qlikview'
+            ? 'Анализ выполнен в режиме QlikView (Doc API): сервер не отдаёт ссылки на поля в объектах. Если приложение доступно движком Sense — переключите платформу на «Qlik Sense» во вкладке «Подключение» и переанализируйте.'
+            : objCount === 0
+              ? 'Объекты фронт-энда не собраны (0) — проверьте подключение (⟳ / «Войти в хаб») и переанализируйте.'
+              : 'Объекты собраны, но ссылки на поля не извлеклись — переанализируйте; если повторится, это ограничение API для импортированных приложений.';
+          return (
+            <div className="hint" style={{ marginTop: 8 }}>
+              ⚠ Оценка неполная: {skippedUsage.length} проверк{skippedUsage.length === 1 ? 'а' : 'и'} не выполнен{(skippedUsage.length === 1 ? 'а' : 'ы')} —
+              сведения об использовании полей недоступны ({skippedUsage.map((s) => s.id).join(', ')}).
+              «Чистые таблицы» в этом случае не означает «отлично»: лишние данные обнаружить невозможно. {advice}
+            </div>
+          );
+        })()}
         {(schema?.meta.notes ?? []).map((n, i) => (
           <div key={i} className="hint" style={{ color: 'var(--warn, #e0a33e)', marginTop: 6 }}>⚠ {n}</div>
         ))}

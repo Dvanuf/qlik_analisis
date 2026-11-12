@@ -475,6 +475,10 @@ export function buildDataSchema(graph, findings = [], lineage = null, ruleStats 
     associationsAvailable: assoc.size > 0,
     linkKinds: { '1:1': 'связь один к одному', 'm:n': 'многие ко многим', key: 'связь по ключу' },
     criteria: MODEL_CRITERIA,
+    // Для честной диагностики пропуска проверок использования полей:
+    // платформа и сколько объектов фронт-энда собрано в этом прогоне.
+    platform: graph?.meta?.platform ?? null,
+    objectsCount: (graph?.objects ?? []).length,
   };
 
   return {
