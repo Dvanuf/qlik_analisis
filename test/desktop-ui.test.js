@@ -249,10 +249,9 @@ test('LineageTab: вкладка «Формирование» — SVG-DAG и д�
   assert.ok(APP.includes('onOpenAnalysis={(name) => {'), 'переход со схемы в «Анализ» не подключён');
 });
 
-test('LineageTab: вьюха «Модель данных» — схема «снежинка» с пометками', () => {
+test('LineageTab: вьюха «Модель данных» — схема с пометками проблем', () => {
   const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
   assert.ok(LINEAGE_TAB.includes('Модель данных'), 'нет переключателя вьюхи');
-  assert.ok(LINEAGE_TAB.includes('Схема модели данных'), 'нет aria-метки схемы');
   assert.ok(LINEAGE_TAB.includes('ms-node'), 'нет боксов таблиц');
   assert.ok(LINEAGE_TAB.includes('ms-fkey'), 'ключевые поля не выделены');
   assert.ok(LINEAGE_TAB.includes('ms-link-mn'), 'связь M:N не помечена');
@@ -260,11 +259,24 @@ test('LineageTab: вьюха «Модель данных» — схема «сн
   assert.ok(LINEAGE_TAB.includes('onOpenAnalysis'), 'нет перехода в «Анализ»');
 });
 
-test('LineageTab: карточка «Качество модели» — домен и худшие таблицы', () => {
+test('LineageTab: три состояния модели — аккордеоны и фильтры (макет 0.29.0)', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  assert.ok(LINEAGE_TAB.includes('С учётом дропнутых'), 'нет секции 1 (как сформировано)');
+  assert.ok(LINEAGE_TAB.includes('Без дропнутых — текущая'), 'нет секции 2 (финальная)');
+  assert.ok(LINEAGE_TAB.includes('Рекомендованная — после правок'), 'нет секции 3 (рекомендованная)');
+  assert.ok(LINEAGE_TAB.includes('asBuilt') && LINEAGE_TAB.includes('afterFix'), 'состояния не читаются из схемы');
+  assert.ok(LINEAGE_TAB.includes('problemsByType'), 'типизированные проблемы не используются');
+  assert.ok(LINEAGE_TAB.includes('Только проблемное'), 'нет чипов-фильтров');
+  assert.ok(LINEAGE_TAB.includes('openSections'), 'секции не сворачиваются');
+  assert.ok(STYLES.includes('.ms-sec-head'), 'стили аккордеона не добавлены');
+  assert.ok(STYLES.includes('.ms-overload-fill'), 'стили полоски перегрузки не добавлены');
+});
+
+test('LineageTab: карточка «Качество модели» — наверху, домен и худшие таблицы', () => {
   const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
   assert.ok(LINEAGE_TAB.includes('Качество модели'), 'нет карточки качества');
   assert.ok(LINEAGE_TAB.includes('domains?.model'), 'нет балла домена модели');
-  assert.ok(LINEAGE_TAB.includes('Таблицы с находками'), 'нет списка худших таблиц');
+  assert.ok(LINEAGE_TAB.includes('Худшие таблицы:'), 'нет списка худших таблиц');
   assert.ok(STYLES.includes('.ms-node'), 'стили схемы не добавлены');
   assert.ok(STYLES.includes('.ms-link-mn'), 'стили связи M:N не добавлены');
 });

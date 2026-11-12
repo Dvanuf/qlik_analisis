@@ -1051,6 +1051,45 @@ table.rq tr.pat { cursor: pointer; }
 .legend-item i.ms-sev-info { background: var(--info); }
 .legend-item i.ms-sev-ok { background: var(--success); }
 
+/* Карточка «Качество модели» (наверху вьюхи) и фильтры (макет 0.29.0). */
+.ms-quality { border-color: var(--line); }
+.ms-qcounts { display: flex; gap: 10px; flex-wrap: wrap; }
+.ms-qcnt { background: var(--panel-2); border-radius: 8px; padding: 6px 12px; font-size: 0.75rem; color: var(--muted); }
+.ms-qcnt b { display: block; font-size: 1.1rem; color: var(--text); }
+.ms-qcnt b.ms-sev-err-t { color: var(--danger); }
+.ms-qcnt b.ms-sev-warn-t { color: var(--warning); }
+.ms-sev-err-t { color: var(--danger); }
+.ms-sev-warn-t { color: var(--warning); }
+.ms-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ms-filters button.is-active { border-color: var(--brand); color: var(--brand); }
+/* Секции-аккордеоны трёх состояний модели. */
+.ms-sec { padding: 0; overflow: hidden; }
+.ms-sec-head {
+  display: flex; gap: 10px; align-items: center; width: 100%;
+  background: none; border: none; color: var(--text); cursor: pointer;
+  padding: 10px 14px; font: inherit; text-align: left;
+}
+.ms-sec-head:hover { background: var(--panel-2); }
+.ms-chev { color: var(--brand); width: 16px; flex: none; }
+.ms-sec-title { font-weight: 600; flex: none; }
+.ms-sec-counts { color: var(--muted); font-size: 0.75rem; font-weight: 400; flex: 1; text-align: right; }
+/* Бейджи типов проблем и статусы на боксах. */
+.ms-b-syn { fill: var(--warning); font-weight: 700; }
+.ms-b-inc { fill: var(--info); }
+.ms-b-unused { fill: var(--danger); }
+.ms-b-mn { fill: var(--danger); font-weight: 700; }
+.ms-ok-t { fill: var(--success); }
+.ms-node.ms-drop { opacity: 0.55; }
+.ms-node.ms-drop + text { text-decoration: line-through; }
+.ms-node.ms-removed { stroke-dasharray: 5 3; }
+.ms-funused { fill: var(--muted); }
+.ms-fremoved { fill: var(--danger); text-decoration: line-through; }
+.ms-overload-track { fill: var(--panel-3); }
+.ms-overload-fill { fill: var(--warning); }
+.ms-overload-fill-hi { fill: var(--danger); }
+.chip { border: 1px solid var(--line); background: var(--panel-3); color: var(--text); border-radius: 999px; cursor: pointer; }
+.chip:hover { border-color: var(--brand); }
+
 /* Панель правил форматирования. */
 .fmtdoc {
   background: var(--panel-2); border: 1px solid var(--line);

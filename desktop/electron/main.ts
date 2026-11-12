@@ -1609,34 +1609,114 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
         warnings: [],
       },
       schema: {
-        tables: [
-          {
-            name: 'Продажи', rows: 1240, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
-            problems: {
-              error: 0, warning: 2, info: 1, total: 3, rules: [
-                { id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 },
-                { id: 'R001', severity: 'warning', title: 'Неиспользуемое поле', count: 1 },
-                { id: 'R020', severity: 'info', title: 'Высокая кардинальность', count: 1 },
+        asBuilt: {
+          tables: [
+            {
+              name: 'Raw', rows: null, synthetic: false, sourceKind: 'lib', keyFields: [],
+              dropped: true, intermediate: true,
+              problemsByType: { unusedFields: 1, unusedTable: 0, synthetic: 0, incompleteKeys: 0, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 0 },
+              problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R001', severity: 'warning', title: 'Неиспользуемое поле', count: 1 }] },
+              fields: [
+                { name: 'Код', key: true, incompleteKey: false, unused: false, problems: null },
+                { name: 'Коммент', key: false, incompleteKey: false, unused: true, problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R001', severity: 'warning', title: 'Неиспользуемое поле', count: 1 }] } },
               ],
             },
-            fields: [
-              {
-                name: 'Код', key: true, incompleteKey: true,
-                problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 }] },
+            {
+              name: 'Продажи', rows: 1240, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+              problemsByType: { unusedFields: 1, unusedTable: 0, synthetic: 1, incompleteKeys: 1, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 40 },
+              problems: {
+                error: 0, warning: 2, info: 1, total: 3, rules: [
+                  { id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 },
+                  { id: 'R001', severity: 'warning', title: 'Неиспользуемое поле', count: 1 },
+                  { id: 'R020', severity: 'info', title: 'Высокая кардинальность', count: 1 },
+                ],
               },
-              { name: 'Сумма', key: false, incompleteKey: false, problems: null },
-            ],
-          },
-          {
-            name: 'Товары', rows: 320, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
-            problems: null,
-            fields: [{ name: 'Код', key: true, incompleteKey: false, problems: null }],
-          },
-        ],
-        links: [{ from: 'продажи', to: 'товары', field: 'код', kind: '1:1' }],
+              fields: [
+                {
+                  name: 'Код', key: true, incompleteKey: true, unused: false,
+                  problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 }] },
+                },
+                { name: 'Сумма', key: false, incompleteKey: false, unused: true, problems: null },
+              ],
+            },
+            {
+              name: 'Товары', rows: 320, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+              problemsByType: { unusedFields: 0, unusedTable: 0, synthetic: 0, incompleteKeys: 0, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 0 },
+              problems: null,
+              fields: [{ name: 'Код', key: true, incompleteKey: false, unused: false, problems: null }],
+            },
+          ],
+          links: [
+            { from: 'raw', to: 'продажи', field: null, kind: 'resident' },
+            { from: 'продажи', to: 'товары', field: 'код', kind: '1:1' },
+          ],
+        },
+        final: {
+          tables: [
+            {
+              name: 'Продажи', rows: 1240, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+              problemsByType: { unusedFields: 1, unusedTable: 0, synthetic: 1, incompleteKeys: 1, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 40 },
+              problems: {
+                error: 0, warning: 2, info: 1, total: 3, rules: [
+                  { id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 },
+                  { id: 'R001', severity: 'warning', title: 'Неиспользуемое поле', count: 1 },
+                  { id: 'R020', severity: 'info', title: 'Высокая кардинальность', count: 1 },
+                ],
+              },
+              fields: [
+                {
+                  name: 'Код', key: true, incompleteKey: true, unused: false,
+                  problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 }] },
+                },
+                { name: 'Сумма', key: false, incompleteKey: false, unused: true, problems: null },
+              ],
+            },
+            {
+              name: 'Товары', rows: 320, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+              problemsByType: { unusedFields: 0, unusedTable: 0, synthetic: 0, incompleteKeys: 0, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 0 },
+              problems: null,
+              fields: [{ name: 'Код', key: true, incompleteKey: false, unused: false, problems: null }],
+            },
+          ],
+          links: [{ from: 'продажи', to: 'товары', field: 'код', kind: '1:1' }],
+        },
+        afterFix: {
+          tables: [
+            {
+              name: 'Продажи', rows: 1240, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+              problemsByType: { unusedFields: 0, unusedTable: 0, synthetic: 1, incompleteKeys: 1, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 0 },
+              problems: {
+                error: 0, warning: 1, info: 0, total: 1, rules: [
+                  { id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 },
+                ],
+              },
+              fields: [
+                {
+                  name: 'Код', key: true, incompleteKey: true, unused: false,
+                  problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 }] },
+                },
+                { name: 'Сумма', key: false, incompleteKey: false, unused: true, removedByFix: true, problems: null },
+              ],
+            },
+            {
+              name: 'Товары', rows: 320, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+              problemsByType: { unusedFields: 0, unusedTable: 0, synthetic: 0, incompleteKeys: 0, mn: 0, merge: 0, empty: 0, cardinality: 0, errors: 0, overload: 0 },
+              problems: null,
+              fields: [{ name: 'Код', key: true, incompleteKey: false, unused: false, problems: null }],
+            },
+          ],
+          links: [{ from: 'продажи', to: 'товары', field: 'код', kind: '1:1' }],
+        },
+        // Совместимость: tables/links = final.
+        tables: [],
+        links: [],
         meta: {
           notes: [], modelFromScript: false, associationsAvailable: true,
           linkKinds: { '1:1': 'связь один к одному', 'm:n': 'многие ко многим', key: 'связь по ключу' },
+          criteria: [
+            { id: 'unusedFields', label: 'Неиспользуемые поля', hint: 'R001/R002' },
+            { id: 'synthetic', label: 'Синтетические ключи', hint: 'P005/P012' },
+          ],
         },
       },
     } as never;

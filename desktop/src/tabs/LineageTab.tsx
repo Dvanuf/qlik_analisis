@@ -5,14 +5,17 @@
  * колонки — уровень построения (depth), рёбра — кривые Безье, клик по узлу —
  * детали. Кнопка «Документ» — текстовый отчёт по разделам и шагам outline.
  *
- * «Модель данных» — схема «снежинка» (как в просмотрщике модели Qlik):
- * таблицы-боксы с полями, связи по общим полям (1:1 / M:N / ключ).
- * Проблемы из находок видны прямо на схеме: рамка таблицы и точки у полей
- * красятся по максимальной важности, клик — детали с переходом в «Анализ».
- * Карточка «Качество модели» — балл домена, находки и худшие таблицы.
+ * «Модель данных» — модель в трёх состояниях, одно под другим, каждое
+ * сворачивается (утверждённый макет 0.29.0): «как сформировано» (с дропнутыми
+ * и промежуточными), «текущая финальная», «рекомендованная — после правок».
+ * Карточка «Качество модели» — наверху: балл домена, счётчики, худшие
+ * таблицы. Проблемы — бейджами по типам (синт.ключ, неиспользуемые поля,
+ * неполные ключи, M:N, перегрузка), чипы-фильтры подсвечивают проблемное.
  */
 import { useMemo, useState } from 'react';
-import type { AnalysisResult, LineageNode, SchemaProblems, SchemaTable } from '../types.js';
+import type {
+  AnalysisResult, LineageNode, SchemaProblems, SchemaTable,
+} from '../types.js';
 import { SOURCE_KIND_LABELS } from '../../../src/script/lineage.js';
 import { canonicalFieldName } from '../../../src/normalize.js';
 import { parseIncludeLines } from '../../../src/extract/includes.js';
@@ -40,6 +43,12 @@ const EDGE_LABELS: Record<string, string> = {
 };
 
 const SEV_RANK: Record<string, number> = { error: 3, warning: 2, info: 1 };
+const SEV_RU: Record<string, string> = { error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание' };
+const CHAIN_LABELS: Record<string, string> = { resident: 'RESIDENT', join: 'JOIN', concatenate: 'CONCATENATE' };
+
+/** Обрезка текста в SVG-узле. */
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const fmtRows = (rows: number | null) => (rows == null ? '—' : rows.toLocaleString('ru-RU'));
 
 /** Максимальная важность проблем — по ней красится рамка таблицы/поле. */
 function maxSev(p: SchemaProblems | null): 'error' | 'warning' | 'info' | null {
@@ -50,20 +59,122 @@ function maxSev(p: SchemaProblems | null): 'error' | 'warning' | 'info' | null {
   return null;
 }
 
-const SEV_RU: Record<string, string> = { error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание' };
+type StateKey = 'asBuilt' | 'final' | 'afterFix';
+const MODEL_STATES: { key: StateKey; title: string }[] = [
+  { key: 'asBuilt', title: '1. С учётом дропнутых — как сформировано' },
+  { key: 'final', title: '2. Без дропнутых — текущая (финальная) модель' },
+  { key: 'afterFix', title: '3. Рекомендованная — после правок' },
+];
 
-/** Обрезка текста в SVG-узле. */
-const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+type FilterKey = 'all' | 'problems' | 'synthetic' | 'unused' | 'mn' | 'incomplete';
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: 'Все' },
+  { key: 'problems', label: 'Только проблемное' },
+  { key: 'synthetic', label: 'Синт.ключи' },
+  { key: 'unused', label: 'Неисп.поля' },
+  { key: 'mn', label: 'M:N' },
+  { key: 'incomplete', label: 'Неполные ключи' },
+];
 
-const fmtRows = (rows: number | null) => (rows == null ? '—' : rows.toLocaleString('ru-RU'));
+/** Таблица проходит фильтр? (для подсветки: не прошедшие гаснут) */
+function matchesFilter(
+  t: SchemaTable,
+  f: FilterKey,
+): boolean {
+  if (f === 'all') return true;
+  const p = t.problemsByType;
+  if (f === 'problems') return (t.problems?.total ?? 0) > 0;
+  if (f === 'synthetic') return p.synthetic > 0;
+  if (f === 'unused') return p.unusedFields > 0 || p.unusedTable > 0;
+  if (f === 'mn') return p.mn > 0;
+  if (f === 'incomplete') return p.incompleteKeys > 0;
+  return true;
+}
+
+/** Раскладка одной схемы: BFS-уровни от таблицы с максимумом связей. */
+function computeLayout(tables: SchemaTable[], links: { from: string; to: string }[]) {
+  const W = 230, GX = 84, GY = 26, HDR = 36, ROW = 17, SHOW = 15;
+  const canon = (name: string) => canonicalFieldName(name);
+  const heightOf = (t: SchemaTable) => {
+    const shown = Math.min(t.fields.length, SHOW);
+    const more = t.fields.length > SHOW ? ROW : 0;
+    const bar = t.problemsByType.overload > 0 ? 8 : 0;
+    return HDR + shown * ROW + more + bar + 8;
+  };
+  const adj = new Map<string, Set<string>>();
+  const deg = new Map<string, number>();
+  const bump = (c: string, nb: string) => {
+    if (!adj.has(c)) adj.set(c, new Set());
+    adj.get(c)!.add(nb);
+  };
+  for (const l of links) {
+    bump(l.from, l.to);
+    bump(l.to, l.from);
+    deg.set(l.from, (deg.get(l.from) ?? 0) + 1);
+    deg.set(l.to, (deg.get(l.to) ?? 0) + 1);
+  }
+  const sorted = [...tables].sort((a, b) => a.name.localeCompare(b.name));
+  let root = sorted[0];
+  for (const t of sorted) {
+    const d = (deg.get(canon(t.name)) ?? 0) - (deg.get(canon(root.name)) ?? 0);
+    if (d > 0) root = t;
+  }
+  const level = new Map<string, number>([[canon(root.name), 0]]);
+  let frontier = [canon(root.name)];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const c of frontier) {
+      for (const nb of adj.get(c) ?? []) {
+        if (!level.has(nb)) {
+          level.set(nb, (level.get(c) ?? 0) + 1);
+          next.push(nb);
+        }
+      }
+    }
+    frontier = next;
+  }
+  const maxLevel = Math.max(0, ...level.values());
+  const cols: SchemaTable[][] = Array.from({ length: maxLevel + 1 }, () => []);
+  const orphans: SchemaTable[] = [];
+  for (const t of sorted) {
+    const lv = level.get(canon(t.name));
+    if (lv == null) orphans.push(t);
+    else cols[lv].push(t);
+  }
+  if (orphans.length) cols.push(orphans);
+  const pos = new Map<string, { x: number; y: number; h: number }>();
+  cols.forEach((col, ci) => {
+    let y = 0;
+    for (const t of col) {
+      const h = heightOf(t);
+      pos.set(canon(t.name), { x: ci * (W + GX), y, h });
+      y += h + GY;
+    }
+  });
+  const colHeights = cols.map((col) => col.reduce((s, t) => s + heightOf(t) + GY, 0));
+  const width = cols.length * (W + GX);
+  const height = Math.max(...colHeights, HDR);
+  const fieldY = (tc: string, fieldName: string): number | null => {
+    const t = tables.find((x) => canon(x.name) === tc);
+    const p = pos.get(tc);
+    if (!t || !p) return null;
+    const idx = t.fields.findIndex((f) => canonicalFieldName(f.name) === canonicalFieldName(fieldName));
+    if (idx < 0 || idx >= SHOW) return null;
+    return p.y + HDR + idx * ROW + ROW - 5;
+  };
+  return { tables: sorted, pos, W, GX, HDR, ROW, SHOW, width, height, fieldY, canon };
+}
 
 export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
   const [selected, setSelected] = useState<LineageNode | null>(null);
   const [docOpen, setDocOpen] = useState(false);
   const [viewPref, setView] = useState<'lineage' | 'schema'>('lineage');
-  const [selTable, setSelTable] = useState<SchemaTable | null>(null);
-  const [selField, setSelField] = useState<{ table: SchemaTable; field: SchemaTable['fields'][number] } | null>(null);
-  const [qualityOpen, setQualityOpen] = useState(false);
+  // Выбранная таблица: { key: состояние, table } — для панели деталей.
+  const [selTable, setSelTable] = useState<{ key: StateKey; table: SchemaTable } | null>(null);
+  const [selField, setSelField] = useState<{ key: StateKey; table: SchemaTable; field: SchemaTable['fields'][number] } | null>(null);
+  // Раскрытые секции-аккордеоны: по умолчанию — текущая финальная модель.
+  const [openSections, setOpenSections] = useState<Set<StateKey>>(new Set(['final']));
+  const [filter, setFilter] = useState<FilterKey>('all');
 
   const lineage = analysis?.lineage ?? null;
   const schema = analysis?.schema ?? null;
@@ -94,86 +205,68 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
     return { cols, nodePos, W, H, width, height };
   }, [lineage]);
 
-  /** Раскладка схемы: BFS-уровни связей от таблицы с максимумом связей —
-   *  корень в первой колонке, звезда/снежинка читается слева направо. */
-  const schemaLayout = useMemo(() => {
-    if (!schema || !schema.tables.length) return null;
-    const W = 230, GX = 84, GY = 26, HDR = 34, ROW = 17, SHOW = 15;
-    const heightOf = (t: SchemaTable) => {
-      const shown = Math.min(t.fields.length, SHOW);
-      const more = t.fields.length > SHOW ? ROW : 0;
-      return HDR + shown * ROW + more + 8;
-    };
-    const canon = (name: string) => canonicalFieldName(name);
-    // Соседство по связям.
-    const adj = new Map<string, Set<string>>();
-    const deg = new Map<string, number>();
-    const bump = (c: string, nb: string) => {
-      if (!adj.has(c)) adj.set(c, new Set());
-      adj.get(c)!.add(nb);
-    };
-    for (const l of schema.links) {
-      bump(l.from, l.to);
-      bump(l.to, l.from);
-      deg.set(l.from, (deg.get(l.from) ?? 0) + 1);
-      deg.set(l.to, (deg.get(l.to) ?? 0) + 1);
+  /** Раскладки трёх состояний модели. */
+  const layouts = useMemo(() => {
+    if (!schema) return null;
+    const out = {} as Record<StateKey, ReturnType<typeof computeLayout>>;
+    for (const st of MODEL_STATES) {
+      const s = st.key === 'asBuilt' ? schema.asBuilt : st.key === 'afterFix' ? schema.afterFix : schema.final;
+      out[st.key] = computeLayout(s.tables, s.links);
     }
-    // Корень: максимум связей, при равенстве — первое имя.
-    const tables = [...schema.tables].sort((a, b) => a.name.localeCompare(b.name));
-    let root = tables[0];
-    for (const t of tables) {
-      const d = (deg.get(canon(t.name)) ?? 0) - (deg.get(canon(root.name)) ?? 0);
-      if (d > 0) root = t;
-    }
-    // BFS-уровни от корня.
-    const level = new Map<string, number>([[canon(root.name), 0]]);
-    let frontier = [canon(root.name)];
-    while (frontier.length) {
-      const next: string[] = [];
-      for (const c of frontier) {
-        for (const nb of adj.get(c) ?? []) {
-          if (!level.has(nb)) {
-            level.set(nb, (level.get(c) ?? 0) + 1);
-            next.push(nb);
-          }
-        }
-      }
-      frontier = next;
-    }
-    // Колонки: таблицы без связей — в последнюю колонку справа.
-    const maxLevel = Math.max(0, ...level.values());
-    const cols: SchemaTable[][] = Array.from({ length: maxLevel + 1 }, () => []);
-    const orphans: SchemaTable[] = [];
-    for (const t of tables) {
-      const lv = level.get(canon(t.name));
-      if (lv == null) orphans.push(t);
-      else cols[lv].push(t);
-    }
-    if (orphans.length) cols.push(orphans);
-    // Позиции: внутри колонки — накопительно по высоте боксов.
-    const pos = new Map<string, { x: number; y: number; h: number }>();
-    cols.forEach((col, ci) => {
-      let y = 0;
-      for (const t of col) {
-        const h = heightOf(t);
-        pos.set(canon(t.name), { x: ci * (W + GX), y, h });
-        y += h + GY;
-      }
-    });
-    const colHeights = cols.map((col) => col.reduce((s, t) => s + heightOf(t) + GY, 0));
-    const width = cols.length * (W + GX);
-    const height = Math.max(...colHeights, HDR);
-    // Y строки поля в боксе (null — поле скрыто лимитом показа).
-    const fieldY = (tc: string, fieldName: string): number | null => {
-      const t = schema.tables.find((x) => canon(x.name) === tc);
-      const p = pos.get(tc);
-      if (!t || !p) return null;
-      const idx = t.fields.findIndex((f) => canonicalFieldName(f.name) === canonicalFieldName(fieldName));
-      if (idx < 0 || idx >= SHOW) return null;
-      return p.y + HDR + idx * ROW + ROW - 5;
-    };
-    return { cols: tables, colBoxes: cols, pos, W, GX, HDR, ROW, SHOW, width, height, fieldY, canon };
+    return out;
   }, [schema]);
+
+  /** Счётчики фильтров и сводка по состоянию asBuilt (полная картина). */
+  const filterCounts = useMemo(() => {
+    const counts: Record<Exclude<FilterKey, 'all'>, number> = {
+      problems: 0, synthetic: 0, unused: 0, mn: 0, incomplete: 0,
+    };
+    const seen = new Set<string>();
+    for (const t of schema?.asBuilt.tables ?? []) {
+      const tc = canonicalFieldName(t.name);
+      if (seen.has(tc)) continue;
+      seen.add(tc);
+      if (matchesFilter(t, 'problems')) counts.problems += 1;
+      if (matchesFilter(t, 'synthetic')) counts.synthetic += 1;
+      if (matchesFilter(t, 'unused')) counts.unused += 1;
+      if (matchesFilter(t, 'mn')) counts.mn += 1;
+      if (matchesFilter(t, 'incomplete')) counts.incomplete += 1;
+    }
+    return counts;
+  }, [schema]);
+
+  const modelDom = analysis?.summary?.domains?.model ?? null;
+  const modelScore = modelDom?.score ?? null;
+  const zone = modelScore == null ? 'mute' : modelScore >= 75 ? 'g' : modelScore >= 50 ? 'y' : 'r';
+  const zonePill = modelScore == null ? 'mute' : modelScore >= 75 ? 'ok' : modelScore >= 50 ? 'warning' : 'error';
+
+  // Находки домена «Модель данных» — для счётчиков карточки.
+  const modelFindings = (analysis?.findings ?? []).filter((f) => f.domain === 'model');
+  const modelBySev = { error: 0, warning: 0, info: 0 };
+  for (const f of modelFindings) {
+    const k = f.severity as keyof typeof modelBySev;
+    if (modelBySev[k] != null) modelBySev[k] += 1;
+  }
+  // Таблиц с синтетическим ключом (по полной картине asBuilt).
+  const syntheticTables = (schema?.asBuilt.tables ?? []).filter((t) => t.problemsByType.synthetic > 0).length;
+
+  // Худшие таблицы для карточки: по максимальной важности, затем по числу мест.
+  const worstTables = useMemo(() => (schema?.final.tables ?? [])
+    .filter((t) => t.problems)
+    .map((t) => ({ t, sev: maxSev(t.problems) ?? 'info' }))
+    .sort((a, b) => (
+      (SEV_RANK[b.sev] ?? 0) - (SEV_RANK[a.sev] ?? 0)
+      || b.t.problems!.total - a.t.problems!.total
+      || a.t.name.localeCompare(b.t.name)
+    ))
+    .slice(0, 4), [schema]);
+
+  const toggleSection = (key: StateKey) => setOpenSections((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
 
   if (!analysis || (!lineage && !schema)) {
     return (
@@ -182,32 +275,11 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
         <p className="muted">
           Структура формирования приложения появится после анализа: источники,
           таблицы, цепочки RESIDENT/JOIN/CONCATENATE, STORE и DROP — как
-          lineage-граф в NodeGraph, плюс схема модели данных с пометками проблем.
+          lineage-граф в NodeGraph, плюс модель данных в трёх состояниях
+          с пометками проблем.
         </p>
       </section>
     );
-  }
-
-  const modelDom = analysis.summary?.domains?.model ?? null;
-  const zonePill = (score?: number) => (score == null ? 'mute' : score >= 75 ? 'ok' : score >= 50 ? 'warning' : 'error');
-
-  // Худшие таблицы для «Качества модели»: по максимальной важности, затем
-  // по числу находок.
-  const worstTables = (schema?.tables ?? [])
-    .filter((t) => t.problems)
-    .map((t) => ({ t, sev: maxSev(t.problems) ?? 'info' }))
-    .sort((a, b) => (
-      (SEV_RANK[b.sev] ?? 0) - (SEV_RANK[a.sev] ?? 0)
-      || b.t.problems!.total - a.t.problems!.total
-      || a.t.name.localeCompare(b.t.name)
-    ));
-  const modelFindings = (analysis.findings ?? []).filter((f) => f.domain === 'model');
-  const modelBySev = { error: 0, warning: 0, info: 0 };
-  let modelPlaces = 0;
-  for (const f of modelFindings) {
-    const sevKey = f.severity as keyof typeof modelBySev;
-    if (modelBySev[sevKey] != null) modelBySev[sevKey] += 1;
-    modelPlaces += f.count ?? 1;
   }
 
   /* --------------------- Вьюха «Граф формирования» --------------------- */
@@ -223,7 +295,6 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
     const pos = (id: string) => nodePos.get(id) ?? { x: 0, y: 0 };
     return (
       <>
-        {/* Легенда */}
         <div className="card row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
           <span className="legend-item"><i className="ln-src" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3 }} /> источник</span>
           <span className="legend-item"><i className="ln-table" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3 }} /> таблица</span>
@@ -235,7 +306,6 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
           ))}
         </div>
 
-        {/* Граф: послойный DAG */}
         <div className="card scrolltbl">
           <svg
             width={layout.width}
@@ -298,7 +368,6 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
           </svg>
         </div>
 
-        {/* Детали выбранного узла */}
         {selected && (
           <div className="card" style={{ marginTop: 12 }}>
             <h3>
@@ -313,8 +382,6 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
               {selected.line != null ? ` · строка ${selected.line}` : ''}
               {' · '}уровень {selected.depth ?? 0}
             </p>
-            {/* Поля таблицы: из dataModel-листа «Поля» или master? — из lineage нет,
-                показываем через dataModel при наличии. */}
             {analysis?.dataModel && (() => {
               const sheet = analysis.dataModel.find((sh) => sh.name === 'Поля');
               if (!sheet) return null;
@@ -341,182 +408,317 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
 
   /* ---------------------- Вьюха «Модель данных» ------------------------ */
   const schemaView = () => {
-    if (!schema || !schemaLayout) {
+    if (!schema || !layouts) {
       return (
         <div className="card" style={{ marginBottom: 12 }}>
-          <p className="muted">Схема модели данных появится после повторного анализа.</p>
+          <p className="muted">Модель данных появится после повторного анализа.</p>
         </div>
       );
     }
-    const { pos, W, HDR, ROW, SHOW, width, height, fieldY, canon } = schemaLayout;
-    const boxPos = (tc: string) => pos.get(tc) ?? null;
-    return (
-      <>
-        {/* Легенда схемы */}
-        <div className="card row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
-          <span className="legend-item"><i className="ms-sev-err" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3 }} /> ошибки</span>
-          <span className="legend-item"><i className="ms-sev-warn" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3 }} /> предупреждения</span>
-          <span className="legend-item"><i className="ms-sev-info" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3 }} /> замечания</span>
-          <span className="legend-item"><i className="ms-sev-ok" style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3 }} /> чистая таблица</span>
-          <span className="legend-item"><b style={{ color: 'var(--brand)' }}>●</b>&nbsp;ключевое поле</span>
-          <span className="legend-item"><u style={{ textDecorationColor: 'var(--warning)' }}>поле</u>&nbsp;— неполный ключ</span>
-          <span className="grow" />
-          <span className="hint">связь: 1:1 · ключ · M:N — пунктир</span>
-        </div>
 
-        {/* Схема «снежинка» */}
-        <div className="card scrolltbl">
+    /** Бейджи проблем таблицы (строка под заголовком бокса). */
+    const badgesOf = (t: SchemaTable) => {
+      const p = t.problemsByType;
+      const out: { cls: string; text: string }[] = [];
+      if (p.synthetic > 0) out.push({ cls: 'ms-b-syn', text: `⚠ синт.ключ ${p.synthetic}` });
+      if (p.incompleteKeys > 0) out.push({ cls: 'ms-b-inc', text: `▲ неполный ${p.incompleteKeys}` });
+      if (p.unusedFields > 0) out.push({ cls: 'ms-b-unused', text: `◦ неисп. ${p.unusedFields}` });
+      if (p.unusedTable > 0) out.push({ cls: 'ms-b-unused', text: 'не используется' });
+      if (p.mn > 0) out.push({ cls: 'ms-b-mn', text: `M:N ${p.mn}` });
+      if (t.removedByFix) out.push({ cls: 'ms-b-unused', text: '− удаляется правкой' });
+      return out;
+    };
+
+    /** Схема одного состояния. */
+    const renderState = (key: StateKey) => {
+      const lay = layouts![key];
+      const st = key === 'asBuilt' ? schema!.asBuilt : key === 'afterFix' ? schema!.afterFix : schema!.final;
+      const { pos, W, HDR, ROW, SHOW, width, height, fieldY, canon } = lay;
+      const boxPos = (tc: string) => pos.get(tc) ?? null;
+      return (
+        <div className="card scrolltbl" style={{ marginTop: 10 }}>
           <svg
             width={width}
             height={height}
             viewBox={`0 0 ${width} ${height}`}
             style={{ display: 'block', minWidth: '100%' }}
             role="img"
-            aria-label="Схема модели данных"
+            aria-label={`Модель данных: ${MODEL_STATES.find((s) => s.key === key)?.title ?? ''}`}
             className="ms-schema"
           >
             <defs>
-              <marker id="ms-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <marker id={`ms-arrow-${key}`} viewBox="0 0 8 8" refX="8" refY="4" markerWidth="7" markerHeight="7" orient="auto">
                 <path d="M0,0 L8,4 L0,8 z" fill="var(--muted)" />
               </marker>
             </defs>
 
-            {/* Рёбра: от строки поля в таблице-источнике к строке поля в приёмнике */}
-            {schema.links.map((l, i) => {
+            {st.links.map((l, i) => {
               const a = boxPos(l.from);
               const b = boxPos(l.to);
               if (!a || !b) return null;
-              const fy1 = fieldY(l.from, l.field);
-              const fy2 = fieldY(l.to, l.field);
+              const fy1 = l.field ? fieldY(l.from, l.field) : null;
+              const fy2 = l.field ? fieldY(l.to, l.field) : null;
               const x1 = a.x + W, y1 = fy1 ?? a.y + a.h / 2;
               const x2 = b.x, y2 = fy2 ?? b.y + b.h / 2;
               const mx = (x1 + x2) / 2;
               const cls = l.kind === 'm:n' ? 'ms-link ms-link-mn' : l.kind === '1:1' ? 'ms-link ms-link-11' : 'ms-link';
-              const label = l.kind === 'key' ? cut(l.field, 18) : `${cut(l.field, 14)} · ${l.kind === '1:1' ? '1:1' : 'M:N'}`;
+              const label = l.field
+                ? (l.kind === 'key' ? cut(l.field, 18) : `${cut(l.field, 14)} · ${l.kind === '1:1' ? '1:1' : 'M:N'}`)
+                : (CHAIN_LABELS[l.kind] ?? '');
               return (
-                <g key={`${l.from}|${l.to}|${l.field}`}>
+                <g key={`${l.from}|${l.to}|${l.field ?? l.kind}|${i}`}>
                   <path
                     d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2 - 3} ${y2}`}
                     className={cls}
-                    markerEnd="url(#ms-arrow)"
+                    markerEnd={`url(#ms-arrow-${key})`}
                   />
-                  <text x={mx} y={(y1 + y2) / 2 - 3} textAnchor="middle" className="ms-linklabel">{label}</text>
+                  {label && <text x={mx} y={(y1 + y2) / 2 - 3} textAnchor="middle" className="ms-linklabel">{label}</text>}
                 </g>
               );
             })}
 
-            {/* Таблицы-боксы */}
-            {schema.tables.map((t) => {
+            {st.tables.map((t) => {
               const tc = canon(t.name);
               const p = boxPos(tc);
               if (!p) return null;
               const sev = maxSev(t.problems);
               const zoneCls = sev === 'error' ? 'ms-err' : sev === 'warning' ? 'ms-warn' : sev === 'info' ? 'ms-info' : 'ms-ok';
-              const isSel = selTable && canon(selTable.name) === tc;
+              const dimmed = !matchesFilter(t, filter);
+              const badges = badgesOf(t);
+              const isSel = selTable?.key === key && canon(selTable.table.name) === tc;
               const shown = t.fields.slice(0, SHOW);
+              const bar = t.problemsByType.overload > 0;
               return (
-                <g key={tc} transform={`translate(${p.x}, ${p.y})`}>
+                <g key={`${key}-${tc}`} transform={`translate(${p.x}, ${p.y})`} opacity={dimmed ? 0.3 : 1}>
                   <rect
                     width={W} height={p.h} rx={8}
-                    className={`ms-node ${zoneCls}${isSel ? ' ms-sel' : ''}`}
+                    className={`ms-node ${zoneCls}${t.dropped ? ' ms-drop' : ''}${t.removedByFix ? ' ms-removed' : ''}${isSel ? ' ms-sel' : ''}`}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => { setSelTable(t); setSelField(null); }}
+                    onClick={() => { setSelTable({ key, table: t }); setSelField(null); }}
                   >
-                    <title>{t.name} · {fmtRows(t.rows)} строк{t.synthetic ? ' · синтетический ключ' : ''}</title>
+                    <title>{t.name} · {fmtRows(t.rows)} строк{t.synthetic ? ' · синтетический ключ' : ''}{t.dropped ? ' · удалена (DROP)' : ''}</title>
                   </rect>
                   <text x={10} y={20} className="ms-title" style={{ cursor: 'pointer' }}
-                    onClick={() => { setSelTable(t); setSelField(null); }}>{cut(t.name, 22)}</text>
-                  <text x={W - 8} y={20} textAnchor="end" className="ms-sub">{t.rows == null ? 'строки —' : `${fmtRows(t.rows)} стр`}</text>
-                  <text x={10} y={30} className="ms-sub">
-                    {t.problems && ([
-                      ['ms-sev-err', t.problems.error, 'ошибки'],
-                      ['ms-sev-warn', t.problems.warning, 'пред.'],
-                      ['ms-sev-info', t.problems.info, 'зам.'],
-                    ] as const).filter(([, n]) => (n as number) > 0).map(([cls, n]) => (
-                      <tspan key={cls} className={cls}>{`${n} ${(n as number) === 1 ? (cls === 'ms-sev-err' ? 'ошибка' : cls === 'ms-sev-warn' ? 'пред.' : 'зам.') : (cls === 'ms-sev-err' ? 'ошибок' : cls === 'ms-sev-warn' ? 'пред.' : 'зам.')}  `}</tspan>
-                    ))}
-                    {t.synthetic && <tspan className="ms-sub"> · синт. ключ</tspan>}
-                    {t.sourceKind && <tspan className="ms-sub"> · {SOURCE_KIND_LABELS[t.sourceKind] ?? ''}</tspan>}
+                    onClick={() => { setSelTable({ key, table: t }); setSelField(null); }}>{cut(t.name, 20)}</text>
+                  <text x={W - 8} y={20} textAnchor="end" className="ms-sub">
+                    {t.dropped ? '✖ DROP' : t.removedByFix ? '− удаляется' : (t.rows == null ? 'строки —' : `${fmtRows(t.rows)} стр`)}
+                  </text>
+                  <text x={10} y={32} className="ms-sub">
+                    {badges.length === 0 && !t.stored && !t.sourceKind && <tspan>чистая таблица</tspan>}
+                    {badges.map((b, i) => <tspan key={i} className={b.cls}>{`${b.text}  `}</tspan>)}
+                    {t.stored && <tspan className="ms-ok-t">· STORE </tspan>}
+                    {t.sourceKind && <tspan> · {SOURCE_KIND_LABELS[t.sourceKind] ?? ''}</tspan>}
                   </text>
                   {shown.map((f, fi) => {
                     const fy = HDR + fi * ROW + ROW - 5;
                     const fsev = maxSev(f.problems);
+                    const mark = f.removedByFix ? '− ' : f.key ? '● ' : f.unused ? '◦ ' : '';
                     return (
                       <text
                         key={fi}
-                        x={fsev || f.key ? 26 : 12}
+                        x={f.removedByFix || f.key || f.unused || fsev ? 24 : 12}
                         y={fy}
-                        className={`ms-field${f.key ? ' ms-fkey' : ''}${f.incompleteKey ? ' ms-finc' : ''}`}
+                        className={`ms-field${f.key ? ' ms-fkey' : ''}${f.incompleteKey ? ' ms-finc' : ''}${f.unused && !f.removedByFix ? ' ms-funused' : ''}${f.removedByFix ? ' ms-fremoved' : ''}`}
                         style={{ cursor: 'pointer' }}
-                        onClick={(e) => { e.stopPropagation(); setSelTable(t); setSelField({ table: t, field: f }); }}
+                        onClick={(e) => { e.stopPropagation(); setSelTable({ key, table: t }); setSelField({ key, table: t, field: f }); }}
                       >
-                        <title>{f.name}{f.key ? ' · ключ' : ''}{f.incompleteKey ? ' · неполный ключ' : ''}</title>
+                        <title>{f.name}{f.key ? ' · ключ' : ''}{f.incompleteKey ? ' · неполный ключ' : ''}{f.unused ? ' · не используется' : ''}{f.removedByFix ? ' · удаляется правкой' : ''}</title>
                         {fsev && <tspan className={`ms-sev-${fsev === 'error' ? 'err' : fsev === 'warning' ? 'warn' : 'info'}`}>● </tspan>}
                         {f.key && <tspan className="ms-keymark">● </tspan>}
-                        {cut(f.name, fsev || f.key ? 22 : 26)}
+                        {mark}{cut(f.name, fsev || f.key || f.unused || f.removedByFix ? 21 : 26)}
                       </text>
                     );
                   })}
                   {t.fields.length > SHOW && (
                     <text x={12} y={HDR + SHOW * ROW + ROW - 5} className="ms-more">+{t.fields.length - SHOW} ещё…</text>
                   )}
+                  {bar && (
+                    <>
+                      <rect x={10} y={p.h - 8} width={W - 20} height={4} rx={2} className="ms-overload-track" />
+                      <rect x={10} y={p.h - 8} width={Math.max(4, (W - 20) * t.problemsByType.overload / 100)} height={4} rx={2}
+                        className={t.problemsByType.overload >= 70 ? 'ms-overload-fill-hi' : 'ms-overload-fill'}>
+                        <title>Перегрузка данными: {t.problemsByType.overload}%</title>
+                      </rect>
+                    </>
+                  )}
                 </g>
               );
             })}
           </svg>
         </div>
+      );
+    };
 
-        {/* Детали таблицы */}
-        {selTable && !selField && (
-          <div className="card" style={{ marginTop: 12 }}>
-            <h3>
-              Таблица: {selTable.name}
-              {selTable.synthetic && <span className="pill warning" style={{ marginLeft: 8 }}>синтетический ключ</span>}
-              {selTable.problems && <span className={`pill ${maxSev(selTable.problems) === 'error' ? 'error' : maxSev(selTable.problems) === 'warning' ? 'warning' : 'mute'}`} style={{ marginLeft: 8 }}>находок: {selTable.problems.total}</span>}
-              <span className="grow" />
-              {onOpenAnalysis && (
-                <button className="small" onClick={() => onOpenAnalysis(selTable.name)}>Показать в Анализе</button>
-              )}
-              <button className="small" style={{ marginLeft: 6 }} onClick={() => setSelTable(null)}>Закрыть</button>
-            </h3>
-            <p className="muted small">
-              {fmtRows(selTable.rows)} строк · полей: {selTable.fields.length}
-              {selTable.sourceKind ? ` · источник: ${SOURCE_KIND_LABELS[selTable.sourceKind] ?? selTable.sourceKind}` : ''}
-              {selTable.keyFields.length ? ` · ключи: ${selTable.keyFields.join(', ')}` : ''}
-            </p>
-            {selTable.problems && (
-              <>
-                <div className="hint" style={{ margin: '8px 0 4px' }}>Находки по таблице</div>
-                {selTable.problems.rules.map((r) => (
-                  <div key={r.id} className="row small" style={{ gap: 8, marginBottom: 2 }}>
-                    <span className={`pill ${r.severity === 'error' ? 'error' : r.severity === 'warning' ? 'warning' : 'mute'}`}>{SEV_RU[r.severity] ?? r.severity}</span>
-                    <span>{r.title}</span>
-                    <span className="muted">{r.id} · мест: {r.count}</span>
-                  </div>
+    return (
+      <>
+        {/* Карточка «Качество модели» — наверху (утверждённый макет) */}
+        <div className="card ms-quality" style={{ marginBottom: 12 }}>
+          <div className="hint" style={{ marginBottom: 6 }}>Качество модели</div>
+          <div className="row" style={{ gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className={`ring ${zone}`} style={{ width: 84, height: 84, borderWidth: 7 }}>
+              <div>
+                <b>{modelScore ?? '—'}</b>
+                <br />
+                <span className="muted">из 100</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 15 }}>
+              Модель данных
+              <br />
+              <span className={`pill ${zonePill}`} style={{ marginTop: 4, display: 'inline-block' }}>
+                {modelDom?.verdict ?? 'не оценена'}
+              </span>
+            </div>
+            <div className="ms-qcounts">
+              <div className="ms-qcnt"><b className="ms-sev-err-t">{modelBySev.error}</b>ошибки</div>
+              <div className="ms-qcnt"><b className="ms-sev-warn-t">{modelBySev.warning}</b>предупреждения</div>
+              <div className="ms-qcnt"><b>{modelBySev.info}</b>замечания</div>
+              <div className="ms-qcnt"><b className="ms-sev-warn-t">{syntheticTables}</b>синт.ключа</div>
+            </div>
+            <span className="grow" />
+            {worstTables.length > 0 && (
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span className="hint">Худшие таблицы:</span>
+                {worstTables.map(({ t, sev }) => (
+                  <button
+                    key={t.name}
+                    className="chip small"
+                    onClick={() => { setSelTable({ key: 'final', table: t }); setSelField(null); }}
+                    title="Показать находки таблицы"
+                  >
+                    {cut(t.name, 18)} · {SEV_RU[sev]?.toLowerCase()}
+                  </button>
                 ))}
-                {selTable.fields.some((f) => f.problems) && (
-                  <>
-                    <div className="hint" style={{ margin: '10px 0 4px' }}>Проблемные поля (клик — детали)</div>
-                    {selTable.fields.filter((f) => f.problems).map((f) => {
-                      const s = maxSev(f.problems) ?? 'info';
-                      return (
-                        <div key={f.name} className="row small" style={{ gap: 8, marginBottom: 2, cursor: 'pointer' }}
-                          onClick={() => setSelField({ table: selTable, field: f })}>
-                          <span className={`pill ${s === 'error' ? 'error' : s === 'warning' ? 'warning' : 'mute'}`}>{SEV_RU[s]}</span>
-                          <span>{f.name}</span>
-                          <span className="muted">{f.key ? 'ключ · ' : ''}{f.incompleteKey ? 'неполный · ' : ''}находок: {f.problems!.total}</span>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </>
+              </div>
             )}
-            {!selTable.problems && (
-              <p className="small" style={{ color: 'var(--success)' }}>Проблем не найдено — таблица чистая.</p>
+            {worstTables.length === 0 && (
+              <span className="small" style={{ color: 'var(--success)' }}>Находок по модели нет — все таблицы чистые.</span>
             )}
           </div>
-        )}
+          {(schema?.meta.notes ?? []).map((n, i) => (
+            <div key={i} className="hint" style={{ color: 'var(--warn, #e0a33e)', marginTop: 6 }}>⚠ {n}</div>
+          ))}
+        </div>
+
+        {/* Фильтры проблем */}
+        <div className="ms-filters" style={{ marginBottom: 12 }}>
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              className={`small${filter === f.key ? ' is-active' : ''}`}
+              onClick={() => setFilter(f.key)}
+              aria-pressed={filter === f.key}
+            >
+              {f.label}
+              {f.key !== 'all' ? ` ${filterCounts[f.key as Exclude<FilterKey, 'all'>]}` : ''}
+            </button>
+          ))}
+          <span className="grow" />
+          <span className="hint" style={{ alignSelf: 'center' }}>клик по таблице — находки</span>
+        </div>
+
+        {/* Три состояния модели — аккордеоны */}
+        {MODEL_STATES.map((st) => {
+          const s = st.key === 'asBuilt' ? schema.asBuilt : st.key === 'afterFix' ? schema.afterFix : schema.final;
+          const droppedCount = s.tables.filter((t) => t.dropped).length;
+          const removedFields = s.tables.reduce((n, t) => n + t.fields.filter((f) => f.removedByFix).length, 0);
+          const removedTables = s.tables.filter((t) => t.removedByFix).length;
+          const counts = st.key === 'asBuilt'
+            ? `${s.tables.length} табл · ${droppedCount} удалены · ${s.links.length} связей`
+            : st.key === 'afterFix'
+              ? `${s.tables.length} табл · −${removedFields} полей · −${removedTables} табл · ${s.links.length} связей`
+              : `${s.tables.length} табл · ${s.links.length} связей`;
+          const open = openSections.has(st.key);
+          return (
+            <div key={st.key} className="card ms-sec" style={{ marginBottom: 10 }}>
+              <button
+                className="ms-sec-head"
+                onClick={() => toggleSection(st.key)}
+                aria-expanded={open}
+              >
+                <span className="ms-chev">{open ? '▼' : '▶'}</span>
+                <span className="ms-sec-title">{st.title}</span>
+                <span className="ms-sec-counts">{counts}</span>
+              </button>
+              {open && renderState(st.key)}
+            </div>
+          );
+        })}
+
+        {/* Детали таблицы */}
+        {selTable && !selField && (() => {
+          const t = selTable.table;
+          const pbt = t.problemsByType;
+          const typePills: { cls: string; label: string }[] = [
+            ...(pbt.synthetic > 0 ? [{ cls: 'warning', label: `синт.ключ: ${pbt.synthetic}` }] : []),
+            ...(pbt.incompleteKeys > 0 ? [{ cls: 'warning', label: `неполные ключи: ${pbt.incompleteKeys}` }] : []),
+            ...(pbt.unusedFields > 0 ? [{ cls: 'mute', label: `неисп. поля: ${pbt.unusedFields}` }] : []),
+            ...(pbt.unusedTable > 0 ? [{ cls: 'error', label: 'таблица не используется' }] : []),
+            ...(pbt.mn > 0 ? [{ cls: 'error', label: `M:N: ${pbt.mn}` }] : []),
+            ...(pbt.empty > 0 ? [{ cls: 'mute', label: `пустое: ${pbt.empty}` }] : []),
+            ...(pbt.cardinality > 0 ? [{ cls: 'mute', label: `кардинальность: ${pbt.cardinality}` }] : []),
+            ...(pbt.merge > 0 ? [{ cls: 'ok', label: 'можно объединить (1:1)' }] : []),
+            ...(pbt.overload > 0 ? [{ cls: 'warning', label: `перегрузка ${pbt.overload}%` }] : []),
+          ];
+          return (
+            <div className="card" style={{ marginTop: 12 }}>
+              <h3>
+                Таблица: {t.name}
+                {t.dropped && <span className="pill error" style={{ marginLeft: 8 }}>✖ DROP</span>}
+                {t.removedByFix && <span className="pill warning" style={{ marginLeft: 8 }}>− удаляется правкой</span>}
+                {t.synthetic && <span className="pill warning" style={{ marginLeft: 8 }}>синтетический ключ</span>}
+                {t.problems && <span className={`pill ${maxSev(t.problems) === 'error' ? 'error' : maxSev(t.problems) === 'warning' ? 'warning' : 'mute'}`} style={{ marginLeft: 8 }}>находок: {t.problems.total}</span>}
+                <span className="grow" />
+                {onOpenAnalysis && (
+                  <button className="small" onClick={() => onOpenAnalysis(t.name)}>Показать в Анализе</button>
+                )}
+                <button className="small" style={{ marginLeft: 6 }} onClick={() => setSelTable(null)}>Закрыть</button>
+              </h3>
+              <p className="muted small">
+                {fmtRows(t.rows)} строк · полей: {t.fields.length}
+                {t.sourceKind ? ` · источник: ${SOURCE_KIND_LABELS[t.sourceKind] ?? t.sourceKind}` : ''}
+                {t.keyFields.length ? ` · ключи: ${t.keyFields.join(', ')}` : ''}
+                {t.intermediate ? ' · промежуточная (нет в финальной модели)' : ''}
+              </p>
+              {typePills.length > 0 && (
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '6px 0' }}>
+                  {typePills.map((p, i) => <span key={i} className={`pill ${p.cls}`}>{p.label}</span>)}
+                </div>
+              )}
+              {t.problems && (
+                <>
+                  <div className="hint" style={{ margin: '8px 0 4px' }}>Находки по таблице</div>
+                  {t.problems.rules.map((r) => (
+                    <div key={r.id} className="row small" style={{ gap: 8, marginBottom: 2 }}>
+                      <span className={`pill ${r.severity === 'error' ? 'error' : r.severity === 'warning' ? 'warning' : 'mute'}`}>{SEV_RU[r.severity] ?? r.severity}</span>
+                      <span>{r.title}</span>
+                      <span className="muted">{r.id} · мест: {r.count}</span>
+                    </div>
+                  ))}
+                  {t.fields.some((f) => f.problems || f.removedByFix) && (
+                    <>
+                      <div className="hint" style={{ margin: '10px 0 4px' }}>Проблемные поля (клик — детали)</div>
+                      {t.fields.filter((f) => f.problems || f.removedByFix).map((f) => {
+                        const s = maxSev(f.problems) ?? 'info';
+                        return (
+                          <div key={f.name} className="row small" style={{ gap: 8, marginBottom: 2, cursor: 'pointer' }}
+                            onClick={() => setSelField({ key: selTable.key, table: t, field: f })}>
+                            <span className={`pill ${s === 'error' ? 'error' : s === 'warning' ? 'warning' : 'mute'}`}>{SEV_RU[s]}</span>
+                            <span>{f.removedByFix ? '− ' : ''}{f.name}</span>
+                            <span className="muted">{f.key ? 'ключ · ' : ''}{f.incompleteKey ? 'неполный · ' : ''}{f.unused ? 'не используется · ' : ''}{f.removedByFix ? 'удаляется правкой' : `находок: ${f.problems?.total ?? 0}`}</span>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
+              )}
+              {!t.problems && (
+                <p className="small" style={{ color: 'var(--success)' }}>Проблем не найдено — таблица чистая.</p>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Детали поля */}
         {selField && (
@@ -526,6 +728,7 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
               <span className="muted small" style={{ marginLeft: 8 }}>таблица {selField.table.name}</span>
               {selField.field.key && <span className="pill ok" style={{ marginLeft: 8 }}>ключ</span>}
               {selField.field.incompleteKey && <span className="pill warning" style={{ marginLeft: 8 }}>неполный ключ</span>}
+              {selField.field.removedByFix && <span className="pill warning" style={{ marginLeft: 8 }}>− удаляется правкой</span>}
               <span className="grow" />
               {onOpenAnalysis && (
                 <button className="small" onClick={() => onOpenAnalysis(selField.field.name)}>Показать в Анализе</button>
@@ -557,9 +760,8 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
         <span className="hint">
           {view === 'lineage'
             ? `${lineage?.nodes.length ?? 0} узлов · ${lineage?.edges.length ?? 0} связей`
-            : `${schema?.tables.length ?? 0} таблиц · ${schema?.links.length ?? 0} связей`}
+            : `${schema?.final.tables.length ?? 0} таблиц · ${schema?.final.links.length ?? 0} связей`}
         </span>
-        {/* Переключатель вьюх: lineage-граф или схема модели данных */}
         <span className="viewswitch">
           <button
             className={`small${view === 'lineage' ? ' is-active' : ''}`}
@@ -580,11 +782,6 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
         {view === 'lineage' && (
           <button className="small" onClick={() => setDocOpen((v) => !v)} aria-expanded={docOpen}>
             Документ
-          </button>
-        )}
-        {view === 'schema' && (
-          <button className="small" onClick={() => setQualityOpen((v) => !v)} aria-expanded={qualityOpen}>
-            Качество модели
           </button>
         )}
       </div>
@@ -609,7 +806,7 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
         </div>
       )}
 
-      {/* Предупреждения: мёртвые таблицы, источники-сироты */}
+      {/* Предупреждения lineage: мёртвые таблицы, источники-сироты */}
       {view === 'lineage' && (lineage?.warnings.length ?? 0) > 0 && (
         <div className="card" style={{ marginBottom: 12 }}>
           {lineage!.warnings.map((w, i) => (
@@ -619,47 +816,6 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
       )}
 
       {view === 'lineage' ? lineageView() : schemaView()}
-
-      {/* Карточка «Качество модели»: балл домена, находки, худшие таблицы */}
-      {view === 'schema' && qualityOpen && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <h3>
-            Качество модели данных
-            <span className="grow" />
-            <button className="small" onClick={() => setQualityOpen(false)}>Скрыть</button>
-          </h3>
-          <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span className={`pill ${zonePill(modelDom?.score)}`}>
-              {modelDom ? `домен «Модель данных»: ${modelDom.score} · ${modelDom.verdict}` : 'домен не оценён'}
-            </span>
-            {modelBySev.error > 0 && <span className="pill error">ошибки: {modelBySev.error}</span>}
-            {modelBySev.warning > 0 && <span className="pill warning">предупреждения: {modelBySev.warning}</span>}
-            {modelBySev.info > 0 && <span className="pill mute">замечания: {modelBySev.info}</span>}
-            <span className="hint">{modelFindings.length} находок · {modelPlaces} мест</span>
-          </div>
-          {(schema?.meta.notes ?? []).map((n, i) => (
-            <div key={i} className="hint" style={{ color: 'var(--warn, #e0a33e)', marginTop: 4 }}>⚠ {n}</div>
-          ))}
-          {worstTables.length > 0 && (
-            <>
-              <div className="hint" style={{ margin: '10px 0 4px' }}>Таблицы с находками — худшие сверху (клик — на схеме)</div>
-              {worstTables.map(({ t, sev }) => (
-                <div key={t.name} className="row small" style={{ gap: 8, marginBottom: 2, cursor: 'pointer' }}
-                  onClick={() => { setSelTable(t); setSelField(null); }}>
-                  <span className={`pill ${sev === 'error' ? 'error' : sev === 'warning' ? 'warning' : 'mute'}`}>{SEV_RU[sev]}</span>
-                  <span>{t.name}</span>
-                  <span className="muted">находок: {t.problems!.total} · {t.problems!.rules[0]?.title ?? ''}</span>
-                </div>
-              ))}
-            </>
-          )}
-          {worstTables.length === 0 && (
-            <p className="small" style={{ color: 'var(--success)', marginTop: 8 }}>
-              Находок по модели данных нет — все таблицы чистые.
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Документ: разделы и шаги (аналог App Documentation) */}
       {view === 'lineage' && docOpen && outline && (

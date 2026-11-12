@@ -268,7 +268,22 @@ export type SchemaProblems = {
   rules: { id: string; severity: string; title: string; count: number }[];
 };
 
-/** Таблица схемы модели данных («снежинки»). */
+/** Проблемы таблицы по типам — для бейджей и фильтров на схеме. */
+export type SchemaProblemsByType = {
+  unusedFields: number; unusedTable: number; synthetic: number; incompleteKeys: number;
+  mn: number; merge: number; empty: number; cardinality: number; errors: number;
+  /** Доля лишних строк/полей, 0–100. */
+  overload: number;
+};
+
+/** Поле таблицы на схеме. */
+export type SchemaField = {
+  name: string; key: boolean; incompleteKey: boolean;
+  unused?: boolean; removedByFix?: boolean;
+  problems: SchemaProblems | null;
+};
+
+/** Таблица схемы модели данных. */
 export type SchemaTable = {
   name: string;
   rows: number | null;
@@ -276,14 +291,29 @@ export type SchemaTable = {
   sourceKind: LineageNode['sourceKind'] | null;
   keyFields: string[];
   problems: SchemaProblems | null;
-  fields: { name: string; key: boolean; incompleteKey: boolean; problems: SchemaProblems | null }[];
+  problemsByType: SchemaProblemsByType;
+  fields: SchemaField[];
+  /** Только в asBuilt: удалённая (DROP) / выгруженная (STORE) / промежуточная. */
+  dropped?: boolean; stored?: boolean; intermediate?: boolean;
+  /** Только в afterFix: предлагается удалить правкой. */
+  removedByFix?: boolean;
 };
 
-/** Связь между таблицами по общему полю (адреса — канонические имена). */
-export type SchemaLink = { from: string; to: string; field: string; kind: '1:1' | 'm:n' | 'key' };
+/** Связь между таблицами по общему полю (адреса — канонические имена); поле null — RESIDENT/JOIN/CONCATENATE-цепочка. */
+export type SchemaLink = { from: string; to: string; field: string | null; kind: '1:1' | 'm:n' | 'key' | 'resident' | 'join' | 'concatenate' };
 
-/** Схема модели данных с пометками проблем — строится ядром без запросов к серверу. */
+/** Состояние модели: набор таблиц и связей. */
+export type SchemaState = { tables: SchemaTable[]; links: SchemaLink[] };
+
+/** Критерий оценки модели — легенда панели качества. */
+export type SchemaCriterion = { id: string; label: string; hint: string };
+
+/** Схема модели данных в трёх состояниях — строится ядром без запросов к серверу. */
 export type DataSchema = {
+  asBuilt: SchemaState;
+  final: SchemaState;
+  afterFix: SchemaState;
+  /** Совместимость: tables/links = состояние final. */
   tables: SchemaTable[];
   links: SchemaLink[];
   meta: {
@@ -291,6 +321,7 @@ export type DataSchema = {
     modelFromScript: boolean;
     associationsAvailable: boolean;
     linkKinds: Record<string, string>;
+    criteria: SchemaCriterion[];
   };
 };
 
