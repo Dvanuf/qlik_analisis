@@ -238,7 +238,27 @@ test('LineageTab: вкладка «Формирование» — SVG-DAG и д�
   assert.ok(LINEAGE_TAB.includes('ln-arrow'), 'нет стрелок графа');
   assert.ok(LINEAGE_TAB.includes('Документ'), 'нет текстового документа');
   assert.ok(APP.includes("tabs: ['analysis', 'script', 'refactor', 'model', 'lineage']"), 'вкладка не в РАБОТА');
-  assert.ok(APP.includes("<LineageTab analysis={analysis} />"), 'LineageTab не смонтирован');
+  assert.ok(APP.includes('onOpenAnalysis={(name) => {'), 'переход со схемы в «Анализ» не подключён');
+});
+
+test('LineageTab: вьюха «Модель данных» — схема «снежинка» с пометками', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  assert.ok(LINEAGE_TAB.includes('Модель данных'), 'нет переключателя вьюхи');
+  assert.ok(LINEAGE_TAB.includes('Схема модели данных'), 'нет aria-метки схемы');
+  assert.ok(LINEAGE_TAB.includes('ms-node'), 'нет боксов таблиц');
+  assert.ok(LINEAGE_TAB.includes('ms-fkey'), 'ключевые поля не выделены');
+  assert.ok(LINEAGE_TAB.includes('ms-link-mn'), 'связь M:N не помечена');
+  assert.ok(LINEAGE_TAB.includes('analysis?.schema'), 'схема не берётся из результата анализа');
+  assert.ok(LINEAGE_TAB.includes('onOpenAnalysis'), 'нет перехода в «Анализ»');
+});
+
+test('LineageTab: карточка «Качество модели» — домен и худшие таблицы', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  assert.ok(LINEAGE_TAB.includes('Качество модели'), 'нет карточки качества');
+  assert.ok(LINEAGE_TAB.includes('domains?.model'), 'нет балла домена модели');
+  assert.ok(LINEAGE_TAB.includes('Таблицы с находками'), 'нет списка худших таблиц');
+  assert.ok(STYLES.includes('.ms-node'), 'стили схемы не добавлены');
+  assert.ok(STYLES.includes('.ms-link-mn'), 'стили связи M:N не добавлены');
 });
 
 test('LineageTab: баннер нераскрытых включений (скрипт-заглушка)', () => {

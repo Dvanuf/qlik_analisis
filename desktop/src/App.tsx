@@ -1309,7 +1309,13 @@ export default function App() {
       )}
 
       {tab === 'lineage' && (
-        <LineageTab analysis={analysis} />
+        <LineageTab
+          analysis={analysis}
+          onOpenAnalysis={(name) => {
+            setAnalysisFilter(name);
+            setTab('analysis');
+          }}
+        />
       )}
 
       {tab === 'summary' && (

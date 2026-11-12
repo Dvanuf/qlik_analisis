@@ -427,6 +427,15 @@ async function runSmokeCheck(): Promise<void> {
         const aiStatusParsed = JSON.parse(String(aiStatus)) as { ok: boolean; error?: string };
         if (!aiStatusParsed.ok) throw new Error(`ИИ-статус недоступен: ${aiStatusParsed.error}`);
 
+        // Режим конфиденциальности без локальной модели: шаг «Промпт ИИ» закономерно
+        // недоступен (внешним провайдерам в этом режиме нельзя) — шаг помечается
+        // пропуском вместо падения: настройки пользователя smoke не меняет.
+        // (До const aiSettings ниже — иначе затенение имени.)
+        const conf = aiSettings();
+        const promptChain = providerChain(conf.provider, conf.fallback);
+        const promptSkipped = Boolean(conf.sensitive)
+          && promptChain.every((id) => PROVIDERS[id]?.external !== false);
+
         // Блок «Настройки ИИ» должен открываться по кнопке.
         await win.webContents.executeJavaScript(`
           (function () {
@@ -437,7 +446,7 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
         await new Promise((r) => setTimeout(r, 500));
-        const aiSettings = await win.webContents.executeJavaScript(`
+        const aiSettingsDom = await win.webContents.executeJavaScript(`
           (function () {
             return JSON.stringify({
               block: document.querySelectorAll('.ai-settings').length,
@@ -447,7 +456,9 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
         // Блок «Промпт запроса» должен открываться и показывать текст промпта.
-        const aiPrompt = await win.webContents.executeJavaScript(`
+        const aiPrompt = promptSkipped
+          ? ''
+          : await win.webContents.executeJavaScript(`
           (function () {
             var d = document.querySelector('.ai-prompt');
             if (!d) return JSON.stringify({ ok: false, error: 'нет блока промпта' });
@@ -473,13 +484,15 @@ async function runSmokeCheck(): Promise<void> {
             });
           })()
         `);
-        const aiPromptParsed = JSON.parse(String(aiPrompt)) as {
-          ok: boolean; error?: string; provider?: string; hasSystem?: boolean; hasUser?: boolean; userLen?: number;
-        };
-        if (!aiPromptParsed.ok) {
+        const aiPromptParsed: {
+          ok: boolean; error?: string; provider?: string; hasSystem?: boolean; hasUser?: boolean; userLen?: number; skipped?: boolean;
+        } = promptSkipped
+          ? { ok: true, hasSystem: true, hasUser: true, skipped: true }
+          : JSON.parse(String(aiPrompt));
+        if (!promptSkipped && !aiPromptParsed.ok) {
           throw new Error(`Промпт ИИ недоступен: ${aiPromptParsed.error}`);
         }
-        if (!aiPromptParsed.hasSystem || !aiPromptParsed.hasUser) {
+        if (!promptSkipped && (!aiPromptParsed.hasSystem || !aiPromptParsed.hasUser)) {
           throw new Error('Промпт ИИ собран без системной инструкции или без текста запроса');
         }
 
@@ -559,7 +572,7 @@ async function runSmokeCheck(): Promise<void> {
           model: JSON.parse(String(model)),
           ai: JSON.parse(String(ai)),
           aiStatus: aiStatusParsed,
-          aiSettings: JSON.parse(String(aiSettings)),
+          aiSettings: JSON.parse(String(aiSettingsDom)),
           aiPrompt: aiPromptParsed,
           aiChat: aiChatParsed,
           scoreTab: scoreParsed,

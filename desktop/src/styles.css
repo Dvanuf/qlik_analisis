@@ -1020,6 +1020,32 @@ table.rq tr.pat { cursor: pointer; }
 .ln-sub { font-size: 10px; fill: var(--muted); }
 .legend-item { display: inline-flex; gap: 6px; align-items: center; font-size: 0.8125rem; }
 
+/* Схема модели данных (вьюха «Модель данных» вкладки «Формирование»).
+   Рамка таблицы — по максимальной важности находок: видно прямо на схеме. */
+.viewswitch { display: inline-flex; gap: 4px; }
+.viewswitch button.is-active { border-color: var(--brand); color: var(--brand); }
+.ms-node { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.2; }
+.ms-node.ms-err { stroke: var(--danger); stroke-width: 1.6; }
+.ms-node.ms-warn { stroke: var(--warning); }
+.ms-node.ms-info { stroke: var(--line); }
+.ms-node.ms-ok { stroke: var(--success); }
+.ms-node.ms-sel { stroke: var(--brand); stroke-width: 2; }
+.ms-title { font-size: 12px; font-weight: 600; fill: var(--text); }
+.ms-sub { font-size: 10px; fill: var(--muted); }
+.ms-sev-err { fill: var(--danger); }
+.ms-sev-warn { fill: var(--warning); }
+.ms-sev-info { fill: var(--info); }
+.ms-sev-ok { fill: var(--success); }
+.ms-field { font-size: 11px; fill: var(--text); }
+.ms-field.ms-fkey { font-weight: 700; }
+.ms-field.ms-finc { text-decoration: underline dashed; text-decoration-color: var(--warning); }
+.ms-keymark { fill: var(--brand); }
+.ms-more { font-size: 10px; fill: var(--muted); }
+.ms-link { stroke: var(--muted); stroke-width: 1.2; fill: none; opacity: 0.7; }
+.ms-link-11 { stroke: var(--info); }
+.ms-link-mn { stroke: var(--danger); stroke-dasharray: 4 3; }
+.ms-linklabel { font-size: 9px; fill: var(--muted); }
+
 /* Панель правил форматирования. */
 .fmtdoc {
   background: var(--panel-2); border: 1px solid var(--line);
