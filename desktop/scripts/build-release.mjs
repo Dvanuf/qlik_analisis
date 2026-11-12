@@ -16,6 +16,7 @@
  */
 import { build, Platform, Arch } from 'electron-builder';
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -25,6 +26,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
 const version = pkg.version;
+
+// --- Пересборка main и renderer перед упаковкой ---------------------------
+// electron-builder пакует dist/** как есть. Без этого шага релиз уходит
+// с устаревшим бандлом, если dist не пересобрали вручную (случай v0.27.2:
+// фикс форматтера «//» не попал в релиз). Этот же Electron работает как Node.
+console.log('Сборка main…');
+execFileSync(process.execPath, [resolve(root, 'scripts', 'build-main.mjs')], {
+  stdio: 'inherit', cwd: root, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+});
+console.log('Сборка renderer…');
+execFileSync(process.execPath, [resolve(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'build'], {
+  stdio: 'inherit', cwd: root, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+});
 
 // --- Заглушка npm: production-зависимостей у приложения нет ---
 const stubDir = resolve(root, '.build-stub');

@@ -3,7 +3,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatScript, formatRulesDoc } from '../src/script/format.js';
+import { formatScript, formatScriptDetailed, formatRulesDoc, MAX_PROTECT_LINES } from '../src/script/format.js';
 
 test('formatScript: вложенность SUB/FOR/IF и обратный выход', () => {
   const src = [
@@ -124,4 +124,25 @@ test('formatScript: строчный комментарий не глотает 
   assert.ok(withTab.split('\n')[0] === '///$tab 01_ Данные', '///$tab в колонке 0');
   assert.ok(withTab.includes('// хвостовой комментарий'), 'inline-комментарий сохранён');
   assert.ok(withTab.includes(' b\nRESIDENT S;'), 'поля после комментария разбираются');
+});
+
+test('formatScript: незакрытая кавычка не слепит остаток файла (предохранитель)', () => {
+  // Регрессия: строка с нечётным апострофом (опечатка) маскировалась до
+  // конца файла — всё после неё не форматировалось, кнопка «Формат»
+  // сообщала «менять нечего». Лимит фрагмента (MAX_PROTECT_LINES) оставляет
+  // сломанный фрагмент как текст, разбор продолжается.
+  const filler = Array.from({ length: MAX_PROTECT_LINES + 20 }, (_, i) => `// строка ${i}`).join('\n');
+  const src = [
+    'T1:',
+    'LOAD a, b',
+    'RESIDENT S;',
+    "сломано 'здесь",           // незакрытая кавычка — дальше раньше не разбиралось
+    filler,                     // хвост длиннее лимита: раньше уходил в фрагмент до конца файла
+    'T2:',
+    'LOAD c, d',
+    'RESIDENT R;',
+  ].join('\n');
+  const r = formatScriptDetailed(src, {});
+  assert.ok(r.warnings.some((w) => w.includes('не найден закрывающий')), 'предупреждение о незакрытой кавычке');
+  assert.ok(r.script.includes('LOAD\n c\n,d\nRESIDENT R;'), 'LOAD после сломанного фрагмента отформатирован');
 });

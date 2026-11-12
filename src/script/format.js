@@ -22,6 +22,33 @@
 /** Максимальная глубина по умолчанию (п. 2.5). */
 export const DEFAULT_MAX_DEPTH = 8;
 
+/**
+ * Предохранитель маскирования: фрагмент, который не закрылся и глотает
+ * больше этого числа строк, не считается защищённым — это опечатка вроде
+ * лишнего апострофа или незакрытого /*, и без лимита она делает форматтер
+ * слепым до конца файла («Форматирование не изменило текст»).
+ */
+export const MAX_PROTECT_LINES = 200;
+
+/** Число переводов строки между позициями (для лимита фрагмента). */
+function linesBetween(text, from, to) {
+  let count = 0;
+  for (let k = from; k < to && k < text.length; k += 1) {
+    if (text[k] === '\n') count += 1;
+  }
+  return count;
+}
+
+/** Номер строки (1-) позиции — для предупреждений. */
+function lineOf(text, pos) {
+  let line = 1;
+  for (let k = 0; k < pos && k < text.length; k += 1) {
+    if (text[k] === '\n') line += 1;
+  }
+  return line;
+}
+
+
 const BLOCK_END = /^end\s+(sub|if|switch)\b|^next\b|^loop\b/i;
 const BLOCK_MID = /^(else|elseif)\b/i;
 const BLOCK_CASE = /^(case|default)\b/i;
@@ -53,13 +80,24 @@ function blockStartRegex(extraBlocks) {
  * Маскирование защищённых фрагментов (п. 3.1): строки '…'/"…",
  * комментарии // и /* *\/, REM … ;, $(…), $(=…), set analysis {<…>}.
  * Возвращает { text, fragments } — плейсхолдеры \u0001N\u0001.
+ * @param {string} text
+ * @param {string[]} [warnings] — сюда пишутся случаи сработавшего предохранителя
  */
-function maskProtected(text) {
+function maskProtected(text, warnings = []) {
   const fragments = [];
   let out = '';
   let i = 0;
   const push = (frag) => { fragments.push(frag); return `\u0001${fragments.length - 1}\u0001`; };
   const n = text.length;
+  // Фрагмент, который не закрылся и уходит до конца файла: если он глотает
+  // больше лимита строк — это почти наверняка опечатка (лишний апостроф,
+  // незакрытый комментарий), а не строка. Оставляем символ как текст и
+  // продолжаем разбор — иначе форматтер слеп на весь остаток файла.
+  const swallowGuard = (start, closer) => {
+    if (linesBetween(text, start, n) <= MAX_PROTECT_LINES) return false;
+    warnings.push(`Строка ${lineOf(text, start)}: не найден закрывающий «${closer}» — текст после этой позиции не считался защищённым (проверьте кавычку/комментарий)`);
+    return true;
+  };
   while (i < n) {
     const rest2 = text.slice(i, i + 2);
     if (rest2 === '//') {
@@ -75,6 +113,7 @@ function maskProtected(text) {
     if (rest2 === '/*') {
       const end = text.indexOf('*/', i + 2);
       const stop = end === -1 ? n : end + 2;
+      if (stop === n && swallowGuard(i, '*/')) { out += '/'; i += 1; continue; }
       out += push(text.slice(i, stop));
       i = stop;
       continue;
@@ -87,6 +126,7 @@ function maskProtected(text) {
         if (text[j] === c) { j += 1; break; }
         j += 1;
       }
+      if (j >= n && swallowGuard(i, c)) { out += c; i += 1; continue; }
       out += push(text.slice(i, j));
       i = j;
       continue;
@@ -94,6 +134,7 @@ function maskProtected(text) {
     if (/^rem\b/i.test(text.slice(i, i + 4))) {
       const end = text.indexOf(';', i);
       const stop = end === -1 ? n : end + 1;
+      if (stop === n && swallowGuard(i, ';')) { out += text.slice(i, i + 3); i += 3; continue; }
       out += push(text.slice(i, stop));
       i = stop;
       continue;
@@ -105,6 +146,7 @@ function maskProtected(text) {
         if (text[j] === '(') depth += 1;
         else if (text[j] === ')') { depth -= 1; if (depth === 0) { j += 1; break; } }
       }
+      if (j >= n && swallowGuard(i, ')')) { out += '$'; i += 1; continue; }
       out += push(text.slice(i, j));
       i = j;
       continue;
@@ -112,6 +154,7 @@ function maskProtected(text) {
     if (text.slice(i, i + 2) === '{<') {
       const end = text.indexOf('}>', i);
       const stop = end === -1 ? n : end + 2;
+      if (stop === n && swallowGuard(i, '}>')) { out += '{'; i += 1; continue; }
       out += push(text.slice(i, stop));
       i = stop;
       continue;
@@ -170,7 +213,7 @@ export function formatScriptDetailed(src, opts = {}) {
   const cleanSpaces = opts.cleanSpaces !== false;
   const startRe = blockStartRegex(opts.extraBlocks);
 
-  const masked = maskProtected(String(src ?? '').replace(/\r\n?/g, '\n'));
+  const masked = maskProtected(String(src ?? '').replace(/\r\n?/g, '\n'), warnings);
   const rawLines = masked.text.split('\n');
   const fragments = masked.fragments;
 
