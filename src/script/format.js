@@ -62,7 +62,16 @@ function maskProtected(text) {
   const n = text.length;
   while (i < n) {
     const rest2 = text.slice(i, i + 2);
-    if (rest2 === '//') { out += push(text.slice(i)); break; }
+    if (rest2 === '//') {
+      // Строчный комментарий — только до конца строки: до фикса «//» глотал
+      // весь остаток файла, и после первого комментария форматтер не видел
+      // ни одного оператора (кнопка «Формат» честно сообщала «менять нечего»).
+      const end = text.indexOf('\n', i);
+      const stop = end === -1 ? n : end;
+      out += push(text.slice(i, stop));
+      i = stop;
+      continue;
+    }
     if (rest2 === '/*') {
       const end = text.indexOf('*/', i + 2);
       const stop = end === -1 ? n : end + 2;

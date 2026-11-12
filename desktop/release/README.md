@@ -9,6 +9,7 @@
 
 | Версия | Релиз |
 |---|---|
+| 0.27.2 | [v0.27.2 — фикс: «Формат» не менял скрипты с комментариями //](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.27.2) |
 | 0.27.1 | [v0.27.1 — фикс: схема модели данных была пуста при анализе файла/скрипта; smoke проверяет «Формирование»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.27.1) |
 | 0.27.0 | [v0.27.0 — «Формирование»: схема модели данных с пометками проблем и карточкой «Качество модели»](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.27.0) |
 | 0.26.1 | [v0.26.1 — фикс сброса галочки «Включить» GitLab при сохранении](https://github.com/Dvanuf/qlik_analisis/releases/tag/v0.26.1) |

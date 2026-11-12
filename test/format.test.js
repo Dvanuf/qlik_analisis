@@ -95,3 +95,33 @@ test('formatScript: однострочный LOAD с полями — одно �
   // «LOAD * FROM x;» без полей не трогается.
   assert.equal(formatScript('LOAD * FROM x;'), 'LOAD * FROM x;');
 });
+
+test('formatScript: строчный комментарий не глотает остаток скрипта', () => {
+  // Регрессия: «//» маскировался до конца ВСЕГО текста — после первого
+  // комментария форматтер не видел ни одного оператора и сообщал
+  // «нечего менять» (живой случай: скрипт Jira worklog с // перед LOAD).
+  const src = [
+    '// 1. Забираем сырые данные',
+    'Raw:',
+    'LOAD',
+    '    issue_key,',
+    '    parent_key;',
+    '// 2. Сортируем',
+    'Sorted:',
+    'NoConcatenate',
+    'LOAD *',
+    'RESIDENT Raw',
+    'ORDER BY issue_key DESC;',
+  ].join('\n');
+  const out = formatScript(src);
+  assert.notEqual(out, src, 'скрипт с комментариями должен форматироваться');
+  assert.ok(out.includes(' issue_key\n,parent_key;'), 'поля LOAD перестроены (первое — без запятой)');
+  assert.ok(out.includes('// 1. Забираем сырые данные'), 'комментарий сохранён');
+  assert.ok(out.includes('///$tab') === false, 'лишнего нет');
+  // ///$tab остаётся в колонке 0; inline-комментарий не теряется при
+  // перестроении (может уехать на свою строку с ведущей запятой — текст цел).
+  const withTab = formatScript("///$tab 01_ Данные\nRaw:\nLOAD a, // хвостовой комментарий\n b\nRESIDENT S;");
+  assert.ok(withTab.split('\n')[0] === '///$tab 01_ Данные', '///$tab в колонке 0');
+  assert.ok(withTab.includes('// хвостовой комментарий'), 'inline-комментарий сохранён');
+  assert.ok(withTab.includes(' b\nRESIDENT S;'), 'поля после комментария разбираются');
+});
