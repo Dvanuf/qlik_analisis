@@ -211,3 +211,49 @@ test('formatScript: зона fmt:off защищает LOAD от перестро
   assert.ok(r.script.includes('LOAD\n e\n,f\nRESIDENT Q;'), 'LOAD после зоны отформатирован');
   assert.ok(r.script.includes('LOAD\n a\n,b\nRESIDENT S;'), 'LOAD до зоны отформатирован');
 });
+
+test('formatScript: запятые внутри функций не режут поле (все функции, не только ApplyMap)', () => {
+  // Живой случай: ApplyMap/SubField разрезались по запятым аргументов на
+  // «псевдополя». Список полей режется только по запятым верхнего уровня
+  // (вне скобок) — верно для ЛЮБОЙ функции с аргументами.
+  const src = [
+    'Dim:',
+    'LOAD',
+    '    ID',
+    ",ApplyMap('CustomerMap'",
+    '    ,SubField(PathName',
+    "    ,'\\'",
+    '    ,2)',
+    '    ,Null()) as PathCustomer2',
+    'FROM [lib://Data/dim.qvd];',
+  ].join('\n');
+  const r = formatScriptDetailed(src, {});
+  assert.ok(
+    r.script.includes(",ApplyMap('CustomerMap',SubField(PathName,'\\',2),Null()) as PathCustomer2"),
+    'вызов функции — одно поле, запятые аргументов внутри',
+  );
+  assert.ok(!r.script.includes(';;'), 'нет задвоенного «;» от «//» внутри [lib://…]');
+  // Хвостовые запятые — то же поле одной строкой.
+  const r2 = formatScriptDetailed(src, { commaStyle: 'trailing' });
+  assert.ok(
+    r2.script.includes("ApplyMap('CustomerMap',SubField(PathName,'\\',2),Null()) as PathCustomer2"),
+    'trailing: то же поведение',
+  );
+  // Другие функции с запятыми в аргументах — тоже одно поле.
+  const fn = formatScriptDetailed([
+    'M:',
+    'LOAD',
+    '    Sum(Amount) as S,',
+    '    If(Flag = 1, A, B) as F,',
+    '    Left(Name, 3) as L,',
+    '    [Поле, с запятой] as N',
+    'RESIDENT T;',
+  ].join('\n'), {});
+  assert.ok(fn.script.includes(',If(Flag = 1, A, B) as F'), 'If — одним полем');
+  assert.ok(fn.script.includes(',Left(Name, 3) as L'), 'Left — одним полем');
+  assert.ok(fn.script.includes(',[Поле, с запятой] as N'), 'запятая внутри [скобок] не режет имя поля');
+  assert.ok(fn.script.includes(' Sum(Amount) as S'), 'Sum — первым полем');
+  // FROM с lib:// — хвост цел: один «;», подключение не «съедено».
+  const lib = formatScriptDetailed('T:\nLOAD a\nFROM [lib://Data/x.qvd];', {});
+  assert.ok(lib.script.trimEnd().endsWith('FROM [lib://Data/x.qvd];'), 'lib:// в FROM — без артефактов');
+});

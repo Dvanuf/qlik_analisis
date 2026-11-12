@@ -98,9 +98,13 @@ function maskProtected(text, warnings = []) {
     warnings.push(`Строка ${lineOf(text, start)}: не найден закрывающий «${closer}» — текст после этой позиции не считался защищённым (проверьте кавычку/комментарий)`);
     return true;
   };
+  // Внутри [скобок] «//» и «/*» — не комментарии: это часть содержимого
+  // (подключение [lib://…], имя поля со слэшами). Без этого «//» из
+  // lib:// глотал хвост строки, и в конце оператора появлялся лишний «;».
+  let bracket = 0;
   while (i < n) {
     const rest2 = text.slice(i, i + 2);
-    if (rest2 === '//') {
+    if (bracket === 0 && rest2 === '//') {
       // Строчный комментарий — только до конца строки: до фикса «//» глотал
       // весь остаток файла, и после первого комментария форматтер не видел
       // ни одного оператора (кнопка «Формат» честно сообщала «менять нечего»).
@@ -110,7 +114,7 @@ function maskProtected(text, warnings = []) {
       i = stop;
       continue;
     }
-    if (rest2 === '/*') {
+    if (bracket === 0 && rest2 === '/*') {
       const end = text.indexOf('*/', i + 2);
       const stop = end === -1 ? n : end + 2;
       if (stop === n && swallowGuard(i, '*/')) { out += '/'; i += 1; continue; }
@@ -160,6 +164,8 @@ function maskProtected(text, warnings = []) {
       continue;
     }
     out += c;
+    if (c === '[') bracket += 1;
+    else if (c === ']') bracket = Math.max(0, bracket - 1);
     i += 1;
   }
   return { text: out, fragments };
@@ -326,6 +332,26 @@ export function formatScript(src, opts = {}) {
 }
 
 /**
+ * Разрезает список полей по запятым верхнего уровня: запятая внутри
+ * скобок (аргументы ApplyMap/If/Sum… или имя поля [a,b]) поле не режет.
+ * Строки, $(…), {<…>} уже замаскированы на этот момент.
+ */
+function splitTopLevelCommas(s) {
+  const parts = [];
+  let depth = 0;
+  let cur = '';
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i];
+    if (c === '(' || c === '[') depth += 1;
+    else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+    if (c === ',' && depth === 0) { parts.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+
+/**
  * Многострочные LOAD/SELECT: одно поле на строку, ведущие запятые,
  * ключевые слова — на уровне оператора, «;» в конце (п. 4–5).
  * Однострочные операторы не трогаются. Оператор с любой строкой из
@@ -360,7 +386,10 @@ function reformatLoadStatements(lines, { commaStyle, warnings, protectedOut }) {
       i = j + 1;
       continue;
     }
-    const text = body.join(' ');
+    const text = body.join(' ')
+      // Склейка строк даёт артефакт « запятая» (перенос перед запятой):
+      // это наш собственный пробел — убираем всегда.
+      .replace(/[ \t]+,/g, ',');
     // Однострочный оператор разбираем, только если в нём есть поля
     // (хотя бы одна запятая): «LOAD * FROM x;» остаётся как есть.
     const single = body.length === 1 && !/^\s*(?:load|select)\b[^,]*,/i.test(text);
@@ -377,7 +406,7 @@ function reformatLoadStatements(lines, { commaStyle, warnings, protectedOut }) {
       tailParts = text.slice(kwMatch.index).trim().split(LOAD_KEYWORD_SPLIT).filter(Boolean);
     }
     const fieldsPart = head.replace(/^(load|select)\b/i, '').trim().replace(/[;,]+$/, '');
-    const fields = fieldsPart ? fieldsPart.split(',') : [];
+    const fields = fieldsPart ? splitTopLevelCommas(fieldsPart) : [];
     out.push(`${indent}LOAD`);
     fields.forEach((f, k) => {
       const field = f.trim();
