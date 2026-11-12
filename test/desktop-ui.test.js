@@ -239,14 +239,20 @@ test('ConnectTab: таблица — Владелец на месте, Тэги 
   assert.ok(row.includes('a.published === true'), 'нет ячейки вида');
 });
 
-test('LineageTab: вкладка «Формирование» — SVG-DAG и детали', () => {
+test('LineageTab: вкладка «Формирование» — только модель данных (0.29.1)', () => {
   const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
-  assert.ok(LINEAGE_TAB.includes('lineage?.nodes') || LINEAGE_TAB.includes('analysis?.lineage'), 'lineage не используется');
-  assert.ok(LINEAGE_TAB.includes('.scoretiles') === false && LINEAGE_TAB.includes('comp-track') === false, 'лишние блоки');
-  assert.ok(LINEAGE_TAB.includes('ln-arrow'), 'нет стрелок графа');
-  assert.ok(LINEAGE_TAB.includes('Документ'), 'нет текстового документа');
+  // Lineage-граф и «Документ» убраны по замечанию: вкладка = модель данных.
+  assert.ok(LINEAGE_TAB.includes('docOpen') === false && LINEAGE_TAB.includes('ln-arrow') === false, 'lineage-граф и «Документ» не убраны');
+  assert.ok(LINEAGE_TAB.includes('viewswitch') === false, 'переключатель вьюх не убран');
   assert.ok(APP.includes("tabs: ['analysis', 'script', 'refactor', 'model', 'lineage']"), 'вкладка не в РАБОТА');
-  assert.ok(APP.includes('onOpenAnalysis={(name) => {'), 'переход со схемы в «Анализ» не подключён');
+  assert.ok(APP.includes('onOpenAnalysis={(name) => {'), 'переход в «Анализ» не подключён');
+});
+
+test('LineageTab: карточка качества честна при пропущенных проверках', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  assert.ok(LINEAGE_TAB.includes('Оценка неполная'), 'нет честного вердикта при пропусках');
+  assert.ok(LINEAGE_TAB.includes('skippedUsage'), 'пропущенные проверки не читаются из ruleStats');
+  assert.ok(LINEAGE_TAB.includes('оценка недоступна'), 'нет обработки отсутствия балла домена');
 });
 
 test('LineageTab: вьюха «Модель данных» — схема с пометками проблем', () => {
@@ -279,13 +285,6 @@ test('LineageTab: карточка «Качество модели» — нав�
   assert.ok(LINEAGE_TAB.includes('Худшие таблицы:'), 'нет списка худших таблиц');
   assert.ok(STYLES.includes('.ms-node'), 'стили схемы не добавлены');
   assert.ok(STYLES.includes('.ms-link-mn'), 'стили связи M:N не добавлены');
-});
-
-test('LineageTab: баннер нераскрытых включений (скрипт-заглушка)', () => {
-  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
-  assert.ok(LINEAGE_TAB.includes('parseIncludeLines(analysis?.script'), 'включения не проверяются');
-  assert.ok(LINEAGE_TAB.includes('включения не раскрыты'), 'нет баннера заглушки');
-  assert.ok(LINEAGE_TAB.includes('includeNotes'), 'нет диагностики QRS');
 });
 
 test('main.ts: analyze-app/analyze-file отдают lineage в UI', () => {

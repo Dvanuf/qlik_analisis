@@ -543,9 +543,9 @@ async function runSmokeCheck(): Promise<void> {
           throw new Error('Переключатель размера шрифта не меняет размеры интерфейса');
         }
 
-        // Вкладка «Формирование»: переключатель вьюх — lineage-граф и схема
-        // модели данных («снежинка») с пометками проблем. Урок 0.25.2: вкладка
-        // без данных не ловилась smoke'ом — проверяем отрисовку и схему.
+        // Вкладка «Формирование»: модель данных в трёх состояниях (аккордеоны)
+        // с карточкой «Качество модели» наверху. Урок 0.25.2: вкладка без
+        // данных не ловилась smoke'ом — проверяем отрисовку и схему.
         await win.webContents.executeJavaScript(`
           (function () {
             var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
@@ -555,42 +555,29 @@ async function runSmokeCheck(): Promise<void> {
           })()
         `);
         await new Promise((r) => setTimeout(r, 600));
-        const lineageShot = await win.webContents.capturePage();
-        const schemaClick = await win.webContents.executeJavaScript(`
-          (function () {
-            var viewBtns = Array.prototype.slice.call(document.querySelectorAll('.viewswitch button'));
-            var modelBtn = viewBtns.filter(function (b) { return b.textContent.indexOf('Модель данных') >= 0; })[0];
-            if (!modelBtn) return JSON.stringify({ switcher: viewBtns.length, error: 'нет кнопки «Модель данных»' });
-            modelBtn.click();
-            return JSON.stringify({ switcher: viewBtns.length });
-          })()
-        `);
-        await new Promise((r) => setTimeout(r, 600));
         const schemaState = await win.webContents.executeJavaScript(`
           (function () {
             return JSON.stringify({
-              schemaSvg: document.querySelectorAll('svg.ms-schema').length,
+              quality: document.querySelectorAll('.ms-quality').length,
+              sections: document.querySelectorAll('.ms-sec').length,
+              filters: document.querySelectorAll('.ms-filters button').length,
               tables: document.querySelectorAll('.ms-node').length,
               links: document.querySelectorAll('.ms-link').length,
-              fields: document.querySelectorAll('.ms-field').length,
-              qualityBtn: Array.prototype.slice.call(document.querySelectorAll('button'))
-                .some(function (b) { return b.textContent.indexOf('Качество модели') >= 0; })
+              fields: document.querySelectorAll('.ms-field').length
             });
           })()
         `);
         const schemaParsed = JSON.parse(String(schemaState)) as {
-          schemaSvg: number; tables: number; links: number; fields: number; qualityBtn?: boolean;
+          quality: number; sections: number; filters: number; tables: number; links: number; fields: number;
         };
-        // Скриншоты пишем до проверок: пусть smoke падает, но снимки остаются
-        // для разбора (в упакованном приложении — в userData).
+        // Скриншот пишем до проверок: пусть smoke падает, но снимок остаётся.
         const shotDir = app.isPackaged
           ? resolve(app.getPath('userData'), 'qa-smoke')
           : resolve(app.getAppPath(), 'out');
         if (!existsSync(shotDir)) mkdirSync(shotDir, { recursive: true });
-        writeFileSync(resolve(shotDir, 'smoke-lineage.png'), lineageShot.toPNG());
-        writeFileSync(resolve(shotDir, 'smoke-schema.png'), (await win.webContents.capturePage()).toPNG());
-        if (!schemaParsed.schemaSvg || !schemaParsed.tables) {
-          throw new Error(`Схема модели данных не отрисовалась: ${String(schemaState)}; ошибки консоли: ${consoleErrors.join(' | ').slice(0, 800)}`);
+        writeFileSync(resolve(shotDir, 'smoke-model.png'), (await win.webContents.capturePage()).toPNG());
+        if (!schemaParsed.quality || schemaParsed.sections !== 3 || !schemaParsed.tables) {
+          throw new Error(`Модель данных не отрисовалась: ${String(schemaState)}; ошибки консоли: ${consoleErrors.join(' | ').slice(0, 800)}`);
         }
 
         const image = await win.webContents.capturePage();
