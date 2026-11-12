@@ -262,6 +262,38 @@ export type LineageNode = {
 export type LineageEdge = { from: string; to: string; kind: 'source' | 'resident' | 'join' | 'concatenate' | 'store' };
 export type LineageGraph = { nodes: LineageNode[]; edges: LineageEdge[]; warnings: string[] };
 
+/** Проблемы таблицы/поля: счётчики по важности + перечень правил. */
+export type SchemaProblems = {
+  error: number; warning: number; info: number; total: number;
+  rules: { id: string; severity: string; title: string; count: number }[];
+};
+
+/** Таблица схемы модели данных («снежинки»). */
+export type SchemaTable = {
+  name: string;
+  rows: number | null;
+  synthetic: boolean;
+  sourceKind: LineageNode['sourceKind'] | null;
+  keyFields: string[];
+  problems: SchemaProblems | null;
+  fields: { name: string; key: boolean; incompleteKey: boolean; problems: SchemaProblems | null }[];
+};
+
+/** Связь между таблицами по общему полю (адреса — канонические имена). */
+export type SchemaLink = { from: string; to: string; field: string; kind: '1:1' | 'm:n' | 'key' };
+
+/** Схема модели данных с пометками проблем — строится ядром без запросов к серверу. */
+export type DataSchema = {
+  tables: SchemaTable[];
+  links: SchemaLink[];
+  meta: {
+    notes: string[];
+    modelFromScript: boolean;
+    associationsAvailable: boolean;
+    linkKinds: Record<string, string>;
+  };
+};
+
 export type AnalysisResult = {
   appName?: string;
   appId?: string;
@@ -326,6 +358,8 @@ export type AnalysisResult = {
   includeNotes?: string[];
   /** Структура формирования приложения (lineage-граф). */
   lineage?: LineageGraph;
+  /** Схема модели данных («снежинка») с пометками проблем. */
+  schema?: DataSchema;
   ruleStats?: {
     id: string; category: string; severity: string; title: string;
     count: number; skipped: boolean; note: string | null; domain?: DomainId;

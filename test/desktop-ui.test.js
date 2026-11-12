@@ -254,6 +254,19 @@ test('main.ts: analyze-app/analyze-file отдают lineage в UI', () => {
   assert.equal(count, 2, 'lineage не прокинут в оба обработчика анализа');
 });
 
+test('main.ts: analyze-app/analyze-file отдают схему модели в UI', () => {
+  const MAIN = readFileSync(resolve(HERE, '..', 'desktop', 'electron', 'main.ts'), 'utf8');
+  const count = (MAIN.match(/schema: result\.schema,/g) || []).length;
+  assert.equal(count, 2, 'schema не прокинута в оба обработчика анализа');
+  assert.ok(MAIN.includes('smoke проверяет «Формирование» на обеих вьюхах'), 'в smoke-фикстуре нет схемы');
+});
+
+test('types.ts: типы схемы модели данных описаны', () => {
+  assert.ok(TYPES.includes('export type DataSchema'), 'нет типа DataSchema');
+  assert.ok(TYPES.includes('export type SchemaTable'), 'нет типа SchemaTable');
+  assert.ok(TYPES.includes('schema?: DataSchema'), 'AnalysisResult не содержит schema');
+});
+
 test('ConnectTab: карточка GitLab для авто-раскрытия включений', () => {
   const CONNECT_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ConnectTab.tsx'), 'utf8');
   assert.ok(CONNECT_TAB.includes('gitlabConfigGet'), 'нет загрузки настроек GitLab');

@@ -675,6 +675,8 @@ ipcMain.handle('core:analyze-file', async (_e, filePath: string) => {
     expressionIndex: result.expressionIndex,
     outline: result.outline,
     lineage: result.lineage,
+    // Схема модели данных («снежинка») с пометками проблем.
+    schema: result.schema,
     skipped: result.summary.skipped,
   };
 });
@@ -1526,6 +1528,47 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
         { id: 'R018', domain: 'dash', skipped: true },
       ],
       dataModel: [],
+      // Lineage и схема модели: smoke проверяет «Формирование» на обеих вьюхах.
+      lineage: {
+        nodes: [
+          { id: 'src:lib://d/sales.qvd', kind: 'source', label: 'sales.qvd', depth: 0, sourceKind: 'lib', detail: 'lib://d/sales.qvd' },
+          { id: 'tbl:продажи', kind: 'table', label: 'Продажи', depth: 0, stored: true },
+          { id: 'tbl:товары', kind: 'table', label: 'Товары', depth: 0 },
+        ],
+        edges: [{ from: 'src:lib://d/sales.qvd', to: 'tbl:продажи', kind: 'source' }],
+        warnings: [],
+      },
+      schema: {
+        tables: [
+          {
+            name: 'Продажи', rows: 1240, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+            problems: {
+              error: 0, warning: 2, info: 1, total: 3, rules: [
+                { id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 },
+                { id: 'R001', severity: 'warning', title: 'Неиспользуемое поле', count: 1 },
+                { id: 'R020', severity: 'info', title: 'Высокая кардинальность', count: 1 },
+              ],
+            },
+            fields: [
+              {
+                name: 'Код', key: true, incompleteKey: true,
+                problems: { error: 0, warning: 1, info: 0, total: 1, rules: [{ id: 'R010', severity: 'warning', title: 'Неполный ключ', count: 1 }] },
+              },
+              { name: 'Сумма', key: false, incompleteKey: false, problems: null },
+            ],
+          },
+          {
+            name: 'Товары', rows: 320, synthetic: false, sourceKind: 'lib', keyFields: ['Код'],
+            problems: null,
+            fields: [{ name: 'Код', key: true, incompleteKey: false, problems: null }],
+          },
+        ],
+        links: [{ from: 'продажи', to: 'товары', field: 'код', kind: '1:1' }],
+        meta: {
+          notes: [], modelFromScript: false, associationsAvailable: true,
+          linkKinds: { '1:1': 'связь один к одному', 'm:n': 'многие ко многим', key: 'связь по ключу' },
+        },
+      },
     } as never;
   }
   sendProgress('connect', 'Подключение к движку');
@@ -1689,6 +1732,8 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
     // Структура скрипта: разделы, шаги, поток построения, недостижимый код.
     outline: result.outline,
     lineage: result.lineage,
+    // Схема модели данных («снежинка») с пометками проблем.
+    schema: result.schema,
   };
 });
 
