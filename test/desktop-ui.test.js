@@ -145,11 +145,19 @@ test('App: аватар удалён, платформа показываетс�
 });
 
 test('RefactorTab: форматирование и синхронная прокрутка панелей', () => {
-  assert.ok(REFACTOR_TAB.includes("formatScriptDetailed(proposed, fmtOpts)"), 'форматирование не подключено');
+  assert.ok(REFACTOR_TAB.includes('formatScriptSections(proposed, fmtOpts, includedSections)'), 'форматирование не подключено');
   assert.ok(REFACTOR_TAB.includes('setFormatOn'), 'нет тумблера формата');
   assert.ok(REFACTOR_TAB.includes('setSyncScroll'), 'нет тумблера прокрутки');
   assert.ok(REFACTOR_TAB.includes('syncFrom'), 'нет синхронной прокрутки');
   assert.ok(REFACTOR_TAB.includes('finalScript: shown'), 'экспортируется не показанная версия');
+});
+
+test('RefactorTab: панель «Что форматировать» — выбор секций ///$tab', () => {
+  assert.ok(REFACTOR_TAB.includes('splitScriptSections'), 'секции не считаются');
+  assert.ok(REFACTOR_TAB.includes('Что форматировать'), 'нет панели выбора секций');
+  assert.ok(REFACTOR_TAB.includes('includedSections'), 'перечень секций к форматированию не передаётся');
+  assert.ok(REFACTOR_TAB.includes('fmtSkip'), 'нет состояния исключённых секций');
+  assert.ok(REFACTOR_TAB.includes('Что форматировать».'), 'подсказка не объясняет выбор «ничего»');
 });
 
 test('ScoreTab: аналитическая карточка по макету', () => {

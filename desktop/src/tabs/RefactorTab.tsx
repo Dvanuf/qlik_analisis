@@ -13,7 +13,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
 import { computeScore } from '../../../src/score/index.js';
-import { formatScriptDetailed, formatRulesDoc } from '../../../src/script/format.js';
+import { formatScriptDetailed, formatScriptSections, formatRulesDoc, splitScriptSections } from '../../../src/script/format.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
 import type { AnalysisResult, RefactorChange, RulesConfig } from '../types.js';
 
@@ -65,6 +65,10 @@ export default function RefactorTab(props: Props) {
   const [formatOn, setFormatOn] = useState(false);
   const [syncScroll, setSyncScroll] = useState(true);
   const [howFmt, setHowFmt] = useState(false);
+  // Частичное форматирование: секции ///$tab со снятой галочкой остаются
+  // как есть. Выбор временный (не пишется в rules.json) и сбрасывается
+  // при новом анализе — затерянные имена безвредны: секции фильтруются.
+  const [fmtSkip, setFmtSkip] = useState<Set<string>>(new Set());
   const leftRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
   const syncingRef = useRef(false);
@@ -116,9 +120,22 @@ export default function RefactorTab(props: Props) {
     () => (rulesConfig as { rules?: { formatting?: Record<string, unknown> } } | null)?.rules?.formatting ?? {},
     [rulesConfig],
   );
+  // Секции ///$tab предложенной версии и перечень к форматированию:
+  // при < 2 секциях выбор не показывается — форматируется весь скрипт.
+  const sections = useMemo(() => splitScriptSections(proposed), [proposed]);
+  const includedSections = useMemo(() => {
+    if (sections.length < 2) return null;
+    return sections.filter((s) => !fmtSkip.has(s.name)).map((s) => s.name);
+  }, [sections, fmtSkip]);
+  const toggleSection = (name: string) => setFmtSkip((prev) => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    return next;
+  });
   const fmt = useMemo(
-    () => (formatOn ? formatScriptDetailed(proposed, fmtOpts) : { script: proposed, warnings: [] }),
-    [proposed, formatOn, fmtOpts],
+    () => (formatOn ? formatScriptSections(proposed, fmtOpts, includedSections) : { script: proposed, warnings: [] }),
+    [proposed, formatOn, fmtOpts, includedSections],
   );
   const shown = fmt.script;
   // Форматирование включено, но текст не изменился — объясняем почему.
@@ -380,10 +397,39 @@ export default function RefactorTab(props: Props) {
           </button>
         </div>
 
+        {/* Выбор секций: появляется при «Формат», если вкладок ≥ 2 */}
+        {formatOn && sections.length >= 2 && (
+          <div className="fmtdoc" style={{ margin: '8px 0' }}>
+            <b>Что форматировать</b>
+            <div className="hint" style={{ margin: '2px 0 6px' }}>
+              Отмеченные вкладки переформатируются, снятые остаются как есть.
+              Экспорт и «Копировать» берут показанную смесь.
+            </div>
+            {sections.map((s) => (
+              <label key={s.name} className="fixitem">
+                <input
+                  type="checkbox"
+                  checked={!fmtSkip.has(s.name)}
+                  onChange={() => toggleSection(s.name)}
+                />
+                <span className="fixbody">
+                  {s.name}
+                  <span className="muted small" style={{ marginLeft: 6 }}>
+                    · строки {s.from}–{s.to}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+
         {fmtNoChange && (
           <p className="hint" style={{ margin: '6px 0' }}>
             Форматирование не изменило текст: в скрипте нет многострочных
             LOAD/SELECT и блоков для выравнивания (или он уже отформатирован).
+            {includedSections && includedSections.length === 0
+              ? ' Отмечено «ничего» — выберите вкладки в панели «Что форматировать».'
+              : ''}
           </p>
         )}
 
