@@ -1045,6 +1045,11 @@ table.rq tr.pat { cursor: pointer; }
 .ms-link-11 { stroke: var(--info); }
 .ms-link-mn { stroke: var(--danger); stroke-dasharray: 4 3; }
 .ms-linklabel { font-size: 9px; fill: var(--muted); }
+/* Квадраты легенды схемы: HTML-элементам нужен background, fill — только SVG. */
+.legend-item i.ms-sev-err { background: var(--danger); }
+.legend-item i.ms-sev-warn { background: var(--warning); }
+.legend-item i.ms-sev-info { background: var(--info); }
+.legend-item i.ms-sev-ok { background: var(--success); }
 
 /* Панель правил форматирования. */
 .fmtdoc {

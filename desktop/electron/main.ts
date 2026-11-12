@@ -228,6 +228,13 @@ async function runSmokeCheck(): Promise<void> {
             '  Comment',
             'FROM \'lib://Data/Customers.qvd\';',
             '',
+            'Orders:',
+            'LOAD',
+            '  ID,',
+            '  OrderNo,',
+            '  Amount',
+            'FROM \'lib://Data/Orders.qvd\';',
+            '',
           ].join('\n'), 'utf8');
           // Диалог выбора файла подменяем: в smoke-режиме он не нужен.
           const realDialog = dialog.showOpenDialog;
@@ -534,6 +541,56 @@ async function runSmokeCheck(): Promise<void> {
         const fontParsed = JSON.parse(String(fontScale)) as { small: number; mid: number; big: number };
         if (!(fontParsed.mid > fontParsed.small && fontParsed.big > fontParsed.mid)) {
           throw new Error('Переключатель размера шрифта не меняет размеры интерфейса');
+        }
+
+        // Вкладка «Формирование»: переключатель вьюх — lineage-граф и схема
+        // модели данных («снежинка») с пометками проблем. Урок 0.25.2: вкладка
+        // без данных не ловилась smoke'ом — проверяем отрисовку и схему.
+        await win.webContents.executeJavaScript(`
+          (function () {
+            var btn = Array.prototype.slice.call(document.querySelectorAll('.menu .nav-item'))
+              .filter(function (b) { return b.textContent.indexOf('Формирование') === 0; })[0];
+            if (btn) btn.click();
+            return true;
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 600));
+        const lineageShot = await win.webContents.capturePage();
+        const schemaClick = await win.webContents.executeJavaScript(`
+          (function () {
+            var viewBtns = Array.prototype.slice.call(document.querySelectorAll('.viewswitch button'));
+            var modelBtn = viewBtns.filter(function (b) { return b.textContent.indexOf('Модель данных') >= 0; })[0];
+            if (!modelBtn) return JSON.stringify({ switcher: viewBtns.length, error: 'нет кнопки «Модель данных»' });
+            modelBtn.click();
+            return JSON.stringify({ switcher: viewBtns.length });
+          })()
+        `);
+        await new Promise((r) => setTimeout(r, 600));
+        const schemaState = await win.webContents.executeJavaScript(`
+          (function () {
+            return JSON.stringify({
+              schemaSvg: document.querySelectorAll('svg.ms-schema').length,
+              tables: document.querySelectorAll('.ms-node').length,
+              links: document.querySelectorAll('.ms-link').length,
+              fields: document.querySelectorAll('.ms-field').length,
+              qualityBtn: Array.prototype.slice.call(document.querySelectorAll('button'))
+                .some(function (b) { return b.textContent.indexOf('Качество модели') >= 0; })
+            });
+          })()
+        `);
+        const schemaParsed = JSON.parse(String(schemaState)) as {
+          schemaSvg: number; tables: number; links: number; fields: number; qualityBtn?: boolean;
+        };
+        // Скриншоты пишем до проверок: пусть smoke падает, но снимки остаются
+        // для разбора (в упакованном приложении — в userData).
+        const shotDir = app.isPackaged
+          ? resolve(app.getPath('userData'), 'qa-smoke')
+          : resolve(app.getAppPath(), 'out');
+        if (!existsSync(shotDir)) mkdirSync(shotDir, { recursive: true });
+        writeFileSync(resolve(shotDir, 'smoke-lineage.png'), lineageShot.toPNG());
+        writeFileSync(resolve(shotDir, 'smoke-schema.png'), (await win.webContents.capturePage()).toPNG());
+        if (!schemaParsed.schemaSvg || !schemaParsed.tables) {
+          throw new Error(`Схема модели данных не отрисовалась: ${String(schemaState)}; ошибки консоли: ${consoleErrors.join(' | ').slice(0, 800)}`);
         }
 
         const image = await win.webContents.capturePage();

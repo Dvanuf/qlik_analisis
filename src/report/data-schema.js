@@ -63,12 +63,48 @@ function finalizeProblems(bucket) {
  * @param {object[]} findings — итоговые находки анализа (после дедупликации)
  * @param {object|null} [lineage] — lineage-граф (для типа источника таблицы)
  * @param {object[]} [ruleStats] — статистика правил (для notes о пропусках)
+ * @param {object|null} [scriptModel] — модель скрипта (parseScript): когда
+ *   движок не отдал таблиц (анализ файла/скрипта), таблицы и связи выводятся
+ *   из LOAD/RESIDENT — иначе схема пуста при живом lineage.
  * @returns {{ tables: object[], links: object[], meta: object }}
  */
-export function buildDataSchema(graph, findings = [], lineage = null, ruleStats = []) {
+export function buildDataSchema(graph, findings = [], lineage = null, ruleStats = [], scriptModel = null) {
   const notes = [];
-  const tablesSrc = graph?.tables ?? [];
-  const fieldsSrc = graph?.fields ?? [];
+  let tablesSrc = graph?.tables ?? [];
+  let fieldsSrc = graph?.fields ?? [];
+
+  // Таблиц нет (анализ файла/скрипта: коннектор отдаёт только текст) —
+  // выводим таблицы и поля из модели скрипта: LOAD-приёмники, RESIDENT-цели,
+  // поля каждого LOAD. Объёмы (строки/кардинальность) неизвестны — это
+  // честно помечается в meta (modelFromScript + note).
+  if (!tablesSrc.length && scriptModel?.loads?.length) {
+    const tableMap = new Map();
+    const addTable = (name, fields) => {
+      const key = canonicalFieldName(name);
+      if (!key) return;
+      if (!tableMap.has(key)) {
+        tableMap.set(key, { name: String(name), rows: null, synthetic: false, fields: [], seen: new Set() });
+      }
+      const t = tableMap.get(key);
+      for (const f of fields ?? []) {
+        const fc = canonicalFieldName(f);
+        if (!fc || t.seen.has(fc)) continue;
+        t.seen.add(fc);
+        t.fields.push(f);
+      }
+    };
+    for (const load of scriptModel.loads) addTable(load.table, load.fields);
+    for (const r of scriptModel.residents ?? []) {
+      if (r.target) addTable(r.target, r.fields);
+    }
+    tablesSrc = [...tableMap.values()].map((t) => ({
+      name: t.name, rows: null, synthetic: t.synthetic, fields: t.fields, keyFields: [],
+    }));
+    fieldsSrc = [];
+    for (const t of tablesSrc) {
+      for (const f of t.fields) fieldsSrc.push({ name: String(f), table: t.name, key: false, rows: null, distinct: null });
+    }
+  }
 
   // Сводные по полям: (таблица|поле) → статистика движка (кардинальность и пр.).
   const fieldStats = new Map();

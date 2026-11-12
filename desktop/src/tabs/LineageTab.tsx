@@ -426,7 +426,7 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
                   </rect>
                   <text x={10} y={20} className="ms-title" style={{ cursor: 'pointer' }}
                     onClick={() => { setSelTable(t); setSelField(null); }}>{cut(t.name, 22)}</text>
-                  <text x={W - 8} y={20} textAnchor="end" className="ms-sub">{fmtRows(t.rows)} стр</text>
+                  <text x={W - 8} y={20} textAnchor="end" className="ms-sub">{t.rows == null ? 'строки —' : `${fmtRows(t.rows)} стр`}</text>
                   <text x={10} y={30} className="ms-sub">
                     {t.problems && ([
                       ['ms-sev-err', t.problems.error, 'ошибки'],

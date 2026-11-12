@@ -112,6 +112,33 @@ test('buildDataSchema: пустой граф — пустая схема без 
   assert.deepEqual(schema.meta.notes, []);
 });
 
+test('buildDataSchema: без таблиц движка таблицы выводятся из модели скрипта', () => {
+  // Файловый анализ: коннектор отдаёт только текст скрипта (tables: []).
+  const script = [
+    'Продажи:',
+    'LOAD Код, Сумма FROM [lib://Data/sales.qvd] (qvd);',
+    'Товары:',
+    'LOAD Код, Наименование FROM [lib://Data/goods.qvd] (qvd);',
+    'Итоги:',
+    'LOAD Код, Sum(Сумма) as Итог Resident Продажи Group By Код;',
+  ].join('\n');
+  const model = parseScript(script);
+  const g = { meta: { source: 'file:script', capabilities: ['script'] }, tables: [], fields: [] };
+  const schema = buildDataSchema(g, [], lineage(), [], model);
+  assert.deepEqual(schema.tables.map((t) => t.name).sort(), ['Итоги', 'Продажи', 'Товары']);
+  const sales = schema.tables.find((t) => t.name === 'Продажи');
+  assert.deepEqual(sales.fields.map((f) => f.name).sort(), ['Код', 'Сумма']);
+  assert.equal(sales.rows, null, 'объём строк из скрипта неизвестен');
+  assert.equal(schema.links.length, 3, '«Код» связывает все три таблицы: Итоги–Продажи, Итоги–Товары, Продажи–Товары');
+  assert.ok(schema.links.every((l) => l.kind === 'key'), 'без кардинальности все связи — key');
+  assert.equal(schema.meta.modelFromScript, true);
+  assert.ok(schema.meta.notes.some((n) => n.includes('объём данных')));
+  // Настоящие таблицы движка не заменяются скриптовыми.
+  const engineSchema = buildDataSchema(GRAPH, [], lineage(), [], model);
+  assert.equal(engineSchema.tables.length, 3);
+  assert.equal(engineSchema.tables.find((t) => t.name === 'Мост').synthetic, true);
+});
+
 test('buildDataSchema: модель из скрипта — пометка об отсутствии объёмов', () => {
   const g = { ...GRAPH, meta: { source: 'file:qvs', capabilities: [] } };
   const schema = buildDataSchema(g, [], lineage());

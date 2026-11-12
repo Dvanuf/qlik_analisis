@@ -231,7 +231,8 @@ export function analyze(graph, config = {}) {
     // Модель данных и метаданные — листами книги Excel (QSME: Data model).
     dataModel: buildDataModelSheets(graph),
     // Схема модели данных («снежинка») с пометками проблем по таблицам/полям.
-    schema: buildDataSchema(graph, locatedFindings, lineage, ruleStats),
+    // Без таблиц движка — таблицы выводятся из модели скрипта (анализ файла).
+    schema: buildDataSchema(graph, locatedFindings, lineage, ruleStats, scriptModel),
     // Перечень выражений — для поиска «где используется это выражение».
     expressionIndex: buildExpressionIndex(graph),
   };
