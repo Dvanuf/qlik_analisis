@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Макет: вкладка «Формирование» — модель данных в трёх состояниях</title>
+<style>
+  /* Токены приложения (dark) */
+  :root {
+    --bg: #1a1a1a; --panel: #222; --panel-2: #2a2a2a; --panel-3: #333;
+    --text: #e6e6e6; --muted: #9a9a9a; --line: #3a3a3a;
+    --brand: #00873d; --danger: #c20048; --warning: #bb3800; --success: #0d6932; --info: #005db9;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 24px; max-width: 1180px; margin-inline: auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .note { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+
+  /* ── Карточка «Качество модели» (наверху) ─────────────────────────── */
+  .quality { display: flex; gap: 20px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; flex-wrap: wrap; }
+  .ring { width: 84px; height: 84px; border-radius: 50%; border: 7px solid var(--danger); display: grid; place-content: center; text-align: center; flex: none; }
+  .ring b { font-size: 26px; }
+  .ring span { font-size: 10px; color: var(--muted); }
+  .verdict { font-size: 15px; }
+  .verdict .pill { margin-left: 8px; }
+  .counts { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cnt { background: var(--panel-2); border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+  .cnt b { font-size: 16px; display: block; }
+  .cnt.err b { color: #ff5c8a; } .cnt.warn b { color: #ffab5c; } .cnt.info b { color: #6ab0ff; }
+  .worst { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip { background: var(--panel-3); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; border: 1px solid var(--line); }
+  .chip:hover { border-color: var(--brand); }
+
+  .pill { border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+  .pill.error { background: rgba(194,0,72,.25); color: #ff5c8a; }
+  .pill.warning { background: rgba(187,56,0,.22); color: #ffab5c; }
+  .pill.ok { background: rgba(13,105,50,.3); color: #58c77f; }
+  .pill.mute { background: var(--panel-3); color: var(--muted); }
+
+  /* ── Фильтры ──────────────────────────────────────────────────────── */
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .fchip { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .fchip.on { border-color: var(--brand); color: #6fd092; background: rgba(0,135,61,.12); }
+
+  /* ── Секции-аккордеоны ───────────────────────────────────────────── */
+  details.section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+  details.section > summary { list-style: none; cursor: pointer; display: flex; gap: 10px; align-items: center; padding: 10px 16px; font-weight: 600; }
+  details.section > summary::-webkit-details-marker { display: none; }
+  .marker { color: var(--brand); width: 16px; display: inline-block; }
+  .sec-title { flex: none; }
+  .sec-counts { color: var(--muted); font-size: 12px; font-weight: 400; flex: 1; }
+  .sec-body { padding: 0 16px 16px; }
+
+  /* ── Схема (SVG) ──────────────────────────────────────────────────── */
+  svg text { font-family: system-ui, sans-serif; }
+  .node rect { fill: var(--panel-2); stroke: var(--line); rx: 8; }
+  .node.err rect { stroke: var(--danger); stroke-width: 1.8; }
+  .node.warn rect { stroke: var(--warning); }
+  .node.ok rect { stroke: var(--success); }
+  .node.drop rect { stroke: var(--line); opacity: .55; }
+  .node.drop text { opacity: .55; text-decoration: line-through; }
+  .t-title { font-size: 12px; font-weight: 700; fill: var(--text); }
+  .t-sub { font-size: 10px; fill: var(--muted); }
+  .badge { font-size: 9px; font-weight: 700; }
+  .badge.syn { fill: #ffab5c; } .badge.unused { fill: #ff5c8a; } .badge.mn { fill: #ff5c8a; }
+  .field { font-size: 11px; fill: var(--text); }
+  .field.key { font-weight: 700; }
+  .field.unused { fill: var(--muted); }
+  .dot-syn { fill: #ffab5c; } .dot-unused { fill: #ff5c8a; } .dot-key { fill: var(--brand); }
+  .link { stroke: var(--muted); fill: none; stroke-width: 1.3; opacity: .75; }
+  .link.mn { stroke: var(--danger); stroke-dasharray: 4 3; }
+  .link.drop { stroke-dasharray: 3 3; opacity: .4; }
+  .lsub { font-size: 9px; fill: var(--muted); }
+  .overload { fill: var(--panel-3); }
+  .overload-bar { fill: var(--warning); }
+
+  /* ── Легенда ──────────────────────────────────────────────────────── */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 11px; padding: 8px 2px 0; }
+  .legend b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Формирование: модель данных</h1>
+<div class="note">Макет вида вкладки (0.29.0). Данные примера: скрипт Jira (sales.qvd → Raw ✖DROP → Sorted → ji_jira_issue) + справочная модель.</div>
+
+<!-- Карточка качества — наверху -->
+<div class="quality">
+  <div class="ring"><div><b>44</b><br><span>из 100</span></div></div>
+  <div class="verdict">Модель данных<br><span class="pill error">Критично</span></div>
+  <div class="counts">
+    <div class="cnt err"><b>3</b>ошибки</div>
+    <div class="cnt warn"><b>5</b>предупреждения</div>
+    <div class="cnt info"><b>14</b>замечания</div>
+    <div class="cnt warn"><b>2</b>синт.ключа</div>
+  </div>
+  <div class="worst">
+    <span class="hint" style="color:var(--muted);font-size:12px">Худшие таблицы:</span>
+    <span class="chip">Продажи · синт.ключ · 5 неисп.</span>
+    <span class="chip">Факты · M:N</span>
+    <span class="chip">Raw · не используется</span>
+  </div>
+</div>
+
+<!-- Фильтры проблем -->
+<div class="filters">
+  <button class="fchip on">Все</button>
+  <button class="fchip">Только проблемное 8</button>
+  <button class="fchip">Синт.ключи 2</button>
+  <button class="fchip">Неисп.поля 41</button>
+  <button class="fchip">M:N 1</button>
+  <button class="fchip">Неполные ключи 3</button>
+</div>
+
+<!-- Секция 1 -->
+<details class="section" open>
+  <summary><span class="marker">▼</span>
+    <span class="sec-title">1. С учётом дропнутых — как сформировано</span>
+    <span class="sec-counts">7 таблиц · 2 удалены · 6 связей · источники и промежуточные шаги</span>
+  </summary>
+  <div class="sec-body">
+    <svg width="100%" height="330" viewBox="0 0 1100 330">
+      <!-- Источник -->
+      <g class="node"><rect x="10" y="30" width="150" height="40" rx="8"/>
+        <text x="85" y="50" text-anchor="middle" class="t-title">sales.qvd</text>
+        <text x="85" y="63" text-anchor="middle" class="t-sub">источник lib://</text></g>
+      <path class="link" d="M 85 70 L 85 105" marker-end="url(#ar)"/>
+      <!-- Raw DROP -->
+      <g class="node drop"><rect x="10" y="110" width="150" height="64" rx="8"/>
+        <text x="85" y="130" text-anchor="middle" class="t-title">Raw</text>
+        <text x="85" y="144" text-anchor="middle" class="t-sub">удалена DROP</text>
+        <text x="85" y="162" text-anchor="middle" class="badge unused" style="text-decoration:none">◦ неисп. поле 1</text></g>
+      <path class="link drop" d="M 85 166 L 85 200"/>
+      <!-- Sorted -->
+      <g class="node warn"><rect x="10" y="205" width="150" height="56" rx="8"/>
+        <text x="85" y="225" text-anchor="middle" class="t-title">Sorted</text>
+        <text x="85" y="239" text-anchor="middle" class="t-sub">RESIDENT Raw</text>
+        <text x="85" y="253" text-anchor="middle" class="badge syn">▲ ключ 85%</text></g>
+      <path class="link" d="M 160 233 C 230 233, 230 130, 290 130"/>
+      <!-- ji_jira_issue STORE -->
+      <g class="node ok"><rect x="290" y="100" width="180" height="60" rx="8"/>
+        <text x="380" y="120" text-anchor="middle" class="t-title">ji_jira_issue ●STORE</text>
+        <text x="380" y="134" text-anchor="middle" class="t-sub">RESIDENT Sorted</text>
+        <text x="380" y="150" text-anchor="middle" class="badge unused">◦ неисп. 2 · 40% шума</text></g>
+      <!-- Товары -->
+      <g class="node ok"><rect x="290" y="215" width="180" height="70" rx="8"/>
+        <text x="380" y="235" text-anchor="middle" class="t-title">Товары</text>
+        <text x="380" y="249" text-anchor="middle" class="t-sub">lib://goods.qvd</text>
+        <text x="380" y="263" text-anchor="middle" class="field">● Код   ◦ Сток (неисп 2)</text>
+        <text x="380" y="277" text-anchor="middle" class="field">● Наименование</text></g>
+      <!-- Факты: синтетический -->
+      <g class="node err"><rect x="560" y="100" width="200" height="70" rx="8"/>
+        <text x="660" y="120" text-anchor="middle" class="t-title">$Syn Факты</text>
+        <text x="660" y="134" text-anchor="middle" class="badge syn">⚠ синтетический ключ (3 поля)</text>
+        <text x="660" y="150" text-anchor="middle" class="t-sub">автоключ Qlik — не должно быть</text>
+        <text x="660" y="163" text-anchor="middle" class="badge mn">M:N с Товары</text></g>
+      <path class="link" d="M 470 130 C 520 130, 520 135, 560 135"/>
+      <path class="link mn" d="M 470 250 C 520 250, 520 160, 560 155"/>
+      <text x="515" y="215" class="lsub" text-anchor="middle">M:N ⚠</text>
+      <!-- Продажи -->
+      <g class="node err"><rect x="850" y="96" width="210" height="94" rx="8"/>
+        <text x="955" y="116" text-anchor="middle" class="t-title">Продажи</text>
+        <text x="955" y="130" text-anchor="middle" class="badge syn">⚠ синт.ключ · ▲ Код (85%)</text>
+        <text x="955" y="146" text-anchor="middle" class="field">● Код  ◦ Комментарий</text>
+        <text x="955" y="160" text-anchor="middle" class="field">● Дата  ◦ Сумма2</text>
+        <rect x="860" y="168" width="190" height="5" rx="2" class="overload"/><rect x="860" y="168" width="76" height="5" rx="2" class="overload-bar"/>
+        <text x="955" y="184" text-anchor="middle" class="lsub">перегрузка 40% (лишние данные)</text></g>
+      <path class="link" d="M 760 135 C 800 135, 810 135, 850 135"/>
+      <defs><marker id="ar" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#9a9a9a"/></marker></defs>
+    </svg>
+    <div class="legend">
+      <b>●</b> ключевое поле · <b>▲</b> неполный ключ (subset %) · <b>⚠</b> синтетический ключ ·
+      <b>◦</b> неиспользуемое поле · <b>✖/зачёркнуто</b> удалённая (DROP) · <b>полоска</b> перегрузка данными ·
+      пунктир = M:N
+    </div>
+  </div>
+</details>
+
+<!-- Секция 2 -->
+<details class="section">
+  <summary><span class="marker">▶</span>
+    <span class="sec-title">2. Без дропнутых — текущая (финальная) модель</span>
+    <span class="sec-counts">4 таблицы · 3 связи · то, что используется приложением сейчас</span>
+  </summary>
+  <div class="sec-body">
+    <div class="note" style="margin:0 0 6px">Свёрнута по умолчанию: клик по заголовку раскрывает схему — те же таблицы без Raw/промежуточных.</div>
+  </div>
+</details>
+
+<!-- Секция 3 -->
+<details class="section">
+  <summary><span class="marker">▶</span>
+    <span class="sec-title">3. Рекомендованная — после правок</span>
+    <span class="sec-counts">3 таблицы · 2 связи · −2 неисп.поля · −1 синт.ключ</span>
+  </summary>
+  <div class="sec-body">
+    <div class="note" style="margin:0 0 6px">Финальная модель минус то, что предлагается правками (dropField/dropTable): удаляемое помечено «−». Клик по правке — «Показать в Анализе».</div>
+  </div>
+</details>
+
+</body>
+</html>
