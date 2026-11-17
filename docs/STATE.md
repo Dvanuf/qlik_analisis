@@ -329,7 +329,7 @@ cd "$PROJ/desktop" && ELECTRON_RUN_AS_NODE=1 "$ELECTRON" scripts/build-release.m
 
 ## 8. Быстрый старт для новой задачи
 
-1. Прочитать [`AGENTS.md`](../AGENTS.md) — правила работы, пути, соглашения.
+1. Прочитать [`AGENTS.md`](../AGENTS.md) — правила работы, пути, соглашения; [`PROJECT.md`](PROJECT.md) — обзор проекта.
 2. Прочитать этот файл — состояние и особенности сервера.
 3. `git log --oneline -10` и `git tag` — что уже сделано.
 4. Проверить `npm test` — 446 тестов, должно быть зелено.
