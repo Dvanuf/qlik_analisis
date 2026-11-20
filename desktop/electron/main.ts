@@ -976,7 +976,7 @@ ipcMain.handle('core:export-rules-catalog', async () => {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const file = resolve(dir, `Каталог правил ${stamp}.xlsx`);
-  const SEVERITY_LABELS: Record<string, string> = { error: 'Ошибка', warning: 'Предупреждение', info: 'Инфо' };
+  const SEVERITY_LABELS: Record<string, string> = { error: 'Ошибка', warning: 'Предупреждение', info: 'Замечание' };
   const CATEGORY_LABELS: Record<string, string> = {
     Quality: 'Качество выражений', Resources: 'Ресурсы и данные',
     Practices: 'Практики разработки', Script: 'Скрипт загрузки',
@@ -2134,12 +2134,15 @@ ipcMain.handle('core:ai-keys-clear', async () => {
 });
 
 /** Текущий запрос ИИ — его можно отменить. */
-let aiAbort: AbortController | null = null;
+let aiChatAbort: AbortController | null = null;
+let aiRefactorAbort: AbortController | null = null;
 
 /** Отмена текущего запроса ИИ. */
 ipcMain.handle('core:ai-cancel', () => {
-  aiAbort?.abort();
-  aiAbort = null;
+  aiChatAbort?.abort();
+  aiChatAbort = null;
+  aiRefactorAbort?.abort();
+  aiRefactorAbort = null;
   return true;
 });
 
@@ -2225,9 +2228,9 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
     if (fromEnv) apiKeys[id] = fromEnv;
   }
 
-  aiAbort?.abort();
-  aiAbort = new AbortController();
-  const controller = aiAbort;
+  aiChatAbort?.abort();
+  aiChatAbort = new AbortController();
+  const controller = aiChatAbort;
 
   // Фокус находки: точечный вопрос добавляет в сводку одну находку.
   const focus = payload?.focus ?? null;
@@ -2288,7 +2291,8 @@ ipcMain.handle('core:ai-ask', async (_e, payload: {
     const provider = err instanceof AiError ? err.provider : null;
     return { ok: false, error: maskSecrets(message), code, provider };
   } finally {
-    if (aiAbort === controller) aiAbort = null;
+    if (aiChatAbort === controller) aiChatAbort = null;
+    if (aiRefactorAbort === controller) aiRefactorAbort = null;
   }
 });
 
@@ -2313,9 +2317,9 @@ ipcMain.handle('core:ai-refactor', async (_e, payload: {
     if (fromEnv) apiKeys[id] = fromEnv;
   }
 
-  aiAbort?.abort();
-  aiAbort = new AbortController();
-  const controller = aiAbort;
+  aiRefactorAbort?.abort();
+  aiRefactorAbort = new AbortController();
+  const controller = aiRefactorAbort;
 
   try {
     const result = await refactorScript({
@@ -2351,6 +2355,7 @@ ipcMain.handle('core:ai-refactor', async (_e, payload: {
     const provider = err instanceof AiError ? err.provider : null;
     return { ok: false, error: maskSecrets(message), code, provider };
   } finally {
-    if (aiAbort === controller) aiAbort = null;
+    if (aiChatAbort === controller) aiChatAbort = null;
+    if (aiRefactorAbort === controller) aiRefactorAbort = null;
   }
 });

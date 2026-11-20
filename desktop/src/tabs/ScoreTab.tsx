@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DOMAIN_ORDER, DOMAIN_LABELS } from '../../../src/rules/domains.js';
 import { v2Info } from '../v2fallback.js';
+import { aggregateGroup } from '../../../src/score/index.js';
 
 // Домен из находки — строка; подписи ядра имеют конкретные ключи.
 const DL = DOMAIN_LABELS as Record<string, string>;
@@ -44,6 +45,15 @@ const SEVERITY_PILL: Record<Severity, string> = {
 /** Уровень цвета по баллу: red < 50, yellow < 75, green дальше. */
 function zone(score: number): 'r' | 'y' | 'g' {
   return score < 50 ? 'r' : score < 75 ? 'y' : 'g';
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last > 1 && last < 5) return few;
+  if (last === 1) return one;
+  return many;
 }
 
 export default function ScoreTab(props: Props) {
@@ -144,10 +154,16 @@ export default function ScoreTab(props: Props) {
       .sort((a, b) => a.score - b.score);
     return rows;
   }, [batch]);
-  const groupAvg = group.length
-    ? Math.round(group.reduce((s, g) => s + g.score, 0) / group.length)
-    : null;
-  const groupRed = group.filter((g) => g.score < 50).length;
+  // Единая агрегация с «Сводным отчётом» (аудит C4): avg/медиана/зоны из ядра.
+  const agg = useMemo(
+    () => aggregateGroup((batch?.results ?? []).filter((r) => !r.error)) as {
+      avg: number | null;
+      zones: { critical: number; attention: number; good: number };
+    },
+    [batch],
+  );
+  const groupAvg = agg.avg == null ? null : Math.round(agg.avg);
+  const groupRed = agg.zones.critical;
 
   // Фильтры группы: поток / владелец / тэг.
   const [streamF, setStreamF] = useState('all');
@@ -396,7 +412,7 @@ export default function ScoreTab(props: Props) {
             )}
             {manualFixes.length > 0 && (
               <div className="planrow">
-                <b>Вручную: {manualFixes.length}</b> — прирост +{manualGain} балла
+                <b>Вручную: {manualFixes.length}</b> — прирост +{manualGain} {plural(manualGain, "балл", "балла", "баллов")}
                 ({manualFixes.map((t) => t.title).join('; ')}).
               </div>
             )}
@@ -449,7 +465,7 @@ export default function ScoreTab(props: Props) {
               {options.owners.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
             <select value={tagF} onChange={(e) => setTagF(e.target.value)} aria-label="Фильтр по тэгу">
-              <option value="all">Все тэги</option>
+              <option value="all">Все теги</option>
               {options.tags.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>

@@ -498,7 +498,7 @@ export default function SummaryTab(props: Props) {
         <div className="card scrolltbl">
           <h3>По потокам</h3>
           <table className="batchTable">
-            <thead><tr><th>Поток</th><th>Прил.</th><th>Оценка</th><th>Ошибок</th><th>Слабый домен</th></tr></thead>
+            <thead><tr><th>Поток</th><th>Приложение</th><th>Оценка</th><th>Ошибок</th><th>Слабый домен</th></tr></thead>
             <tbody>
               {group.byStream.map((s) => (
                 <tr key={s.stream}>

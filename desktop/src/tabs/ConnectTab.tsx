@@ -624,7 +624,7 @@ export default function ConnectTab(props: Props) {
               </select>
             </label>
             <label>
-              Тэги:{' '}
+              Теги:{' '}
               <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
                 <option value="all">все</option>
                 {tags.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -688,6 +688,8 @@ export default function ConnectTab(props: Props) {
                     key={a.id}
                     className={selectedIds.includes(a.id) ? 'rule' : ''}
                     onClick={() => toggleSelected(a.id)}
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSelected(a.id); } }}
                     style={{ cursor: 'pointer' }}
                   >
                     <td style={{ textAlign: 'center' }}>

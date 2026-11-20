@@ -326,7 +326,9 @@ export default function App() {
    * остальное — успех; точный вид можно задать вторым аргументом.
    */
   function showToast(text: string, kind?: 'ok' | 'err' | 'info') {
-    const k = kind ?? (/^Не удалось/.test(text) ? 'err' : 'ok');
+    // Вид тоста: явный kind, иначе маркеры ошибки (аудит B7 — «Ошибка NTLM…»
+    // и «История недоступна…» раньше показывались зелёными как успех).
+    const k = kind ?? (/^(Не удалось|Ошибка|Нет доступа|История недоступна)/.test(text) ? 'err' : 'ok');
     setToast({ text, kind: k, at: Date.now() });
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 5500);
@@ -856,7 +858,7 @@ export default function App() {
         });
         saved += 1;
       }
-      showToast(`В историю сохранено прогонов: ${saved}`);
+      showToast(saved === 1 ? "В историю сохранён 1 прогон" : `В историю сохранено прогонов: ${saved}`);
       await loadHistory();
       await loadAllRuns();
     } catch (err) {
@@ -1113,7 +1115,7 @@ export default function App() {
                 >
                   {g.label}
                 </button>
-                <ul className="group__list">
+                <ul className="group__list" role="tablist">
                   {tabs.map((id) => {
                     const i = TAB_ORDER.indexOf(id);
                     const cnt = id === 'analysis' && analysis ? analysis.summary.findings.total
