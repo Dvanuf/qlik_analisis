@@ -18,7 +18,6 @@ import { DOMAIN_IDS, DOMAIN_LABELS, domainForRule } from '../../src/rules/domain
 import { extractFromFile } from '../../src/connectors/file.js';
 import { renderHtml } from '../../src/report/html.js';
 import { runDoctor } from '../../src/cli/doctor.js';
-import { parseScript } from '../../src/script/parse.js';
 import { listLibrary, libraryAsQvs, librarySubs } from '../../src/script/library.js';
 import { maskSecrets, maskUrl } from '../../src/logging/mask.js';
 import { readRulesConfig, writeRulesConfig, sanitizeRulesConfig, RULES_CONFIG_FILE } from '../../src/rules/config.js';
