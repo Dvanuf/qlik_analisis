@@ -88,6 +88,11 @@ declare global {
       gitlabConfigGet(): Promise<Record<string, unknown>>;
       /** Сохранение настроек GitLab + токен. */
       gitlabConfigSave(payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+      /** Сверка скрипта приложения с эталоном в GitLab (L013). */
+      gitlabSyncCheck(payload: { appName: string; script: string }): Promise<{
+        ok: boolean; status: 'sync' | 'drift' | 'missing' | 'unknown'; file?: string;
+        diff?: { type: string; text: string }[]; diffLines?: number; note?: string; truncated?: boolean;
+      }>;
       /** Выбор папки репозитория (диалог). */
       pickFolder(): Promise<string | null>;
       rulesConfig(): Promise<unknown>;

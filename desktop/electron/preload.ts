@@ -36,6 +36,7 @@ const api = {
   readTextFile: (path: string) => ipcRenderer.invoke('core:read-text-file', path) as Promise<string>,
   /** Настройки GitLab: конфиг + факт наличия токена. */
   gitlabConfigGet: () => ipcRenderer.invoke('core:gitlab-config-get') as Promise<Record<string, unknown>>,
+  gitlabSyncCheck: (payload: { appName: string; script: string }) => ipcRenderer.invoke('core:gitlab-sync-check', payload) as Promise<{ ok: boolean; status: string; file?: string; diff?: { type: string; text: string }[]; diffLines?: number; note?: string; truncated?: boolean }>,
   /** Сохранение настроек GitLab + токен. */
   gitlabConfigSave: (payload: Record<string, unknown>) => ipcRenderer.invoke('core:gitlab-config-save', payload) as Promise<Record<string, unknown>>,
   /** Выбор папки репозитория (диалог). */

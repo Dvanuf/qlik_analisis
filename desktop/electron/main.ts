@@ -2092,6 +2092,46 @@ function walkScriptFiles(dir: string, depth = 0): string[] {
 }
 
 /** Настройки GitLab: конфиг + факт наличия токена (значение не отдаётся). */
+/** Сверка скрипта приложения с эталоном в GitLab (PLAN этап 5, L013):
+ *  файл ищется по имени приложения в настроенных папках, сравнение —
+ *  построчное, статусы sync/drift/missing/unknown. */
+ipcMain.handle('core:gitlab-sync-check', async (_e, payload: {
+  appName: string; script: string;
+}) => {
+  const appName = String(payload?.appName ?? '');
+  try {
+    const gitlab = await gitlabSettings();
+    if (gitlab.enabled !== true || !(gitlab.targets as unknown[] | undefined)?.length) {
+      return { ok: false, status: 'unknown', note: 'GitLab не настроен — включите карточку «GitLab — включаемые файлы» на вкладке «Подключение».' };
+    }
+    const { fetchGitLabIndex, fetchGitLabFileText } = await import('../../src/extract/gitlab.js');
+    const { findGitLabFile, compareScripts } = await import('../../src/verify/gitlab-sync.js');
+    const idx = await fetchGitLabIndex({
+      baseUrl: String(gitlab.baseUrl ?? ''),
+      ref: String(gitlab.ref ?? 'master'),
+      token: String(gitlab.token ?? ''),
+      targets: gitlab.targets as { project: string; folder: string }[],
+    });
+    if (!idx.ok) return { ok: false, status: 'unknown', note: idx.notes.join('; ') || 'Индекс GitLab пуст' };
+    const hit = findGitLabFile(idx.index, appName);
+    if (!hit) {
+      return { ok: true, status: 'missing', note: `Файл «${appName}.qvs» не найден в настроенных папках GitLab — сверка невозможна.` };
+    }
+    const raw = await fetchGitLabFileText({
+      baseUrl: String(gitlab.baseUrl ?? ''),
+      ref: String(gitlab.ref ?? 'master'),
+      token: String(gitlab.token ?? ''),
+      projectId: hit.projectId,
+      path: hit.path,
+    });
+    if (!raw.ok) return { ok: false, status: 'unknown', note: raw.note ?? 'Файл GitLab не прочитан' };
+    const cmp = compareScripts(payload?.script ?? '', raw.content ?? '');
+    return { ok: true, status: cmp.status, file: hit.path, diff: cmp.diff, diffLines: cmp.diffLines, truncated: cmp.truncated };
+  } catch (err) {
+    return { ok: false, status: 'unknown', note: String((err as Error).message ?? err).slice(0, 200) };
+  }
+});
+
 ipcMain.handle('core:gitlab-config-get', async () => {
   const cfg = readGitlabConfig();
   const token = await loadGitlabToken();

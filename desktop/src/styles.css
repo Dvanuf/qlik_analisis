@@ -832,6 +832,7 @@ table.rq tr.pat { cursor: pointer; }
 .codeview .l.anchor .n { color: var(--info); font-weight: 700; }
 /* Добавленные строки в предложенной версии скрипта. */
 .codeview .l.added { background: color-mix(in srgb, var(--success) 14%, transparent); box-shadow: inset 3px 0 0 var(--success); }
+.l.removed { background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .codeview .l.added .n { color: var(--success); font-weight: 700; }
 
 /* --- Улучшенный скрипт ------------------------------------------------ */

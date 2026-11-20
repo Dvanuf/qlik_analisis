@@ -65,6 +65,28 @@ export default function ScriptTab(props: Props) {
   const matchSet = useMemo(() => new Set(matches), [matches]);
   const includeFiles = useMemo(() => parseIncludeLines(script), [script]);
 
+  // Сверка с GitLab (L013): файл эталона ищется по имени приложения.
+  type SyncCheck = {
+    ok: boolean; status: 'sync' | 'drift' | 'missing' | 'unknown';
+    file?: string; diff?: { type: string; text: string }[]; diffLines?: number; note?: string; truncated?: boolean;
+  };
+  const [syncCheck, setSyncCheck] = useState<SyncCheck | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const checkGitLab = async () => {
+    setSyncLoading(true);
+    try {
+      const res = await window.qa.gitlabSyncCheck({
+        appName: analysis?.appName ?? '',
+        script,
+      });
+      setSyncCheck(res as SyncCheck);
+    } catch (err) {
+      setSyncCheck({ ok: false, status: 'unknown', note: String((err as Error).message ?? err) });
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   // Подсветка строк выбранной находки.
   useEffect(() => {
     setHighlight(new Set(active?.lines ?? []));
@@ -261,6 +283,43 @@ export default function ScriptTab(props: Props) {
             );
           })}
         </div>
+      </div>
+
+      {/* Сверка с GitLab: эталон ищется по имени приложения (L013) */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <h3>
+          Сверка с GitLab
+          {syncCheck && (
+            <span className={`pill ${syncCheck.status === 'sync' ? 'ok' : syncCheck.status === 'drift' ? 'error' : 'mute'}`} style={{ marginLeft: 8 }}>
+              {syncCheck.status === 'sync' ? 'СИНХРОН' : syncCheck.status === 'drift' ? 'РАСИНХРОН' : syncCheck.status === 'missing' ? 'файл не найден' : 'сверка недоступна'}
+            </span>
+          )}
+          <span className="grow" />
+          <button className="small" onClick={() => void checkGitLab()} disabled={syncLoading || !script.trim()}>
+            {syncLoading ? 'Сверяю…' : 'Сверить с GitLab'}
+          </button>
+        </h3>
+        <p className="hint">
+          Эталонный .qvs ищется по имени приложения в настроенных папках GitLab
+          (карточка «GitLab — включаемые файлы» на «Подключении»).
+        </p>
+        {syncCheck && !syncCheck.ok && <p className="hint" style={{ color: 'var(--warn, #e0a33e)' }}>⚠ {syncCheck.note}</p>}
+        {syncCheck?.ok && syncCheck.status === 'missing' && <p className="hint">⚠ {syncCheck.note}</p>}
+        {syncCheck?.ok && syncCheck.file && (
+          <p className="muted small">Эталон: {syncCheck.file} · отличий в строках: {syncCheck.diffLines ?? 0}{syncCheck.truncated ? ' (diff обрезан)' : ''}</p>
+        )}
+        {syncCheck?.ok && (syncCheck.diff?.length ?? 0) > 0 && (
+          <div className="codeview" style={{ maxHeight: 320, overflow: 'auto' }}>
+            {syncCheck.diff!.map((d, i) => (
+              <div key={i} className={d.type === 'add' ? 'l added' : d.type === 'del' ? 'l removed' : d.type === 'hunk' ? 'l muted' : 'l'}>
+                <span className="c" style={{ whiteSpace: 'pre-wrap' }}>{d.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {syncCheck?.ok && syncCheck.status === 'sync' && (
+          <p className="small" style={{ color: 'var(--success)' }}>Скрипт совпадает с эталоном в GitLab.</p>
+        )}
       </div>
     </section>
   );
