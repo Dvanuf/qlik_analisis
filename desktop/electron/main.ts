@@ -78,7 +78,9 @@ function createWindow(): void {
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    // Открываем наружу только веб-ссылки (аудит D5: без проверки схемы
+    // обработчик мог передать shell.openExternal любой протокол).
+    if (/^https?:/i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -1220,8 +1222,27 @@ ipcMain.handle('core:clear-credentials', (_e, opts?: { host?: string }) => {
   return true;
 });
 
-/** Хосты, для которых разрешен самоподписанный сертификат (только по явному флагу). */
+/** Хосты, для которых разрешен самоподписанный сертификат (только по явному флагу).
+ *  Отражает ТЕКУЩУЮ настройку соединения: снял галочку — хост выбывает из
+ *  whitelist (аудит D5: раньше накапливался навсегда и на все окна). */
 const allowedInsecureHosts = new Set<string>();
+
+/** Хост из URL или пустая строка. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+/** Синхронизировать whitelist с флагом «самоподписанный сертификат» прогона. */
+function syncInsecureHost(url: string, insecure?: boolean): void {
+  const host = hostOf(url);
+  if (!host) return;
+  if (insecure) allowedInsecureHosts.add(host);
+  else allowedInsecureHosts.delete(host);
+}
 
 app.on('certificate-error', (event, _webContents, url, _error, _certificate, callback) => {
   try {
@@ -1268,6 +1289,7 @@ ipcMain.handle('core:open-hub', async (_e, opts: {
     host = new URL(opts.hubUrl).hostname;
   } catch { /* оставим пустым */ }
   if (opts.insecure && host) allowedInsecureHosts.add(host);
+  else if (host) allowedInsecureHosts.delete(host);
 
   const win = new BrowserWindow({
     width: 1180,
@@ -1524,6 +1546,8 @@ ipcMain.handle('core:analyze-app', async (_e, opts: {
   url: string; appId: string; cookie?: string; xrfKey?: string; csrfToken?: string;
   user?: string; password?: string; insecure?: boolean; platform?: string;
 }) => {
+  // Whitelist самоподписанных сертификатов отражает текущую настройку прогона.
+  syncInsecureHost(opts.url, opts.insecure);
   // Этапы анализа: пользователь видит, на чём идёт процесс.
   const sendProgress = (stage: string, detail?: string) => {
     mainWindow?.webContents.send('analyze:progress', { stage, detail, appId: opts.appId });
