@@ -1897,6 +1897,40 @@ const QRS_CONFIG_FILE = 'qrs-config.json';
 const GITLAB_CONFIG_FILE = 'gitlab-config.json';
 /** Токен GitLab — зашифрованно (safeStorage). */
 const GITLAB_TOKEN_FILE = 'gitlab-token.bin';
+const GITHUB_SYNC_CONFIG_FILE = 'github-sync.json';
+const GITHUB_SYNC_TOKEN_FILE = 'github-sync-token.bin';
+
+function githubSyncConfigPath(): string {
+  return resolve(app.getPath('userData'), GITHUB_SYNC_CONFIG_FILE);
+}
+function readGithubSyncConfig(): Record<string, unknown> {
+  const file = githubSyncConfigPath();
+  if (!existsSync(file)) return { baseUrl: 'https://api.github.com', ref: 'main' };
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return { baseUrl: 'https://api.github.com', ref: 'main' };
+  }
+}
+async function loadGithubSyncToken(): Promise<string> {
+  const file = resolve(app.getPath('userData'), GITHUB_SYNC_TOKEN_FILE);
+  if (!existsSync(file)) return '';
+  try {
+    const { result } = await safeStorage.decryptStringAsync(readFileSync(file));
+    return String(result ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+async function saveGithubSyncToken(token: string): Promise<void> {
+  const file = resolve(app.getPath('userData'), GITHUB_SYNC_TOKEN_FILE);
+  const clean = String(token ?? '').trim();
+  if (!clean) {
+    if (existsSync(file)) rmSync(file);
+    return;
+  }
+  writeFileSync(file, await safeStorage.encryptStringAsync(clean));
+}
 
 function aiKeysPath(): string {
   return resolve(app.getPath('userData'), AI_KEYS_FILE);
@@ -2095,6 +2129,57 @@ function walkScriptFiles(dir: string, depth = 0): string[] {
 /** Сверка скрипта приложения с эталоном в GitLab (PLAN этап 5, L013):
  *  файл ищется по имени приложения в настроенных папках, сравнение —
  *  построчное, статусы sync/drift/missing/unknown. */
+ipcMain.handle('core:github-sync-config-get', async () => {
+  const cfg = readGithubSyncConfig();
+  const token = await loadGithubSyncToken();
+  return { ...cfg, token: token || undefined };
+});
+
+ipcMain.handle('core:github-sync-config-save', async (_e, payload: Record<string, unknown>) => {
+  const clean = {
+    baseUrl: String(payload.baseUrl ?? 'https://api.github.com').trim() || 'https://api.github.com',
+    owner: String(payload.owner ?? '').trim(),
+    repo: String(payload.repo ?? '').trim(),
+    ref: String(payload.ref ?? 'main').trim() || 'main',
+  };
+  const path = githubSyncConfigPath();
+  writeFileSync(path, JSON.stringify(clean, null, 2));
+  if (typeof payload.token === 'string') await saveGithubSyncToken(payload.token);
+  const token = await loadGithubSyncToken();
+  return { path, config: clean, token: token || undefined };
+});
+
+/** Сверка с GitHub: эталон ищется по имени приложения в дереве репозитория. */
+ipcMain.handle('core:github-sync-check', async (_e, payload: {
+  appName: string; script: string;
+}) => {
+  const appName = String(payload?.appName ?? '');
+  try {
+    const cfg = readGithubSyncConfig();
+    const owner = String(cfg.owner ?? '').trim();
+    const repo = String(cfg.repo ?? '').trim();
+    if (!owner || !repo) {
+      return { ok: false, status: 'unknown', note: 'GitHub не настроен — укажите owner/repo в карточке «Сверка с GitHub».' };
+    }
+    const { fetchGitHubTree, fetchGitHubFileText, findGitHubFile } = await import('../../src/verify/github-sync.js');
+    const { compareScripts } = await import('../../src/verify/gitlab-sync.js');
+    const token = await loadGithubSyncToken();
+    const gh = { baseUrl: String(cfg.baseUrl ?? ''), owner, repo, ref: String(cfg.ref ?? 'main'), token };
+    const tree = await fetchGitHubTree(gh);
+    if (!tree.ok) return { ok: false, status: 'unknown', note: tree.notes.join('; ') };
+    const hit = findGitHubFile(tree.paths, appName);
+    if (!hit) {
+      return { ok: true, status: 'missing', note: `Файл «${appName}.qvs» не найден в репозитории ${owner}/${repo} — сверка невозможна.` };
+    }
+    const raw = await fetchGitHubFileText({ ...gh, path: hit.file });
+    if (!raw.ok) return { ok: false, status: 'unknown', note: raw.note ?? 'Файл GitHub не прочитан' };
+    const cmp = compareScripts(payload?.script ?? '', raw.content ?? '');
+    return { ok: true, status: cmp.status, file: hit.file, diff: cmp.diff, diffLines: cmp.diffLines, truncated: cmp.truncated };
+  } catch (err) {
+    return { ok: false, status: 'unknown', note: String((err as Error).message ?? err).slice(0, 200) };
+  }
+});
+
 ipcMain.handle('core:gitlab-sync-check', async (_e, payload: {
   appName: string; script: string;
 }) => {

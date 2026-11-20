@@ -5,7 +5,7 @@
 прогонов — в [STATE.md](STATE.md), история версий — в [CHANGELOG.md](../CHANGELOG.md),
 планы и бэклог — в [PLAN.md](PLAN.md) и [ROADMAP.md](ROADMAP.md).
 
-**Текущая версия:** 0.36.0 · тесты ядра: 564/564 · Node ≥ 22, ESM · Electron 45
+**Текущая версия:** 0.37.0 · тесты ядра: 565/565 · Node ≥ 22, ESM · Electron 45
 
 ---
 
@@ -51,7 +51,7 @@ desktop/electron/main.ts ── IPC ──► renderer (React/TS, desktop/src/ta
         │
         ▼
 src/ (ядро, чистый Node ESM, детерминированное — без сети/времени/рандома)
-  verify/     gitlab-sync.js (сверка скрипта с эталоном GitLab, L013)
+  verify/     gitlab-sync.js (сверка с GitLab, L013), github-sync.js (сверка с GitHub)
   extract/    engine.js (QIX WS, GetDocList/объекты/связи), docapi.js (QlikView 12),
               file.js (qvs/qvw-контейнер), qrs.js (сертификаты), gitlab.js,
               includes.js (раскрытие $(Must_Include)), session.js (сессия хаба), ntlm.js

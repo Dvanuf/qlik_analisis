@@ -93,6 +93,14 @@ declare global {
         ok: boolean; status: 'sync' | 'drift' | 'missing' | 'unknown'; file?: string;
         diff?: { type: string; text: string }[]; diffLines?: number; note?: string; truncated?: boolean;
       }>;
+      /** Настройки GitHub-сверки. */
+      githubSyncConfigGet(): Promise<Record<string, unknown>>;
+      githubSyncConfigSave(payload: Record<string, unknown>): Promise<Record<string, unknown>>;
+      /** Сверка скрипта приложения с эталоном в GitHub. */
+      githubSyncCheck(payload: { appName: string; script: string }): Promise<{
+        ok: boolean; status: 'sync' | 'drift' | 'missing' | 'unknown'; file?: string;
+        diff?: { type: string; text: string }[]; diffLines?: number; note?: string; truncated?: boolean;
+      }>;
       /** Выбор папки репозитория (диалог). */
       pickFolder(): Promise<string | null>;
       rulesConfig(): Promise<unknown>;

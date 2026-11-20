@@ -66,6 +66,44 @@ export default function ScriptTab(props: Props) {
   const matchSet = useMemo(() => new Set(matches), [matches]);
   const includeFiles = useMemo(() => parseIncludeLines(script), [script]);
 
+  // Сверка с GitHub: настройки хранятся отдельно (owner/repo/ветка/токен).
+  type GhCheck = {
+    ok: boolean; status: 'sync' | 'drift' | 'missing' | 'unknown';
+    file?: string; diff?: { type: string; text: string }[]; diffLines?: number; note?: string; truncated?: boolean;
+  };
+  const [ghCfg, setGhCfg] = useState<Record<string, string>>({});
+  const [ghCheck, setGhCheck] = useState<GhCheck | null>(null);
+  const [ghLoading, setGhLoading] = useState(false);
+
+  useEffect(() => {
+    void window.qa.githubSyncConfigGet().then((c) => setGhCfg({
+      baseUrl: String(c.baseUrl ?? ''),
+      owner: String(c.owner ?? ''),
+      repo: String(c.repo ?? ''),
+      ref: String(c.ref ?? 'main'),
+      token: String(c.token ?? ''),
+    })).catch(() => {});
+  }, []);
+
+  const saveGhCfg = async () => {
+    try {
+      await window.qa.githubSyncConfigSave(ghCfg);
+    } catch { /* ошибки сохранения покажет следующий прогон */ }
+  };
+
+  const checkGitHub = async () => {
+    setGhLoading(true);
+    try {
+      await saveGhCfg();
+      const res = await window.qa.githubSyncCheck({ appName: analysis?.appName ?? '', script });
+      setGhCheck(res as GhCheck);
+    } catch (err) {
+      setGhCheck({ ok: false, status: 'unknown', note: String((err as Error).message ?? err) });
+    } finally {
+      setGhLoading(false);
+    }
+  };
+
   // Сверка с GitLab (L013): файл эталона ищется по имени приложения.
   type SyncCheck = {
     ok: boolean; status: 'sync' | 'drift' | 'missing' | 'unknown';
@@ -303,6 +341,49 @@ export default function ScriptTab(props: Props) {
         )}
         {syncCheck?.ok && syncCheck.status === 'sync' && (
           <p className="small" style={{ color: 'var(--success)' }}>Скрипт совпадает с эталоном в GitLab.</p>
+        )}
+      </div>
+
+      {/* Сверка с GitHub: второй провайдер эталона */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <h3>
+          Сверка с GitHub
+          {ghCheck && (
+            <span className={`pill ${ghCheck.status === 'sync' ? 'ok' : ghCheck.status === 'drift' ? 'error' : 'mute'}`} style={{ marginLeft: 8 }}>
+              {ghCheck.status === 'sync' ? 'СИНХРОН' : ghCheck.status === 'drift' ? 'РАСИНХРОН' : ghCheck.status === 'missing' ? 'файл не найден' : 'сверка недоступна'}
+            </span>
+          )}
+          <span className="grow" />
+          <button className="small" onClick={() => void checkGitHub()} disabled={ghLoading || !script.trim()}>
+            {ghLoading ? 'Сверяю…' : 'Сверить с GitHub'}
+          </button>
+        </h3>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <input className="search" style={{ maxWidth: 160 }} placeholder="owner" value={ghCfg.owner ?? ''} onChange={(e) => setGhCfg({ ...ghCfg, owner: e.target.value })} aria-label="GitHub owner" />
+          <input className="search" style={{ maxWidth: 200 }} placeholder="repo" value={ghCfg.repo ?? ''} onChange={(e) => setGhCfg({ ...ghCfg, repo: e.target.value })} aria-label="GitHub repo" />
+          <input className="search" style={{ maxWidth: 120 }} placeholder="ветка (main)" value={ghCfg.ref ?? ''} onChange={(e) => setGhCfg({ ...ghCfg, ref: e.target.value })} aria-label="GitHub ветка" />
+          <input className="search" style={{ maxWidth: 220 }} placeholder="токен (PAT)" type="password" value={ghCfg.token ?? ''} onChange={(e) => setGhCfg({ ...ghCfg, token: e.target.value })} aria-label="GitHub токен" />
+        </div>
+        <p className="hint">
+          Эталонный .qvs ищется по имени приложения в дереве репозитория
+          owner/repo. Токен хранится зашифрованно (safeStorage).
+        </p>
+        {ghCheck && !ghCheck.ok && <p className="hint" style={{ color: 'var(--warn, #e0a33e)' }}>⚠ {ghCheck.note}</p>}
+        {ghCheck?.ok && ghCheck.status === 'missing' && <p className="hint">⚠ {ghCheck.note}</p>}
+        {ghCheck?.ok && ghCheck.file && (
+          <p className="muted small">Эталон: {ghCheck.file} · отличий в строках: {ghCheck.diffLines ?? 0}{ghCheck.truncated ? ' (diff обрезан)' : ''}</p>
+        )}
+        {ghCheck?.ok && (ghCheck.diff?.length ?? 0) > 0 && (
+          <div className="codeview" style={{ maxHeight: 320, overflow: 'auto' }}>
+            {ghCheck.diff!.map((d, i) => (
+              <div key={i} className={d.type === 'add' ? 'l added' : d.type === 'del' ? 'l removed' : d.type === 'hunk' ? 'l muted' : 'l'}>
+                <span className="c" style={{ whiteSpace: 'pre-wrap' }}>{d.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {ghCheck?.ok && ghCheck.status === 'sync' && (
+          <p className="small" style={{ color: 'var(--success)' }}>Скрипт совпадает с эталоном в GitHub.</p>
         )}
       </div>
     </section>
