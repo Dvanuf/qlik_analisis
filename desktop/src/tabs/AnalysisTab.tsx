@@ -68,8 +68,9 @@ type Props = {
   onExportDataModel: () => void;
   rulesConfig: RulesConfig | null;
   onSaveRulesConfig: (config: RulesConfig) => void;
-  /** Переход к вкладке «Скрипт загрузки» — из карточки паттерна. */
-  onOpenScript?: () => void;
+  /** Переход к вкладке «Скрипт загрузки» — из находки или карточки паттерна;
+   *  focus передаёт строки и правило — вкладка подсветит и прокрутит к месту. */
+  onOpenScript?: (focus?: { lines?: number[]; ruleId?: string }) => void;
   /** Переход к вкладке «Улучшенный скрипт» — из блока правок. */
   onOpenRefactor?: () => void;
   /** Правило, по которому надо раскрыть находки (кнопка «Открыть» в «Оценке»). */
@@ -78,6 +79,8 @@ type Props = {
   onFilterUsed?: () => void;
   /** Переход к вкладке «Модель данных». */
   onOpenModel?: () => void;
+  /** Переход к вкладке «Правила» — кнопка «Настроить правило» в паттерне. */
+  onOpenRules?: () => void;
   /** Переход к вкладке «ИИ-чат» с вопросом по находке. */
   onAskAi?: (finding: Finding) => void;
 };
@@ -178,6 +181,7 @@ export default function AnalysisTab(props: Props) {
     analysis, categories, onNote, onExport, onExportScript, onExportDataModel,
     focusRule, onFilterUsed,
     rulesConfig, onSaveRulesConfig, onOpenScript, onOpenRefactor, onOpenModel, onAskAi,
+    onOpenRules,
   } = props;
 
   // Активный домен: null — показываем все.
@@ -662,7 +666,7 @@ export default function AnalysisTab(props: Props) {
                       {onOpenScript && (f.lines?.length ?? 0) > 0 && (
                         <button
                           className="link"
-                          onClick={(e) => { e.stopPropagation(); onOpenScript(); }}
+                          onClick={(e) => { e.stopPropagation(); onOpenScript({ lines: f.lines ?? [], ruleId: f.ruleId }); }}
                         >
                           показать в скрипте
                         </button>
@@ -822,8 +826,8 @@ export default function AnalysisTab(props: Props) {
         </h3>
       )}
 
-      {/* --- Подавленные находки --- */}
-      {showSuppressed && suppressed.length > 0 && (
+      {/* --- Подавленные находки: переключатель всегда виден, если есть что показать --- */}
+      {suppressed.length > 0 && (
         <>
           <h3>
             Подавленные находки
@@ -835,6 +839,7 @@ export default function AnalysisTab(props: Props) {
               {' '}· {showSuppressed ? 'скрыть' : `показать (${suppressed.length})`}
             </button>
           </h3>
+          {showSuppressed && (
           <table className="findings">
             <thead>
               <tr><th>Правило</th><th>Находка</th><th>Причина</th><th /></tr>
@@ -857,6 +862,7 @@ export default function AnalysisTab(props: Props) {
               ))}
             </tbody>
           </table>
+          )}
         </>
       )}
 
@@ -920,7 +926,14 @@ export default function AnalysisTab(props: Props) {
             <div className="df">
               <button className="btn pri" autoFocus onClick={() => setOpenPattern(null)}>Закрыть</button>
               {onOpenScript ? (
-                <button className="btn" onClick={() => { setOpenPattern(null); onOpenScript(); }}>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setOpenPattern(null);
+                    const lines = openPattern.places.map((p) => p.line).filter((n): n is number => n != null);
+                    onOpenScript({ lines: [...new Set(lines)], ruleId: openPattern.ruleId });
+                  }}
+                >
                   → Скрипт загрузки
                 </button>
               ) : null}
@@ -929,7 +942,15 @@ export default function AnalysisTab(props: Props) {
                   → Модель данных
                 </button>
               ) : null}
-              <button className="btn">Настроить правило</button>
+              {onOpenRules ? (
+                <button
+                  className="btn"
+                  onClick={() => { setOpenPattern(null); onOpenRules(); }}
+                  title="Открыть вкладку «Правила» — пороги и включённость этого правила"
+                >
+                  Настроить правило
+                </button>
+              ) : null}
             </div>
           </>
         ) : null}

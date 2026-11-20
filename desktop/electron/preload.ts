@@ -50,8 +50,7 @@ const api = {
     url: string; user?: string; password?: string; qlikUser?: string; insecure?: boolean;
   }) => ipcRenderer.invoke('core:doctor', opts),
   openDialog: () => ipcRenderer.invoke('core:open-dialog'),
-  previewScript: (text: string) => ipcRenderer.invoke('core:preview-script', text),
-  readFile: (filePath: string) => ipcRenderer.invoke('core:read-file', filePath),
+  // Мёртвые каналы чтения файла из renderer удалены (аудит 0.30.0) — опасная поверхность.
   listApps: (opts: {
     url: string; cookie?: string; xrfKey?: string; csrfToken?: string;
     user?: string; password?: string; insecure?: boolean;

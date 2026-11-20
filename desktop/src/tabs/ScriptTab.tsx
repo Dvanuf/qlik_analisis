@@ -20,6 +20,8 @@ type Props = {
   repoFolder?: string;
   /** Выбрать папку репозитория и переанализировать. */
   onPickFolder?: () => void;
+  /** Фокус из «Анализа»: подсветить и прокрутить к строкам находки. */
+  focus?: { lines?: number[]; ruleId?: string } | null;
 };
 
 /** Находки, у которых известны строки скрипта. */
@@ -28,7 +30,7 @@ function scriptFindings(findings: Finding[]): Finding[] {
 }
 
 export default function ScriptTab(props: Props) {
-  const { analysis, includesMap, onPickInclude, repoFolder, onPickFolder } = props;
+  const { analysis, includesMap, onPickInclude, repoFolder, onPickFolder, focus } = props;
   const script = analysis?.script ?? '';
   const lines = useMemo(() => script.split(/\r?\n/), [script]);
 
@@ -63,6 +65,18 @@ export default function ScriptTab(props: Props) {
   useEffect(() => {
     setHighlight(new Set(active?.lines ?? []));
   }, [active]);
+
+  // Фокус из «Анализа» («показать в скрипте»): подсветить строки находки
+  // и прокрутить к первой — главный разрыв сценария «нашёл → посмотрел в коде».
+  useEffect(() => {
+    const lines = focus?.lines ?? [];
+    const first = lines[0];
+    if (first == null) return undefined;
+    setHighlight(new Set(lines));
+    const timer = setTimeout(() => gotoLine(first), 80);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   /** Прокрутить к строке и мигнуть на ней. */
   const gotoLine = (n: number) => {

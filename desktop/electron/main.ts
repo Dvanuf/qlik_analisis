@@ -774,16 +774,9 @@ ipcMain.handle('core:open-dialog', async () => {
   return res.canceled ? null : res.filePaths[0];
 });
 
-ipcMain.handle('core:preview-script', (_e, text: string) => {
-  const model = parseScript(text) as { loads: { table: string }[]; variables: { name: string }[]; comments: unknown[] };
-  return {
-    loads: model.loads.map((l) => l.table),
-    variables: model.variables.map((v) => v.name),
-    comments: model.comments.length,
-  };
-});
-
-ipcMain.handle('core:read-file', (_e, filePath: string) => readFileSync(resolve(filePath), 'utf8'));
+// Мёртвые каналы core:preview-script и core:read-file удалены (аудит 0.30.0):
+// renderer их не вызывает, а чтение произвольного файла по пути из renderer —
+// лишняя опасная поверхность.
 
 /**
  * Открывает сессию к движку Qlik и отдаёт глобальный объект.

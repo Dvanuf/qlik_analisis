@@ -996,6 +996,10 @@ export default function App() {
   // Правило, по которому надо раскрыть «Анализ» (кнопка «Открыть» в «Оценке»).
   const [analysisFilter, setAnalysisFilter] = useState<string | null>(null);
 
+  // Фокус «показать в скрипте»: строки и правило находки — «Скрипт загрузки»
+  // подсвечивает место и прокручивает к нему.
+  const [scriptFocus, setScriptFocus] = useState<{ lines?: number[]; ruleId?: string } | null>(null);
+
   // Правки правил — счётчик на вкладке «Улучшенный скрипт».
   const refactorCount = useMemo(
     () => (analysis?.script
@@ -1277,11 +1281,12 @@ export default function App() {
           onExportDataModel={() => void exportDataModel()}
           rulesConfig={rulesConfig}
           onSaveRulesConfig={(c) => void saveRulesConfig(c)}
-          onOpenScript={() => setTab('script')}
+          onOpenScript={(focus) => { setScriptFocus(focus ?? null); setTab('script'); }}
           focusRule={analysisFilter}
           onFilterUsed={() => setAnalysisFilter(null)}
           onOpenRefactor={() => setTab('refactor')}
           onOpenModel={() => setTab('model')}
+          onOpenRules={() => setTab('rules')}
           onAskAi={(finding) => {
             setAiFocus(finding);
             setTab('ai');
@@ -1364,6 +1369,7 @@ export default function App() {
           repoFolder={repoFolderFor(analysis?.appId ?? appId)}
           onPickInclude={(path) => void pickInclude(analysis?.appId ?? appId, path)}
           onPickFolder={() => void pickRepoFolder(analysis?.appId ?? appId)}
+          focus={scriptFocus}
         />
       )}
 

@@ -375,16 +375,25 @@ export default function ConnectTab(props: Props) {
 
   const currentApp = apps.find((a) => a.id === appId) ?? null;
 
-  /** Главная кнопка: одно действие на текущем шаге. */
+  /** Главная кнопка: одно действие на текущем шаге. Кнопка честно
+   *  блокируется, когда действия нет или анализ уже идёт (гонка 0.30.0). */
   const mainAction = (() => {
-    if (!signedIn) return { label: 'Войти в хаб (откроется окно авторизации)', run: onSignIn };
-    if (!appsLoaded) return { label: 'Загрузить список приложений', run: onLoadApps };
+    if (!signedIn) return { label: 'Войти в хаб (откроется окно авторизации)', run: onSignIn, disabled: signingIn };
+    if (!appsLoaded) return { label: 'Загрузить список приложений', run: onLoadApps, disabled: Boolean(busy) };
     // Выбор приложений — только галочками: главный шаг это пакет по выбранным.
+    if (!selectedIds.length) {
+      return {
+        label: 'Отметьте приложения галочками в списке',
+        run: () => {},
+        disabled: true,
+        title: 'Отметьте галочками приложения в таблице ниже — кнопка запустит их анализ',
+      };
+    }
     return {
-      label: selectedIds.length
-        ? `▶ Анализировать выбранные (${selectedIds.length})`
-        : 'Отметьте приложения галочками в списке',
-      run: () => { if (selectedIds.length) onAnalyzeAll(selectedIds); },
+      label: `▶ Анализировать выбранные (${selectedIds.length})`,
+      run: () => onAnalyzeAll(selectedIds),
+      disabled: Boolean(busy) || batchRunning,
+      title: 'Проанализировать отмеченные приложения',
     };
   })();
 
@@ -527,7 +536,12 @@ export default function ConnectTab(props: Props) {
 
       {/* --- Главное действие --- */}
       <div className="actions">
-        <button className="primary" onClick={mainAction.run} disabled={signingIn}>
+        <button
+          className="primary"
+          onClick={mainAction.run}
+          disabled={mainAction.disabled}
+          title={'title' in mainAction ? mainAction.title : undefined}
+        >
           {mainAction.label}
         </button>
       </div>

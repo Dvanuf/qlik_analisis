@@ -87,6 +87,17 @@ export default function RulesTab(props: Props) {
 
   const isDisabled = (id: string) => (rulesConfig?.rules.disabled ?? []).includes(id);
 
+  // Выключенных сверх дефолта: именно они незаметно снимают проверки
+  // (живой кейс «нет оценок» — 57 правил в disabled, включая модель).
+  const disabledCount = (rulesConfig?.rules.disabled ?? []).length;
+  const extraDisabled = disabledCount - DEFAULT_DISABLED_RULES.length;
+
+  /** Вернуть набор выключенных к заводскому дефолту (аудит 0.30.0). */
+  const resetDisabled = () => update((rules) => ({
+    ...rules,
+    disabled: [...DEFAULT_DISABLED_RULES],
+  }));
+
   const toggleRule = (id: string) => update((rules) => ({
     ...rules,
     disabled: rules.disabled.includes(id)
@@ -191,6 +202,22 @@ export default function RulesTab(props: Props) {
           Пресет заменяет список отключённых правил; примените «Сохранить настройки».
         </span>
       </div>
+
+      {/* Честный счётчик выключенных + сброс к заводскому дефолту (аудит 0.30.0):
+          лишние правила в disabled незаметно снимают проверки — «нет оценок». */}
+      {extraDisabled > 0 && (
+        <div className="warn row" style={{ gap: 10, alignItems: 'center' }}>
+          <span>
+            ⚠ Выключено правил сверх дефолта: <b>{extraDisabled}</b> — проверки,
+            которые они выполняют, не запускаются (в «Оценке» и «Формировании»
+            будет «Оценка неполная»).
+          </span>
+          <span className="grow" />
+          <button onClick={resetDisabled} title="Вернуть заводский набор выключенных правил">
+            Включить всё сверх дефолта
+          </button>
+        </div>
+      )}
 
       <div className="actions">
         <button className="primary" onClick={() => rulesConfig && onSave(rulesConfig)} disabled={!rulesConfig}>

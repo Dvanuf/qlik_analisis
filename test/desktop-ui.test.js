@@ -239,6 +239,31 @@ test('ConnectTab: таблица — Владелец на месте, Тэги 
   assert.ok(row.includes('a.published === true'), 'нет ячейки вида');
 });
 
+test('Аудит 0.30.0 волна 1: критичные дефекты закрыты', () => {
+  const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
+  // A1: «Настроить правило» подключено к переходу в «Правила».
+  assert.ok(ANALYSIS_TAB.includes('onOpenRules'), 'A1: кнопка Настроить правило не подключена');
+  assert.ok(APP.includes("onOpenRules={() => setTab('rules')}"), 'A1: App не передаёт onOpenRules');
+  // A2: переключатель подавленных виден всегда, таблица — по состоянию.
+  // Переключатель и таблица разделены: оба маркера присутствуют порознь.
+  assert.ok(ANALYSIS_TAB.includes('{suppressed.length > 0 && (') && ANALYSIS_TAB.includes('{showSuppressed && ('), 'A2: toggle подавленных не разделён с таблицей');
+  // A3: ScriptTab принимает focus, App его передаёт.
+  assert.ok(SCRIPT_TAB.includes('focus?: { lines?: number[]; ruleId?: string } | null'), 'A3: ScriptTab без фокуса');
+  assert.ok(APP.includes('focus={scriptFocus}') && APP.includes('setScriptFocus'), 'A3: фокус скрипта не прокинут');
+  // A4+A7: главная кнопка честно блокируется.
+  assert.ok(APP.includes('tabs:'), 'App читается');
+  const CONNECT = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'ConnectTab.tsx'), 'utf8');
+  assert.ok(CONNECT.includes('disabled: true'), 'A4: кнопка-обманка не заблокирована');
+  assert.ok(CONNECT.includes('disabled: Boolean(busy) || batchRunning'), 'A7: гонка анализа не закрыта');
+  // A5: счётчик выключенных сверх дефолта и сброс.
+  const RULES = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'RulesTab.tsx'), 'utf8');
+  assert.ok(RULES.includes('Выключено правил сверх дефолта'), 'A5: нет честного счётчика');
+  assert.ok(RULES.includes('Включить всё сверх дефолта'), 'A5: нет сброса к дефолту');
+  // D1: опасные мёртвые IPC удалены.
+  const PRELOAD = readFileSync(resolve(HERE, '..', 'desktop', 'electron', 'preload.ts'), 'utf8');
+  assert.ok(PRELOAD.includes('readFile') === false && PRELOAD.includes('previewScript') === false, 'D1: опасные IPC не удалены');
+});
+
 test('LineageTab: вкладка «Формирование» — только модель данных (0.29.1)', () => {
   const LINEAGE_TAB = readFileSync(resolve(HERE, '..', 'desktop', 'src', 'tabs', 'LineageTab.tsx'), 'utf8');
   // Lineage-граф и «Документ» убраны по замечанию: вкладка = модель данных.
