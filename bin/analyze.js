@@ -13,6 +13,7 @@ import { extractFromEngine } from '../src/extract/engine.js';
 import { extractFromFile } from '../src/connectors/file.js';
 import { analyze } from '../src/analyzer.js';
 import { renderHtml } from '../src/report/html.js';
+import { buildJUnitXml, shouldFail } from '../src/report/junit.js';
 import { runDoctor } from '../src/cli/doctor.js';
 import {
   loadConfig, loadDotEnv, resolveTarget, resolveRules, resolvePaths, resolveQrs,
@@ -35,7 +36,7 @@ const FLAGS = {
   '--out-dir': 'outDir', '--summary': 'summary', '--cache-dir': 'cacheDir', '--pause': 'pause',
   '--limit': 'limit', '--app-ids': 'appIds', '--no-cache': 'noCache',
   '--script': 'script', '--qvs': 'qvs', '--qvw': 'qvw', '--fixture': 'fixture', '--out': 'out',
-  '--json': 'json', '--graph': 'graph', '--fail-on': 'failOn',
+  '--json': 'json', '--graph': 'graph', '--fail-on': 'failOn', '--junit': 'junit',
   '--enable': 'enable', '--platform': 'platform', '--disable': 'disable',
   '--max-expression-length': 'maxExpressionLength', '--name-prefixes': 'namePrefixes',
   '--perf': 'perf', '--quiet': 'quiet',
@@ -103,7 +104,8 @@ qlik-analyzer — анализ качества приложений Qlik Sense 
   --out <report.html>     HTML-отчёт
   --json <findings.json>  находки в JSON
   --graph <graph.json>    извлечённый граф приложения
-  --fail-on <error|warning|none>   код возврата для CI
+  --junit <junit.xml>     находки в JUnit XML для CI
+  --fail-on <error|warning|info|none>   код возврата для CI
   --enable/--disable <ID,…>         включение/выключение правил
 `);
 }
@@ -344,8 +346,15 @@ async function main() {
   }
 
   const failOn = args.failOn ?? 'none';
-  if (failOn === 'error' && s.findings.bySeverity.error > 0) process.exit(1);
-  if (failOn === 'warning' && (s.findings.bySeverity.error + s.findings.bySeverity.warning) > 0) process.exit(1);
+  if (shouldFail(s.findings.bySeverity, failOn)) process.exit(1);
+  if (args.junit) {
+    writeOut(resolve(args.junit), buildJUnitXml({
+      appName: s.appName ?? target.app ?? 'app',
+      findings: result.findings,
+      ruleStats: result.ruleStats,
+    }));
+    console.log(`JUnit XML: ${resolve(args.junit)}`);
+  }
 }
 
 main().catch((err) => {
