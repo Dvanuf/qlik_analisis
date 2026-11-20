@@ -867,28 +867,8 @@ ipcMain.handle('core:export-report', async (_e, payload: {
 });
 
 /** Экспорт сводного отчёта по пакетному прогону (HTML + JSON). */
-ipcMain.handle('core:export-summary', async (_e, payload: {
-  totals: unknown; results: unknown; platform?: string;
-}) => {
-  const { renderSummaryHtml } = await import('../../src/report/summary.js');
-  const dir = resolve(app.getPath('documents'), 'QlikAnalyzer');
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-  const htmlPath = resolve(dir, `Сводный анализ ${stamp}.html`);
-  const jsonPath = resolve(dir, `Сводный анализ ${stamp}.json`);
-
-  const html = renderSummaryHtml({
-    results: payload.results as never,
-    totals: payload.totals as never,
-    platform: payload.platform,
-  });
-  writeFileSync(htmlPath, html, 'utf8');
-  writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-  await shell.openPath(htmlPath);
-  return { htmlPath, jsonPath };
-});
-
-/** Настройки правил: чтение и сохранение файла конфигурации. */
+// Мёртвый канал core:export-summary удалён (аудит 0.30.0): сводный экспорт
+// идёт через export-csv/export-xlsx/PDF на вкладке «Сводный отчёт».
 ipcMain.handle('core:rules-config', () => readRulesConfig(rulesConfigPath()));
 
 /** Путь к локальной базе истории анализов. */

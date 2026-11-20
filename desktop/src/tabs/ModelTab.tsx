@@ -11,12 +11,14 @@ import type { AnalysisResult } from '../types.js';
 type Props = {
   analysis: AnalysisResult | null;
   onExport: () => void;
+  /** Переход к «Подключению» из пустого состояния (аудит B3). */
+  onGoConnect?: () => void;
 };
 
 type Sheet = { name: string; headers: string[]; rows: (string | number)[][] };
 
 export default function ModelTab(props: Props) {
-  const { analysis, onExport } = props;
+  const { analysis, onExport, onGoConnect } = props;
 
   const [active, setActive] = useState<string>('');
   const [search, setSearch] = useState('');
@@ -42,9 +44,14 @@ export default function ModelTab(props: Props) {
       <section className="card wide">
         <h2>Модель данных</h2>
         <p className="muted">
-          Модель данных появится после анализа приложения. Откройте вкладку «Подключение»
-          и запустите анализ — здесь будут таблицы, поля, объекты и меры.
+          Модель данных появится после анализа приложения: таблицы,
+          поля, объекты и меры.
         </p>
+        {onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
       </section>
     );
   }

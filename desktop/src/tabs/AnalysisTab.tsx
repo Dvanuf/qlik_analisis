@@ -60,7 +60,10 @@ type SortKey = 'severity' | 'ruleId' | 'category' | 'object' | 'table' | 'line';
 
 type Props = {
   analysis: AnalysisResult | null;
-  categories: string[];
+  /** Счётчик правок скрипта — единый с бейджем меню (аудит C2). */
+  refactorCount?: number;
+  /** Переход к вкладке «Подключение» из пустых состояний (аудит B3). */
+  onGoConnect?: () => void;
   /** Заметка о действии (подавление находки) — показывается тостом. */
   onNote: (text: string) => void;
   onExport: () => void;
@@ -178,7 +181,7 @@ function PatternRows(props: {
 
 export default function AnalysisTab(props: Props) {
   const {
-    analysis, categories, onNote, onExport, onExportScript, onExportDataModel,
+    analysis, refactorCount, onGoConnect, onNote, onExport, onExportScript, onExportDataModel,
     focusRule, onFilterUsed,
     rulesConfig, onSaveRulesConfig, onOpenScript, onOpenRefactor, onOpenModel, onAskAi,
     onOpenRules,
@@ -190,7 +193,6 @@ export default function AnalysisTab(props: Props) {
   const [openPattern, setOpenPattern] = useState<Pattern | null>(null);
   const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
   const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
-  const [scopeFilter, setScopeFilter] = useState<Set<FindingScope>>(new Set());
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('severity');
   const [sortAsc, setSortAsc] = useState(true);
@@ -238,19 +240,13 @@ export default function AnalysisTab(props: Props) {
 
   // Число правок для ссылки на вкладку «Улучшенный скрипт»: строка патча
   // ядра, а если патча нет (старый отчёт) — находки с готовыми правками.
-  const fixes = useMemo(
-    () => (analysis?.patch?.script
-      ? String(analysis.patch.script).split('\n').filter(Boolean).length
-      : (analysis?.findings ?? []).filter((f) => (f as { fix?: unknown }).fix).length),
-    [analysis],
-  );
+  // Счётчик правок — единый с бейджем меню (аудит C2: было три разных числа).
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = findings.filter((f) => {
       if (sevFilter.size && !sevFilter.has(f.severity as Severity)) return false;
       if (catFilter.size && !catFilter.has(f.category)) return false;
-      if (scopeFilter.size && !scopeFilter.has((f.scope ?? 'dashboard') as FindingScope)) return false;
       if (q) {
         const hay = `${f.ruleId} ${f.title} ${f.message} ${f.detail ?? ''} ${f.target?.name ?? ''} ${f.table ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -269,7 +265,7 @@ export default function AnalysisTab(props: Props) {
         default: return 0;
       }
     });
-  }, [findings, sevFilter, catFilter, scopeFilter, search, sortKey, sortAsc]);
+  }, [findings, sevFilter, catFilter, search, sortKey, sortAsc]);
 
   /**
    * Сводка по доменам: сколько проверок, сколько нарушено, сколько мест.
@@ -403,13 +399,19 @@ export default function AnalysisTab(props: Props) {
     return (
       <section className="card wide">
         <h2>Результаты анализа</h2>
-        <p className="muted">Анализ ещё не запускался. Откройте вкладку «Подключение».</p>
+        <p className="muted">Анализ ещё не запускался.</p>
+        {onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
       </section>
     );
   }
 
   const score = analysis.summary.score ?? 0;
-  const scoreClass = score >= 80 ? 'info' : score >= 50 ? 'warning' : 'error';
+  // Пороги зон едины со «Сводным отчётом»/«Формированием» (аудит C1: было 80/50).
+  const scoreClass = score >= 75 ? 'info' : score >= 50 ? 'warning' : 'error';
   const outline = analysis.outline?.full ?? null;
 
   // Числа для метрик: сколько проверок прошло, нарушено и пропущено.
@@ -813,7 +815,7 @@ export default function AnalysisTab(props: Props) {
       )}
 
       {/* --- Предлагаемые правки: полный экран на вкладке «Улучшенный скрипт» --- */}
-      {fixes > 0 && (
+      {(refactorCount ?? 0) > 0 && (
         <h3>
           Предлагаемые правки скрипта
           <button
@@ -821,7 +823,7 @@ export default function AnalysisTab(props: Props) {
             onClick={onOpenRefactor}
             title="Текущий и предложенный скрипт рядом"
           >
-            {' '}· улучшенный скрипт → ({fixes})
+            {' '}· улучшенный скрипт → ({refactorCount})
           </button>
         </h3>
       )}

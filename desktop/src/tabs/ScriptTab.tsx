@@ -20,6 +20,8 @@ type Props = {
   repoFolder?: string;
   /** Выбрать папку репозитория и переанализировать. */
   onPickFolder?: () => void;
+  /** Переход к «Подключению» из пустого состояния (аудит B3). */
+  onGoConnect?: () => void;
   /** Фокус из «Анализа»: подсветить и прокрутить к строкам находки. */
   focus?: { lines?: number[]; ruleId?: string } | null;
 };
@@ -30,9 +32,11 @@ function scriptFindings(findings: Finding[]): Finding[] {
 }
 
 export default function ScriptTab(props: Props) {
-  const { analysis, includesMap, onPickInclude, repoFolder, onPickFolder, focus } = props;
+  const { analysis, includesMap, onPickInclude, repoFolder, onPickFolder, focus, onGoConnect } = props;
   const script = analysis?.script ?? '';
   const lines = useMemo(() => script.split(/\r?\n/), [script]);
+  // Токенизация всего скрипта — дорогая операция: только при смене текста (аудит E3).
+  const tokens = useMemo(() => highlightScript(script), [script]);
 
   const [active, setActive] = useState<Finding | null>(null);
   const [line, setLine] = useState('');
@@ -111,10 +115,14 @@ export default function ScriptTab(props: Props) {
       <section className="card wide">
         <h2>Скрипт загрузки</h2>
         <p className="muted">
-          Скрипт появится после анализа приложения. Откройте вкладку «Подключение»
-          и запустите анализ — здесь будет скрипт с номерами строк и находками,
-          привязанными к строкам.
+          Скрипт появится после анализа приложения: текст с номерами строк
+          и находками, привязанными к строкам.
         </p>
+        {onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
       </section>
     );
   }

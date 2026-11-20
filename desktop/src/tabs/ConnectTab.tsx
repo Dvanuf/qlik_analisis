@@ -10,11 +10,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeEngineUrl } from '../../../src/extract/url.js';
 import type { AppItem, BatchProgress, DoctorStep, Platform, RuleInfo } from '../types.js';
 
-const PLATFORMS: { id: Platform; label: string; hint: string }[] = [
-  { id: 'auto', label: 'Определить автоматически', hint: 'По типам объектов приложения — так надёжнее' },
-  { id: 'qlik-sense', label: 'Qlik Sense', hint: 'QIX App API: объекты, master items, закладки' },
-  { id: 'qlikview', label: 'QlikView 12', hint: 'Doc API: скрипт и модель данных' },
-];
 
 /**
  * Шаги сценария подключения.
@@ -36,12 +31,12 @@ const STEPS = [
   {
     id: 'select',
     title: 'Выбрать приложение',
-    desc: 'Отметьте радиокнопкой приложение для анализа.',
+    desc: 'Отметьте галочками приложения для анализа (можно несколько).',
   },
   {
     id: 'analyze',
     title: 'Запустить анализ',
-    desc: '54 проверки в 6 доменах: модель данных, скрипт, объекты, меры, переменные.',
+    desc: 'Каталог проверок по 6 доменам: модель данных, скрипт, объекты, меры, переменные, подключения.',
   },
 ] as const;
 
@@ -470,7 +465,7 @@ export default function ConnectTab(props: Props) {
             Cookie и CSRF-токен подставятся сами — вручную ничего копировать не нужно.
           </li>
           <li>
-            <b>«Загрузить список приложений»</b> → выберите приложение → <b>«Анализировать»</b>.
+            <b>«Загрузить список приложений»</b> → отметьте приложения галочками → <b>«Анализировать выбранные»</b>.
           </li>
           <li>
             Результаты одного приложения — на вкладке <b>«Анализ»</b>: сводка, находки с фильтрами,
@@ -609,7 +604,7 @@ export default function ConnectTab(props: Props) {
             />
           </div>
           <p className="legend hint">
-            <b>Радиокнопка</b> — приложение, которое будет проанализировано.
+            <b>Галочки</b> — приложения, которые будут проанализированы.
             {' '}<b>Флажок</b> — включить приложение в пакетный анализ (несколько сразу).
           </p>
 

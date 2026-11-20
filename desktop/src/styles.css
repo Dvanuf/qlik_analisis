@@ -39,7 +39,7 @@
    * с белым текстом должна оставаться тёмной: белый на светло-зелёном
    * даёт контраст ≈2.1:1 (провал WCAG по всему приложению). */
   --solid: var(--brand);
-  --link: var(--link);
+  --link: var(--brand);
 
   /* --- масштаб интерфейса (регулировка размера шрифта) --- */
   --ui-scale: 1.15;
@@ -285,33 +285,6 @@ p.small, .small { font-size: 0.75rem; }
 .wizard .step.done .tx i, .wizard .step.current .tx i { color: var(--fw); }
 .wizard .step.current { border-radius: var(--r2); }
 
-/* --- Этап 1: список приложений (combobox) --- */
-.combo { position: relative; min-width: 420px; max-width: 100%; }
-.combo .combo-input {
-  width: 100%; padding: 7px 9px; border: 1px solid var(--line);
-  border-radius: 6px; font-size: 0.8125rem; background: var(--panel); color: var(--text);
-}
-.combo .combo-list {
-  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
-  max-height: 320px; overflow: auto;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 35, 56, .18);
-}
-.combo .combo-item { padding: 7px 10px; cursor: pointer; font-size: 0.8125rem; display: flex; gap: 8px; align-items: baseline; }
-.combo .combo-item:hover, .combo .combo-item.active { background: var(--accent-soft); }
-.combo .combo-item .meta { color: var(--muted); font-size: 0.6875rem; margin-left: auto; }
-.combo .combo-empty { padding: 10px; color: var(--muted); font-size: 0.8125rem; }
-.combo-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-.combo-filters select, .combo-filters input {
-  padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px;
-  font-size: 0.78125rem; background: var(--panel); color: var(--text);
-}
-.combo-selected { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.combo-selected .tag {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--accent-soft); border: 1px solid var(--line);
-  border-radius: 999px; padding: 3px 10px; font-size: 0.75rem;
-}
 
 /* --- Этап 1: чек-лист проверок подключения --- */
 .checklist { list-style: none; padding: 0; margin: 12px 0 0; font-size: 0.8125rem; }
@@ -367,23 +340,16 @@ p.small, .small { font-size: 0.75rem; }
 .heatmap { border-collapse: separate; border-spacing: 2px; font-size: 0.75rem; }
 .heatmap th { color: var(--muted); font-weight: 600; padding: 4px 8px; text-align: left; }
 .heatmap td { text-align: center; padding: 6px 10px; border-radius: 4px; min-width: 46px; }
-.heat-0 { background: var(--soft2); color: var(--muted); }
-.heat-1 { background: rgba(45, 212, 191, .18); }
-.heat-2 { background: rgba(45, 212, 191, .38); }
-.heat-3 { background: rgba(45, 212, 191, .62); color: #06231f; }
-.heat-4 { background: rgba(45, 212, 191, .9); color: #06231f; font-weight: 700; }
 
 .progress { height: 8px; background: var(--soft2); border-radius: 999px; overflow: hidden; margin: 8px 0; }
 .progress > div { height: 100%; background: var(--accent); transition: width .2s ease; }
 
-.top-rules { list-style: none; padding: 0; margin: 0; font-size: 0.8125rem; }
 .top-rules li { display: flex; gap: 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--soft); }
 .top-rules li .bar { flex: 1; height: 8px; background: var(--soft2); border-radius: 999px; overflow: hidden; }
 .top-rules li .bar > div { height: 100%; background: var(--accent); }
 .top-rules li .n { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* --- Этап 3: редактор правил --- */
-.rule-editor { display: flex; flex-direction: column; gap: 4px; }
 .rule-editor .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .rule-editor select, .rule-editor input {
   padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
@@ -795,7 +761,6 @@ p.small, .small { font-size: 0.75rem; }
 .toast.err::before { color: #fff; }
 
 /* --- легенда и мелочи --- */
-.legend-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .pill { border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .pill.error { background: var(--ds); color: var(--danger); border-color: rgba(194, 0, 72, .3); }
 .pill.warning { background: var(--ws); color: var(--warning); border-color: rgba(187, 56, 0, .3); }
@@ -1010,20 +975,10 @@ table.rq tr.pat { cursor: pointer; }
 .comp-legend .d-warn { background: var(--warn, #e0a33e); }
 .comp-legend .d-info { background: var(--panel-3); }
 
-/* Lineage: узлы графа формирования. */
-.ln-node { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.2; }
-.ln-node.ln-src { fill: var(--panel-3); }
-.ln-node.ln-stored { stroke: var(--success); }
-.ln-node.ln-dropped { stroke: var(--danger); opacity: 0.75; }
-.ln-node.ln-sel { stroke: var(--brand); stroke-width: 2; }
-.ln-label { font-size: 12px; font-weight: 600; fill: var(--text); }
-.ln-sub { font-size: 10px; fill: var(--muted); }
 .legend-item { display: inline-flex; gap: 6px; align-items: center; font-size: 0.8125rem; }
 
 /* Схема модели данных (вьюха «Модель данных» вкладки «Формирование»).
    Рамка таблицы — по максимальной важности находок: видно прямо на схеме. */
-.viewswitch { display: inline-flex; gap: 4px; }
-.viewswitch button.is-active { border-color: var(--brand); color: var(--brand); }
 .ms-node { fill: var(--panel-2); stroke: var(--line); stroke-width: 1.2; }
 .ms-node.ms-err { stroke: var(--danger); stroke-width: 1.6; }
 .ms-node.ms-warn { stroke: var(--warning); }
@@ -1131,8 +1086,6 @@ table.rq tr.pat { cursor: pointer; }
   color: var(--success);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 34%, transparent);
 }
-.scorehero-counts .num.err { color: var(--danger); }
-.scorehero-counts .num.warn { color: var(--warning); }
 .howformula { margin: 8px 0 0; }
 /* Кольцо с баллом. */
 .ring {
@@ -1145,9 +1098,6 @@ table.rq tr.pat { cursor: pointer; }
 .ring.y { border: 9px solid var(--warning); }
 .ring.g { border: 9px solid var(--brand); }
 /* Карточки доменов. */
-.domgrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 14px 0; }
-.domcard { margin: 0; }
-.domcard .num { font-size: 20px; }
 /* Полоса балла: цвет по зоне. */
 .pbar i.r { background: var(--danger); }
 .pbar i.y { background: var(--warning); }

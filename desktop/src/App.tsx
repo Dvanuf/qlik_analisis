@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { cleanEngineUrl } from '../../src/extract/url.js';
 import { includeKey, parseIncludeLines } from '../../src/extract/includes.js';
@@ -273,8 +273,6 @@ export default function App() {
 
   const [ruleSearch, setRuleSearch] = useState('');
   const [ruleCat, setRuleCat] = useState('all');
-  const [batchCat, setBatchCat] = useState('all');
-  const [batchSearch, setBatchSearch] = useState('');
   const [hubStatus, setHubStatus] = useState('');
   // Вход в хаб идёт в отдельном окне: интерфейс при этом не блокируется.
   const [signingIn, setSigningIn] = useState(false);
@@ -297,7 +295,6 @@ export default function App() {
   const [comparison, setComparison] = useState<Comparison | null>(null);
   // Прогоны по анализируемому приложению: из них сводка берёт динамику.
   const [aiRuns, setAiRuns] = useState<HistoryRun[]>([]);
-  const [onlyNew, setOnlyNew] = useState(false);
   // Меню-сайдбар: рельса (только иконки), свёрнутые группы, поиск по разделам.
   const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('qa.nav.collapsed') === '1');
   const [closedGroups, setClosedGroups] = useState<string[]>(() => {
@@ -741,7 +738,7 @@ export default function App() {
         script: analysis.script ?? '',
         patch: analysis.patch,
       });
-      showToast(`Изменённый скрипт сохранён: ${res.path}`);
+      showToast(`Скрипт с патчем правок ядра сохранён: ${res.path}`);
     } catch (err) {
       showToast(`Не удалось сохранить скрипт: ${String(err)}`);
     }
@@ -861,6 +858,7 @@ export default function App() {
       }
       showToast(`В историю сохранено прогонов: ${saved}`);
       await loadHistory();
+      await loadAllRuns();
     } catch (err) {
       showToast(`Не удалось сохранить историю: ${String(err)}`);
     }
@@ -914,21 +912,6 @@ export default function App() {
     }
   }
 
-  /** Экспорт сводного отчёта по пакетному прогону. */
-  async function exportBatch() {
-    if (!batch) return;
-    try {
-      const res = await window.qa.exportSummary({
-        totals: batch.totals,
-        results: batch.results,
-        platform,
-      });
-      showToast(`Сводный отчёт сохранён: ${res.htmlPath}`);
-    } catch (err) {
-      showToast(`Не удалось сохранить сводный отчёт: ${String(err)}`);
-    }
-  }
-
   async function analyzeFile() {
     setBusy('Выбор файла…');
     const file = await window.qa.openDialog();
@@ -961,18 +944,19 @@ export default function App() {
     });
   }, [ruleInfo, ruleCat, ruleSearch]);
 
-  // История всех прогонов: колонка «Последняя оценка» в таблице приложений.
+  // История всех прогонов: ЕДИНЫЙ источник для колонки «Последняя оценка»,
+  // трендов группы («Оценка») и динамики («Сводный») — перечитывается после
+  // сохранения прогона (аудит C3: было 4 независимые загрузки).
   const [allRuns, setAllRuns] = useState<HistoryRun[]>([]);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const runs = await window.qa.historyList({ limit: 500 });
-        if (alive) setAllRuns(runs);
-      } catch { /* без истории колонка просто пустая */ }
-    })();
-    return () => { alive = false; };
+  const loadAllRuns = useCallback(async () => {
+    try {
+      const runs = await window.qa.historyList({ limit: 500 });
+      setAllRuns(runs);
+    } catch { /* без истории блоки истории просто скрыты */ }
   }, []);
+  useEffect(() => {
+    void loadAllRuns();
+  }, [loadAllRuns]);
 
   // Последняя оценка каждого приложения — для колонки в «Подключении».
   const scoresByApp = useMemo(() => {
@@ -1014,35 +998,6 @@ export default function App() {
     return map;
   }, [analysis]);
 
-  /** Категории, реально встречающиеся в сводном отчёте (для фильтра). */
-  const batchCatOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of batch?.results ?? []) {
-      for (const [cat, n] of Object.entries(r.summary?.findings.byCategory ?? {})) {
-        if (n > 0) set.add(cat);
-      }
-    }
-    return [...set].sort();
-  }, [batch]);
-
-  /** Отфильтрованные строки сводного отчёта. */
-  const filteredBatch = useMemo(() => {
-    const all = batch?.results ?? [];
-    const q = batchSearch.trim().toLowerCase();
-    return all
-      .filter((r) => {
-        if (batchCat !== 'all') {
-          const n = r.summary?.findings.byCategory[batchCat] ?? 0;
-          if (n === 0) return false;
-        }
-        if (q) {
-          const hay = `${r.title} ${r.appId}`.toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => (b.summary?.findings.total ?? -1) - (a.summary?.findings.total ?? -1));
-  }, [batch, batchCat, batchSearch]);
 
   // Масштаб применяется к корню приложения через CSS-переменную.
   useEffect(() => {
@@ -1222,6 +1177,7 @@ export default function App() {
         <ScoreTab
           analysis={analysis}
           runs={aiRuns}
+          groupRuns={allRuns}
           batch={batch}
           onOpenAnalysis={(ruleId) => {
             setAnalysisFilter(ruleId);
@@ -1230,6 +1186,7 @@ export default function App() {
           onOpenRefactor={() => setTab('refactor')}
           onAnalyzeApp={(id) => void analyzeAppById(id)}
           onPrintReport={(html) => void printScoreReport(html)}
+          onGoConnect={() => setTab('connect')}
           onNote={showToast}
         />
       )}
@@ -1274,7 +1231,6 @@ export default function App() {
       {tab === 'analysis' && (
         <AnalysisTab
           analysis={analysis}
-          categories={categories}
           onNote={showToast}
           onExport={() => void exportCurrent()}
           onExportScript={() => void exportScript()}
@@ -1287,6 +1243,8 @@ export default function App() {
           onOpenRefactor={() => setTab('refactor')}
           onOpenModel={() => setTab('model')}
           onOpenRules={() => setTab('rules')}
+          refactorCount={refactorCount}
+          onGoConnect={() => setTab('connect')}
           onAskAi={(finding) => {
             setAiFocus(finding);
             setTab('ai');
@@ -1310,12 +1268,14 @@ export default function App() {
         <ModelTab
           analysis={analysis}
           onExport={() => void exportDataModel()}
+          onGoConnect={() => setTab('connect')}
         />
       )}
 
       {tab === 'lineage' && (
         <LineageTab
           analysis={analysis}
+          onGoConnect={() => setTab('connect')}
           onOpenAnalysis={(name) => {
             setAnalysisFilter(name);
             setTab('analysis');
@@ -1326,18 +1286,18 @@ export default function App() {
       {tab === 'summary' && (
         <SummaryTab
           batch={batch}
+          allRuns={allRuns}
           appsCount={apps.length}
           onExportCsv={() => void exportCsv()}
           onExportXlsx={() => void exportXlsx()}
           onPrintReport={(html) => void printScoreReport(html)}
           history={history}
           comparison={comparison}
-          onlyNew={onlyNew}
-          onOnlyNew={setOnlyNew}
           onSaveHistory={() => void saveHistory()}
           onCompare={(id) => void compareHistory(id)}
           onLoadHistory={() => void loadHistory()}
           onAnalyzeApp={(id) => void analyzeAppById(id)}
+          onGoConnect={() => setTab('connect')}
         />
       )}
 
@@ -1369,12 +1329,18 @@ export default function App() {
           repoFolder={repoFolderFor(analysis?.appId ?? appId)}
           onPickInclude={(path) => void pickInclude(analysis?.appId ?? appId, path)}
           onPickFolder={() => void pickRepoFolder(analysis?.appId ?? appId)}
+          onGoConnect={() => setTab('connect')}
           focus={scriptFocus}
         />
       )}
 
       {tab === 'refactor' && (
-        <RefactorTab analysis={analysis} onNote={showToast} rulesConfig={rulesConfig} />
+        <RefactorTab
+          analysis={analysis}
+          onNote={showToast}
+          rulesConfig={rulesConfig}
+          onGoConnect={() => setTab('connect')}
+        />
       )}
       </div>
       </div>

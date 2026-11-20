@@ -94,7 +94,6 @@ const api = {
     appName: string; summary: unknown; findings: unknown; patch: unknown; ruleStats: unknown;
   }) => ipcRenderer.invoke('core:export-report', payload),
   /** Сохраняет сводный отчёт по пакетному прогону. */
-  exportSummary: (payload: { totals: unknown; results: unknown; platform?: string }) => ipcRenderer.invoke('core:export-summary', payload),
   /** Этапы анализа приложения: подписка возвращает функцию отписки. */
   onAnalyzeProgress: (cb: (p: { stage: string; detail?: string; appId?: string }) => void) => {
     const listener = (_e: unknown, p: { stage: string; detail?: string; appId?: string }) => cb(p);

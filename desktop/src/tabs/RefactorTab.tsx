@@ -21,6 +21,8 @@ type Props = {
   analysis: AnalysisResult | null;
   /** Заметки об экспорте и ошибках — общий текст внизу окна. */
   onNote: (note: string) => void;
+  /** Переход к «Подключению» из пустого состояния (аудит B3). */
+  onGoConnect?: () => void;
   /** Настройки правил — источник раздела formatting. */
   rulesConfig?: RulesConfig | null;
 };
@@ -46,7 +48,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export default function RefactorTab(props: Props) {
-  const { analysis, onNote, rulesConfig } = props;
+  const { analysis, onNote, rulesConfig, onGoConnect } = props;
   const script = analysis?.script ?? '';
 
   // Выключенные правки: чекбоксы пересобирают предложенную версию.
@@ -142,6 +144,9 @@ export default function RefactorTab(props: Props) {
   const fmtNoChange = formatOn && shown === proposed;
   const rightLines = useMemo(() => shown.split(/\r?\n/), [shown]);
 
+  // Токенизация — дорогая: только при смене соответствующего текста (аудит E3).
+  const scriptTokens = useMemo(() => highlightScript(script), [script]);
+  const shownTokens = useMemo(() => highlightScript(shown), [shown]);
   const anchorLines = useMemo(
     () => new Set(rules.changes.map((c: RefactorChange) => c.line).filter((n): n is number => n != null)),
     [rules.changes],
@@ -170,7 +175,7 @@ export default function RefactorTab(props: Props) {
         script,
         finalScript: shown,
       });
-      onNote(`Изменённый скрипт сохранён: ${res.path}`);
+      onNote(`Показанная версия скрипта (с форматом и правками) сохранена: ${res.path}`);
     } catch (err) {
       onNote(`Не удалось сохранить скрипт: ${String(err)}`);
     }
@@ -268,10 +273,14 @@ export default function RefactorTab(props: Props) {
       <section className="card wide">
         <h2>Улучшенный скрипт</h2>
         <p className="muted">
-          Сравнение текущего и предложенного скрипта появится после анализа.
-          Откройте вкладку «Подключение» и запустите анализ — правки правил
-          встанут по месту, а рядом будет видно, что именно изменится.
+          Сравнение текущего и предложенного скрипта появится после анализа:
+          правки правил встанут по месту, а рядом будет видно, что изменится.
         </p>
+        {onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
       </section>
     );
   }
@@ -302,7 +311,7 @@ export default function RefactorTab(props: Props) {
           </span>
         </h3>
         <div className="codeview senseview" ref={leftRef} onScroll={syncFrom('left')}>
-          {highlightScript(script).map((parts: Token[], i) => (
+          {scriptTokens.map((parts: Token[], i) => (
             <div key={i} className={`l${anchorLines.has(i + 1) ? ' anchor' : ''}`}>
               <span className="n">{i + 1}</span>
               <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
@@ -489,7 +498,7 @@ export default function RefactorTab(props: Props) {
         )}
 
         <div className="codeview senseview" ref={rightRef} onScroll={syncFrom('right')}>
-          {highlightScript(shown).map((parts: Token[], i) => (
+          {shownTokens.map((parts: Token[], i) => (
             <div key={i} className={`l${shownAdded.has(i + 1) ? ' added' : ''}`}>
               <span className="n">{i + 1}</span>
               <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>

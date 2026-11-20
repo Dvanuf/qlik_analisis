@@ -18,6 +18,8 @@ type Props = {
   analysis: AnalysisResult | null;
   /** История прогонов приложения — динамика к прошлой проверке. */
   runs: HistoryRun[];
+  /** Единая история всех прогонов из App — тренды группы (аудит C3). */
+  groupRuns?: HistoryRun[];
   /** Последний пакетный прогон — источник блока «Группа приложений». */
   batch: { results: BatchItem[]; totals: { apps: number } } | null;
   /** Перейти в «Анализ» с фильтром по правилу. */
@@ -26,6 +28,8 @@ type Props = {
   onOpenRefactor: () => void;
   /** Проанализировать приложение из группы. */
   onAnalyzeApp: (appId: string) => void;
+  /** Переход к «Подключению» из пустого состояния (аудит B3). */
+  onGoConnect?: () => void;
   /** Печать «Отчёта для руководителя»: HTML собран здесь, PDF — в main. */
   onPrintReport: (html: string) => void;
   onNote: (text: string) => void;
@@ -43,25 +47,12 @@ function zone(score: number): 'r' | 'y' | 'g' {
 }
 
 export default function ScoreTab(props: Props) {
-  const { analysis, runs, batch, onOpenAnalysis, onOpenRefactor, onAnalyzeApp, onPrintReport, onNote } = props;
+  const { analysis, runs, batch, groupRuns, onGoConnect, onOpenAnalysis, onOpenRefactor, onAnalyzeApp, onPrintReport, onNote } = props;
   const [howOpen, setHowOpen] = useState(false);
-  // История прогонов: тренды приложений в группе (колонка «Тренд» макета).
-  const [groupRuns, setGroupRuns] = useState<HistoryRun[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const runs = await window.qa.historyList({ limit: 500 });
-        if (alive) setGroupRuns(runs);
-      } catch { /* без истории трендов просто нет */ }
-    })();
-    return () => { alive = false; };
-  }, []);
 
   /** Тренд приложения: разница двух последних прогонов одной версии формулы. */
   const trendOf = (appId: string): number | null => {
-    const v2 = groupRuns.filter((r) => r.appId === appId && (r.scoreVersion ?? 1) === 2);
+    const v2 = (groupRuns ?? []).filter((r) => r.appId === appId && (r.scoreVersion ?? 1) === 2);
     if (v2.length < 2) return null;
     return v2[0].score - v2[1].score;
   };
@@ -182,10 +173,14 @@ export default function ScoreTab(props: Props) {
       <section className="card wide">
         <h2>Оценка приложения</h2>
         <p className="muted">
-          Оценка появится после анализа. Откройте вкладку «Подключение»
-          и запустите анализ — здесь будет балл, вердикт, слабые домены
+          Оценка появится после анализа: балл, вердикт, слабые домены
           и первоочередные исправления с приростом балла.
         </p>
+        {onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
       </section>
     );
   }

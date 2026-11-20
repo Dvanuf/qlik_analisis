@@ -25,11 +25,13 @@ type Props = {
   onPrintReport: (html: string) => void;
   history: HistoryRun[];
   comparison: Comparison | null;
-  onlyNew: boolean;
-  onOnlyNew: (value: boolean) => void;
+  /** Единая история всех прогонов из App — динамика и тренды (аудит C3). */
+  allRuns?: HistoryRun[];
   onSaveHistory: () => void;
   onCompare: (baselineId: number) => void;
   onLoadHistory: () => void;
+  /** Переход к «Подключению» из пустого состояния (аудит B3). */
+  onGoConnect?: () => void;
   /** Детальный анализ приложения из любого блока. */
   onAnalyzeApp: (appId: string) => void;
 };
@@ -41,8 +43,8 @@ function zoneOf(score: number): 'r' | 'y' | 'g' {
 
 export default function SummaryTab(props: Props) {
   const {
-    batch, appsCount, onExportCsv, onExportXlsx, onPrintReport,
-    history, comparison, onlyNew, onOnlyNew, onSaveHistory, onCompare, onLoadHistory,
+    batch, appsCount, onGoConnect, onExportCsv, onExportXlsx, onPrintReport,
+    history, comparison, onSaveHistory, onCompare, onLoadHistory,
     onAnalyzeApp,
   } = props;
 
@@ -90,18 +92,9 @@ export default function SummaryTab(props: Props) {
     [filtered],
   );
 
-  /** История v2 — динамика, изменения, тренды (загружается сверху). */
-  const [allRuns, setAllRuns] = useState<HistoryRun[]>([]);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const runs = await window.qa.historyList({ limit: 500 });
-        if (alive) setAllRuns(runs);
-      } catch { /* без истории блоки динамики скрываются */ }
-    })();
-    return () => { alive = false; };
-  }, [history]);
+  // История v2 — ЕДИНЫЙ источник из App (аудит C3): динамика и тренды
+  // обновляются сразу после сохранения прогона, без собственной загрузки.
+  const allRuns = props.allRuns ?? [];
 
   /** Динамика по датам: средняя оценка группы и число красных приложений. */
   const dynamics = useMemo(() => {
@@ -166,9 +159,13 @@ export default function SummaryTab(props: Props) {
       <section className="card wide">
         <h2>Сводный отчёт</h2>
         <p className="muted">
-          Аналитика группы появится после пакетного анализа. Откройте вкладку
-          «Подключение» и нажмите «Анализировать все».
+          Аналитика группы появится после пакетного анализа нескольких приложений.
         </p>
+        {onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
       </section>
     );
   }
@@ -552,7 +549,6 @@ export default function SummaryTab(props: Props) {
         <h3>История прогонов</h3>
         <div className="toolbar">
           <label className="muted small">
-            <input type="checkbox" checked={onlyNew} onChange={(e) => onOnlyNew(e.target.checked)} />
             {' '}показывать только новые находки относительно базовой линии
           </label>
           <span className="muted">прогонов в базе: {history.length}</span>

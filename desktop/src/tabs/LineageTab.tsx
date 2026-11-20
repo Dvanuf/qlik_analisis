@@ -19,6 +19,8 @@ import { canonicalFieldName } from '../../../src/normalize.js';
 
 type Props = {
   analysis: AnalysisResult | null;
+  /** Переход к «Подключению» из пустого состояния (аудит B3). */
+  onGoConnect?: () => void;
   /** Со схемы: открыть «Анализ» с поиском по таблице/полю. */
   onOpenAnalysis?: (name: string) => void;
 };
@@ -143,7 +145,7 @@ function computeLayout(tables: SchemaTable[], links: { from: string; to: string 
   return { tables: sorted, pos, W, GX, HDR, ROW, SHOW, width, height, fieldY, canon };
 }
 
-export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
+export default function LineageTab({ analysis, onOpenAnalysis, onGoConnect }: Props) {
   // Выбранная таблица: { key: состояние, table } — для панели деталей.
   const [selTable, setSelTable] = useState<{ key: StateKey; table: SchemaTable } | null>(null);
   const [selField, setSelField] = useState<{ key: StateKey; table: SchemaTable; field: SchemaTable['fields'][number] } | null>(null);
@@ -233,10 +235,12 @@ export default function LineageTab({ analysis, onOpenAnalysis }: Props) {
         <h2>Формирование</h2>
         <p className="muted">
           Модель данных приложения появится после анализа: таблицы и связи в трёх
-          состояниях — как сформировано (с дропнутыми и промежуточными), текущая
-          финальная и рекомендованная после правок — с пометками всех проблем:
-          неиспользуемые поля и таблицы, синтетические ключи, неполные ключи, M:N,
-          перегрузка данными.
+          состояниях с пометками всех проблем.
+{onGoConnect && (
+          <button className="primary" onClick={onGoConnect} style={{ marginTop: 10 }}>
+            К подключению
+          </button>
+        )}
         </p>
       </section>
     );
