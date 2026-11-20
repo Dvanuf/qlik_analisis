@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AnalysisResult, Finding } from '../types.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
 import { includeKey, parseIncludeLines } from '../../../src/extract/includes.js';
+import ScriptView from '../components/ScriptView.js';
 
 type Props = {
   analysis: AnalysisResult | null;
@@ -261,28 +262,11 @@ export default function ScriptTab(props: Props) {
           <button className="small" onClick={() => gotoMatch(mIdx + 1)} disabled={!matches.length} aria-label="Следующее совпадение">›</button>
         </div>
 
-        <div className="codeview senseview" ref={codeRef}>
-          {highlightScript(script).map((parts: Token[], i) => {
-            const n = i + 1;
-            const cls = [
-              'l',
-              highlight.has(n) ? ' hit' : '',
-              matchSet.has(n) ? ' mhit' : '',
-              matches.length && matches[mIdx] === n ? ' mcur' : '',
-            ].join('');
-            return (
-              <div
-                key={i}
-                id={`sl-${n}`}
-                className={cls}
-                onClick={() => gotoLine(n)}
-              >
-                <span className="n">{n}</span>
-                <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
-              </div>
-            );
-          })}
-        </div>
+        <ScriptView
+          tokens={tokens}
+          classesFor={(n) => [highlight.has(n) ? ' hit' : '', matchSet.has(n) ? ' mhit' : '', n === matches[mIdx] ? ' mcur' : ''].join(' ')}
+          innerRef={codeRef}
+        />
       </div>
 
       {/* Сверка с GitLab: эталон ищется по имени приложения (L013) */}

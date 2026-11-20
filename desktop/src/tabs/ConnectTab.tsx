@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeEngineUrl } from '../../../src/extract/url.js';
 import type { AppItem, BatchProgress, DoctorStep, Platform, RuleInfo } from '../types.js';
+import { uniqSorted, uniqTags } from '../filters.js';
 
 
 /**
@@ -329,23 +330,10 @@ export default function ConnectTab(props: Props) {
   /** Номер текущего шага: первый невыполненный. */
   const currentStep = !signedIn ? 0 : (!appsLoaded ? 1 : (!appSelected ? 2 : 3));
 
-  const streams = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of apps) set.add(a.stream || 'не указан');
-    return [...set].sort();
-  }, [apps]);
-
-  const owners = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of apps) set.add(a.owner || 'не указан');
-    return [...set].sort();
-  }, [apps]);
-
-  const tags = useMemo(() => {
-    const set = new Set<string>();
-    for (const a of apps) for (const t of a.tags ?? []) set.add(t);
-    return [...set].sort();
-  }, [apps]);
+  // Аудит C13: uniq-опции — общий помощник (было три копии).
+  const streams = useMemo(() => uniqSorted(apps.map((a) => a.stream || 'не указан')), [apps]);
+  const owners = useMemo(() => uniqSorted(apps.map((a) => a.owner || 'не указан')), [apps]);
+  const tags = useMemo(() => uniqTags(apps), [apps]);
 
   // Сервер мог не отдать метаданные — тогда фильтры бессмысленны, и об этом
   // надо сказать прямо, а не молча оставить один пункт «все».

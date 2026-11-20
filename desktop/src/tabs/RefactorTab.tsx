@@ -12,6 +12,7 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { buildRefactoredScript } from '../../../src/script/refactor.js';
+import ScriptView from '../components/ScriptView.js';
 import { computeScore } from '../../../src/score/index.js';
 import { formatScriptDetailed, formatScriptSections, formatRulesDoc, splitScriptSections } from '../../../src/script/format.js';
 import { highlightScript, type Token } from '../qlisense-highlight.js';
@@ -310,14 +311,12 @@ export default function RefactorTab(props: Props) {
             {script.split(/\r?\n/).length} строк · подсвечены места правок
           </span>
         </h3>
-        <div className="codeview senseview" ref={leftRef} onScroll={syncFrom('left')}>
-          {scriptTokens.map((parts: Token[], i) => (
-            <div key={i} className={`l${anchorLines.has(i + 1) ? ' anchor' : ''}`}>
-              <span className="n">{i + 1}</span>
-              <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
-            </div>
-          ))}
-        </div>
+        <ScriptView
+          tokens={scriptTokens}
+          anchors={anchorLines}
+          innerRef={leftRef}
+          onScroll={syncFrom('left')}
+        />
 
         {/* Перечень правок: чекбокс выключает правку и пересобирает версию справа */}
         {rules.changes.length > 0 && (
@@ -497,14 +496,12 @@ export default function RefactorTab(props: Props) {
           </p>
         )}
 
-        <div className="codeview senseview" ref={rightRef} onScroll={syncFrom('right')}>
-          {shownTokens.map((parts: Token[], i) => (
-            <div key={i} className={`l${shownAdded.has(i + 1) ? ' added' : ''}`}>
-              <span className="n">{i + 1}</span>
-              <span className="c">{parts.map((t, j) => t.k === 'plain' ? <span key={j}>{t.t}</span> : <span key={j} className={`tk-${t.k}`}>{t.t}</span>)}</span>
-            </div>
-          ))}
-        </div>
+        <ScriptView
+          tokens={shownTokens}
+          added={shownAdded}
+          innerRef={rightRef}
+          onScroll={syncFrom('right')}
+        />
 
         {source === 'ai' && aiResult?.ok && aiResult.commentary && (
           <div className="aicomm">

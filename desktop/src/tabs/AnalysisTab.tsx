@@ -636,7 +636,7 @@ export default function AnalysisTab(props: Props) {
         </thead>
         <tbody>
           {filtered.map((f, i) => {
-            const key = `${f.ruleId}-${i}`;
+            const key = `${f.ruleId}|${f.target?.name ?? ''}|${i}`;
             const isOpen = expanded.has(key);
             const long = (f.message.length + (f.detail?.length ?? 0)) > 120;
             return (
@@ -874,7 +874,7 @@ export default function AnalysisTab(props: Props) {
 
       {/* --- Панель паттерна: корень проблемы и его места --- */}
       <div className={`scrim${openPattern ? ' on' : ''}`} onClick={() => setOpenPattern(null)} />
-      <aside className={`drawer${openPattern ? ' on' : ''}`}>
+      <aside className={`drawer${openPattern ? ' on' : ''}`} role="dialog" aria-modal="true" aria-label="Паттерн проблемы">
         {openPattern ? (
           <>
             <div className="dh">

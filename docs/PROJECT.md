@@ -5,7 +5,7 @@
 прогонов — в [STATE.md](STATE.md), история версий — в [CHANGELOG.md](../CHANGELOG.md),
 планы и бэклог — в [PLAN.md](PLAN.md) и [ROADMAP.md](ROADMAP.md).
 
-**Текущая версия:** 0.35.0 · тесты ядра: 564/564 · Node ≥ 22, ESM · Electron 45
+**Текущая версия:** 0.36.0 · тесты ядра: 564/564 · Node ≥ 22, ESM · Electron 45
 
 ---
 

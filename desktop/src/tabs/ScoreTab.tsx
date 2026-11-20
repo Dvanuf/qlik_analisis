@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { DOMAIN_ORDER, DOMAIN_LABELS } from '../../../src/rules/domains.js';
 import { v2Info } from '../v2fallback.js';
 import { aggregateGroup } from '../../../src/score/index.js';
+import { uniqSorted, uniqTags } from '../filters.js';
 
 // Домен из находки — строка; подписи ядра имеют конкретные ключи.
 const DL = DOMAIN_LABELS as Record<string, string>;
@@ -170,11 +171,10 @@ export default function ScoreTab(props: Props) {
   const [ownerF, setOwnerF] = useState('all');
   const [tagF, setTagF] = useState('all');
   const options = useMemo(() => {
-    const uniq = (vals: (string | null | undefined)[]) => [...new Set(vals.map((v) => String(v ?? '')).filter(Boolean))].sort();
     return {
-      streams: uniq(group.map((g) => g.item.stream)),
-      owners: uniq(group.map((g) => g.item.owner)),
-      tags: uniq(group.flatMap((g) => g.item.tags ?? [])),
+      streams: uniqSorted(group.map((g) => g.item.stream)),
+      owners: uniqSorted(group.map((g) => g.item.owner)),
+      tags: uniqTags(group.map((g) => g.item)),
     };
   }, [group]);
   const filtered = useMemo(() => group.filter(({ item }) => {
